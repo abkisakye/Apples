@@ -1,0 +1,23 @@
+Hello, please use this system for testing your supermarket workflow.
+
+Use only the accounts shared with you for your test session.
+
+Please start by reading the testing guide and then try:
+1. add a few products, customers, and suppliers
+2. make a purchase
+3. make a sale
+4. print the receipt or invoice
+5. test a payment
+6. test stock movement and reports
+
+Important:
+- this is one shared testing app
+- one tester is given access at a time
+- data is not yet fully separated by business
+- please use only the store assigned to you during testing
+
+After testing, please tell me:
+- what was easy
+- what was confusing
+- what was missing
+- what should be improved before real use
