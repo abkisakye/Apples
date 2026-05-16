@@ -8,6 +8,8 @@ use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Models\Supplier;
 use App\Models\SupplierPayment;
+use App\Support\AccessService;
+use App\Support\StoreAssignmentService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -56,6 +58,8 @@ class SupplierPaymentController extends Controller
     public function create(Request $request): View
     {
         $supplierId = $request->integer('supplier_id');
+        $access = app(AccessService::class);
+        $defaultStoreId = auth()->user()?->default_store_id;
 
         return view('supplier_payments.create', [
             'suppliers' => Supplier::query()
@@ -69,6 +73,7 @@ class SupplierPaymentController extends Controller
                 ->posted()
                 ->where('balance_due', '>', 0)
                 ->when($supplierId > 0, fn ($query) => $query->where('supplier_id', $supplierId))
+                ->when($defaultStoreId && ! $access->can('sales.override') && ! $access->hasRole('admin') && ! $access->hasRole('manager'), fn ($query) => $query->where('store_id', $defaultStoreId))
                 ->orderBy('purchase_date')
                 ->get(['id', 'purchase_no', 'purchase_date', 'supplier_id', 'store_id', 'balance_due', 'credit_due_date']),
             'recentPayments' => SupplierPayment::query()
@@ -104,13 +109,18 @@ class SupplierPaymentController extends Controller
         return view('supplier_payments.print', ['payment' => $supplierPayment]);
     }
 
-    public function store(Request $request, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function store(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'payment_date' => ['required', 'date'],
             'supplier_id' => ['required', 'exists:suppliers,id'],
             'purchase_id' => ['required', 'exists:purchases,id'],
-            'payment_mode_id' => ['nullable', 'exists:payment_modes,id'],
+            'payment_mode_id' => ['required', 'exists:payment_modes,id'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'supplier_invoice_no' => ['nullable', 'string', 'max:255'],
             'reference_no' => ['nullable', 'string', 'max:255'],
@@ -136,14 +146,20 @@ class SupplierPaymentController extends Controller
             ]);
         }
 
-        $payment = DB::transaction(function () use ($validated, $purchase, $amount, $documentNumberService) {
+        $storeId = $storeAssignmentService->resolveStoreId(
+            (int) $purchase->store_id,
+            $request->user(),
+            app(AccessService::class)
+        );
+
+        $payment = DB::transaction(function () use ($validated, $purchase, $amount, $documentNumberService, $storeId) {
             $payment = SupplierPayment::create([
                 'payment_no' => $documentNumberService->make('supplier_payment', $validated['payment_date']),
                 'payment_date' => $validated['payment_date'],
                 'supplier_id' => $validated['supplier_id'],
                 'purchase_id' => $purchase->id,
-                'store_id' => $purchase->store_id,
-                'payment_mode_id' => $validated['payment_mode_id'] ?? null,
+                'store_id' => $storeId,
+                'payment_mode_id' => $validated['payment_mode_id'],
                 'amount' => $amount,
                 'supplier_invoice_no' => $validated['supplier_invoice_no'] ?? null,
                 'reference_no' => $validated['reference_no'] ?? null,

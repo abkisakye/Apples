@@ -7,6 +7,8 @@ use App\Models\PaymentMode;
 use App\Models\Store;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
+use App\Support\AccessService;
+use App\Support\StoreAssignmentService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -78,23 +80,29 @@ class ExpenseController extends Controller
         return view('expenses.print', compact('expense'));
     }
 
-    public function store(Request $request, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function store(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'expense_date' => ['required', 'date'],
             'store_id' => ['nullable', 'exists:stores,id'],
-            'payment_mode_id' => ['nullable', 'exists:payment_modes,id'],
+            'payment_mode_id' => ['required', 'exists:payment_modes,id'],
             'category' => ['required', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'reference_no' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
         ]);
+        $storeId = $storeAssignmentService->resolveStoreId((int) ($validated['store_id'] ?? auth()->user()?->default_store_id), $request->user(), app(AccessService::class));
 
         $expense = Expense::query()->create([
             'expense_no' => $documentNumberService->make('expense', $validated['expense_date']),
             'expense_date' => $validated['expense_date'],
-            'store_id' => $validated['store_id'] ?? auth()->user()?->default_store_id,
-            'payment_mode_id' => $validated['payment_mode_id'] ?? null,
+            'store_id' => $storeId,
+            'payment_mode_id' => $validated['payment_mode_id'],
             'category' => trim($validated['category']),
             'amount' => round((float) $validated['amount'], 2),
             'reference_no' => $validated['reference_no'] ?? null,

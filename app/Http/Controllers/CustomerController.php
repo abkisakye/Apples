@@ -106,6 +106,7 @@ class CustomerController extends Controller
             'sales.store:id,name',
             'payments.sale:id,sale_no',
             'payments.paymentMode:id,name',
+            'openingBalancePayments.paymentMode:id,name',
             'saleReturns' => fn ($query) => $query->where('status', 'posted')->with(['sale:id,sale_no', 'paymentMode:id,name']),
         ]);
 
@@ -258,6 +259,7 @@ class CustomerController extends Controller
             'address' => ['nullable', 'string', 'max:255'],
             'location' => ['nullable', 'string', 'max:255'],
             'opening_balance' => ['nullable', 'numeric', 'min:0'],
+            'opening_balance_date' => ['nullable', 'date'],
             'credit_limit' => ['nullable', 'numeric', 'min:0'],
             'customer_type' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
@@ -265,6 +267,9 @@ class CustomerController extends Controller
         ]);
 
         $validated['opening_balance'] = round((float) ($validated['opening_balance'] ?? 0), 2);
+        $validated['opening_balance_date'] = $validated['opening_balance'] > 0
+            ? ($validated['opening_balance_date'] ?? now()->toDateString())
+            : null;
         $validated['credit_limit'] = round((float) ($validated['credit_limit'] ?? 0), 2);
         $validated['is_active'] = $request->boolean('is_active', true);
 
@@ -278,10 +283,22 @@ class CustomerController extends Controller
             'creditSales.paymentMode:id,name',
             'payments.sale:id,sale_no',
             'payments.paymentMode:id,name',
+            'openingBalancePayments.paymentMode:id,name',
             'saleReturns' => fn ($query) => $query->where('status', 'posted')->with(['sale:id,sale_no', 'paymentMode:id,name']),
         ]);
 
         $entries = new Collection();
+
+        if ((float) $customer->opening_balance > 0) {
+            $entries->push([
+                'date' => $customer->opening_balance_date ?? $customer->created_at,
+                'type' => 'Opening Balance',
+                'reference' => 'Opening Balance',
+                'details' => 'Balance brought forward',
+                'debit' => (float) $customer->opening_balance,
+                'credit' => 0.0,
+            ]);
+        }
 
         foreach ($customer->creditSales->sortBy('sale_date') as $sale) {
             $entries->push([
@@ -308,9 +325,11 @@ class CustomerController extends Controller
         foreach ($customer->payments->sortBy('payment_date') as $payment) {
             $entries->push([
                 'date' => $payment->payment_date,
-                'type' => 'Payment',
+                'type' => $payment->account_reference_type === 'opening_balance' ? 'Opening Balance Payment' : 'Payment',
                 'reference' => $payment->payment_no,
-                'details' => $payment->sale?->sale_no ?? ($payment->paymentMode?->name ?? 'Payment'),
+                'details' => $payment->account_reference_type === 'opening_balance'
+                    ? ($payment->paymentMode?->name ?? 'Opening balance payment')
+                    : ($payment->sale?->sale_no ?? ($payment->paymentMode?->name ?? 'Payment')),
                 'debit' => 0.0,
                 'credit' => (float) $payment->amount,
             ]);
@@ -344,6 +363,7 @@ class CustomerController extends Controller
 
         $summary = [
             'opening_balance' => (float) $customer->opening_balance,
+            'opening_balance_remaining' => $customer->openingBalanceOutstanding(),
             'total_sales' => (float) $customer->creditSales->sum('total_amount'),
             'total_payments' => (float) $customer->payments->sum('amount')
                 + (float) $customer->creditSales->sum('amount_paid'),

@@ -6,11 +6,12 @@
         'id' => $customer->id,
         'name' => $customer->name,
         'location' => $customer->location,
-        'credit' => (float) ($customer->outstanding_credit ?? 0),
+        'credit' => round((float) ($customer->outstanding_credit ?? 0) + max((float) $customer->opening_balance - (float) ($customer->opening_payments_total ?? 0), 0), 2),
         'search' => strtolower(trim(implode(' ', array_filter([$customer->name, $customer->location])))),
     ]))
     @php($salesPayload = $outstandingSales->map(fn ($sale) => [
         'id' => $sale->id,
+        'account_reference_type' => 'sale',
         'sale_no' => $sale->sale_no,
         'customer_id' => $sale->customer_id,
         'customer_name' => $sale->customer?->name,
@@ -19,7 +20,18 @@
         'sale_date' => optional($sale->sale_date)->format('Y-m-d'),
         'credit_due_date' => optional($sale->credit_due_date)->format('Y-m-d'),
         'search' => strtolower(trim(implode(' ', array_filter([$sale->sale_no, $sale->customer?->name, $sale->store?->name])))),
-    ]))
+    ])->concat($openingBalanceRows->map(fn ($row) => [
+        'id' => null,
+        'account_reference_type' => 'opening_balance',
+        'sale_no' => 'Opening Balance',
+        'customer_id' => $row->customer_id,
+        'customer_name' => $row->customer?->name,
+        'store_name' => 'Carried forward debt',
+        'balance' => (float) $row->balance_due,
+        'sale_date' => optional($row->sale_date)->format('Y-m-d'),
+        'credit_due_date' => optional($row->credit_due_date)->format('Y-m-d'),
+        'search' => strtolower(trim(implode(' ', array_filter(['opening balance', $row->customer?->name])))),
+    ])))
     <style>
         .payment-shell { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr); gap:12px; align-items:start; }
         .payment-stack { display:grid; gap:12px; }
@@ -49,7 +61,7 @@
     <div class="page-head">
         <div>
             <h2>Customer Payment</h2>
-            <p>Choose the customer, pick the open sale, enter the amount received, and record the payment. The remaining balance updates automatically.</p>
+            <p>Choose the customer, pick the balance, enter the payment, and save.</p>
         </div>
         <div class="actions">
             <a href="{{ route('customer-payments.index') }}" class="button-link">Payment History</a>
@@ -68,9 +80,10 @@
             </section>
 
             <section class="panel">
-                <h3>2. Choose Open Sale</h3>
+                <h3>2. Choose Account</h3>
+                <input type="hidden" name="account_reference_type" id="payment-account-type" value="{{ old('account_reference_type', 'sale') }}">
                 <input type="hidden" name="sale_id" id="payment-sale-id" value="{{ old('sale_id') }}">
-                <input type="text" id="payment-sale-search" class="picker-input" placeholder="Search sale number or store">
+                <input type="text" id="payment-sale-search" class="picker-input" placeholder="Search sale number or account">
                 <div id="payment-sale-results" class="doc-results"></div>
             </section>
         </div>
@@ -90,7 +103,7 @@
                     <label class="form-field">
                         <span>Payment Mode</span>
                         <select name="payment_mode_id">
-                            <option value="">Optional</option>
+                            <option value="">Select mode</option>
                             @foreach ($paymentModes as $mode)
                                 <option value="{{ $mode->id }}" @selected((string) old('payment_mode_id') === (string) $mode->id)>{{ $mode->name }}</option>
                             @endforeach
@@ -115,7 +128,7 @@
                 <h3>4. Payment Summary</h3>
                 <div class="summary-grid" style="margin-top:14px;">
                     <div class="summary-row"><span>Customer</span><strong id="summary-customer">Choose customer</strong></div>
-                    <div class="summary-row"><span>Open Sale</span><strong id="summary-sale">Choose sale</strong></div>
+                    <div class="summary-row"><span>Account</span><strong id="summary-sale">Choose balance</strong></div>
                     <div class="summary-row"><span>Outstanding</span><strong id="summary-balance">{{ $currency }} 0</strong></div>
                     <div class="summary-row"><span>Amount Entered</span><strong id="summary-amount">{{ $currency }} 0</strong></div>
                     <div class="summary-row total"><span>Remaining</span><span id="summary-remaining">{{ $currency }} 0</span></div>
@@ -139,6 +152,7 @@
             const customerIdInput = document.getElementById('payment-customer-id');
             const customerSearch = document.getElementById('payment-customer-search');
             const customerResults = document.getElementById('payment-customer-results');
+            const accountTypeInput = document.getElementById('payment-account-type');
             const saleIdInput = document.getElementById('payment-sale-id');
             const saleSearch = document.getElementById('payment-sale-search');
             const saleResults = document.getElementById('payment-sale-results');
@@ -151,7 +165,15 @@
                 const id = String(customerIdInput.value || '');
                 return id ? sales.filter((item) => String(item.customer_id) === id) : [];
             }
-            function currentSale() { return availableSales().find((item) => String(item.id) === String(saleIdInput.value)); }
+            function currentSale() {
+                return availableSales().find((item) => {
+                    if (item.account_reference_type === 'opening_balance') {
+                        return accountTypeInput.value === 'opening_balance';
+                    }
+
+                    return accountTypeInput.value === 'sale' && String(item.id) === String(saleIdInput.value);
+                });
+            }
 
             function renderCustomers() {
                 const selectedId = String(customerIdInput.value || '');
@@ -178,9 +200,9 @@
                             <strong>${sale.sale_no}</strong>
                             <div class="pick-meta">${[sale.store_name, money(sale.balance), sale.credit_due_date ? `Due ${sale.credit_due_date}` : null].filter(Boolean).join(' / ')}</div>
                         </div>
-                        <button type="button" class="button-link" data-pick-sale="${sale.id}">${selectedId === String(sale.id) ? 'Selected' : 'Select'}</button>
+                        <button type="button" class="button-link" data-pick-sale="${sale.id ?? ''}" data-pick-account-type="${sale.account_reference_type}">${selectedId === String(sale.id) && accountTypeInput.value === sale.account_reference_type ? 'Selected' : 'Select'}</button>
                     </div>
-                `).join('') : `<div class="picker-empty">No open sales match this customer.</div>`;
+                `).join('') : `<div class="picker-empty">No open account matched this customer.</div>`;
             }
 
             function renderSummary() {
@@ -189,19 +211,20 @@
                 const amount = Number(amountInput.value || 0);
                 const balance = Number(sale?.balance || 0);
                 document.getElementById('summary-customer').textContent = customer ? customer.name : 'Choose customer';
-                document.getElementById('summary-sale').textContent = sale ? sale.sale_no : 'Choose sale';
+                document.getElementById('summary-sale').textContent = sale ? sale.sale_no : 'Choose balance';
                 document.getElementById('summary-balance').textContent = money(balance);
                 document.getElementById('summary-amount').textContent = money(amount);
                 document.getElementById('summary-remaining').textContent = money(Math.max(balance - amount, 0));
             }
 
             customerSearch.addEventListener('input', renderCustomers);
-            customerResults.addEventListener('click', (event) => {
+                customerResults.addEventListener('click', (event) => {
                 const button = event.target.closest('[data-pick-customer]');
                 if (!button) return;
                 customerIdInput.value = button.dataset.pickCustomer;
                 const customer = currentCustomer();
                 customerSearch.value = customer ? customer.name : '';
+                accountTypeInput.value = 'sale';
                 saleIdInput.value = '';
                 saleSearch.value = '';
                 renderCustomers();
@@ -213,7 +236,8 @@
             saleResults.addEventListener('click', (event) => {
                 const button = event.target.closest('[data-pick-sale]');
                 if (!button) return;
-                saleIdInput.value = button.dataset.pickSale;
+                accountTypeInput.value = button.dataset.pickAccountType || 'sale';
+                saleIdInput.value = button.dataset.pickSale || '';
                 const sale = currentSale();
                 saleSearch.value = sale ? sale.sale_no : '';
                 renderSales();
@@ -236,6 +260,9 @@
                     return;
                 }
                 if (!saleIdInput.value) {
+                    if (accountTypeInput.value === 'opening_balance') {
+                        return;
+                    }
                     event.preventDefault();
                     alert('Choose the open sale before recording the payment.');
                     saleSearch.focus();

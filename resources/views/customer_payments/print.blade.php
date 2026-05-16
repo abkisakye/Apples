@@ -42,7 +42,7 @@
             'documentName' => $payment->payment_no,
             'documentMetaLines' => [
                 'Date: '.optional($payment->payment_date)->format('d M Y'),
-                'Applied To: '.($payment->sale?->sale_no ?? '-'),
+                'Applied To: '.$accountSummary['account_reference'],
                 'Payment Mode: '.($payment->paymentMode?->name ?? 'Not set'),
                 'Printed: '.$printedAt->format('d M Y H:i'),
             ],
@@ -56,7 +56,7 @@
                 </td>
                 <td>
                     <span class="section-kicker">Balance After Payment</span>
-                    <div class="metric-value">{{ $currency }} {{ number_format((float) ($payment->sale?->balance_due ?? 0), 0) }}</div>
+                    <div class="metric-value">{{ $currency }} {{ number_format((float) $accountSummary['remaining_balance'], 0) }}</div>
                 </td>
                 <td>
                     <span class="section-kicker">Status</span>
@@ -81,8 +81,8 @@
                         <table class="summary-table">
                             <tr><td>Store</td><td>{{ $payment->store?->name ?? '-' }}</td></tr>
                             <tr><td>Reference</td><td>{{ $payment->reference_no ?: $payment->cheque_number ?: '-' }}</td></tr>
-                            <tr><td>Sale Number</td><td>{{ $payment->sale?->sale_no ?? '-' }}</td></tr>
-                            <tr><td>Sale Total</td><td>{{ $currency }} {{ number_format((float) ($payment->sale?->total_amount ?? 0), 0) }}</td></tr>
+                            <tr><td>Account</td><td>{{ $accountSummary['account_reference'] }}</td></tr>
+                            <tr><td>Account Total</td><td>{{ $currency }} {{ number_format((float) $accountSummary['account_total'], 0) }}</td></tr>
                         </table>
                     </div>
                 </td>
@@ -95,7 +95,7 @@
                     <div class="panel">
                         <span class="panel-title">Receipt Note</span>
                         <div class="detail-copy">
-                            This confirms that {{ $currency }} {{ number_format((float) $payment->amount, 0) }} was received from {{ $payment->customer?->name ?? 'the customer' }} and applied to sale {{ $payment->sale?->sale_no ?? '-' }}.
+                            This confirms that {{ $currency }} {{ number_format((float) $payment->amount, 0) }} was received from {{ $payment->customer?->name ?? 'the customer' }} and applied to {{ strtolower($accountSummary['account_label']) }} {{ $accountSummary['account_reference'] }}.
                             @if ($payment->remarks)
                                 <br><br>Remarks: {{ $payment->remarks }}
                             @endif

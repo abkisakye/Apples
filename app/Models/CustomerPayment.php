@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Builder;
 
 class CustomerPayment extends Model
 {
@@ -15,6 +16,11 @@ class CustomerPayment extends Model
             'payment_date' => 'date',
             'amount' => 'decimal:2',
         ];
+    }
+
+    public function scopePosted(Builder $query): Builder
+    {
+        return $query->where('status', 'posted');
     }
 
     public function customer(): BelongsTo

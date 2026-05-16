@@ -55,8 +55,24 @@ class DashboardController extends Controller
             ->orderBy('reminder_date')
             ->limit(8)
             ->get();
+        $openingDebtRows = Customer::query()
+            ->where('is_system', false)
+            ->where('opening_balance', '>', 0)
+            ->withSum(['openingBalancePayments as opening_payments_total' => fn ($query) => $query->where('status', 'posted')], 'amount')
+            ->get(['id', 'opening_balance', 'opening_balance_date', 'created_at'])
+            ->map(function (Customer $customer) {
+                $balanceDue = round(max((float) $customer->opening_balance - (float) ($customer->opening_payments_total ?? 0), 0), 2);
+
+                return (object) [
+                    'credit_due_date' => $customer->opening_balance_date ?? optional($customer->created_at)?->toDateString(),
+                    'balance_due' => $balanceDue,
+                ];
+            })
+            ->filter(fn ($row) => (float) $row->balance_due > 0)
+            ->values();
         $customerAgingTotals = $this->agingTotals(
-            Sale::query()->posted()->where('sale_type', 'credit')->where('balance_due', '>', 0)->get(['credit_due_date', 'balance_due']),
+            Sale::query()->posted()->where('sale_type', 'credit')->where('balance_due', '>', 0)->get(['credit_due_date', 'balance_due'])
+                ->concat($openingDebtRows),
             'credit_due_date',
             'balance_due'
         );
@@ -143,19 +159,19 @@ class DashboardController extends Controller
                 'sales' => $salesQuery->count(),
                 'purchases' => $purchasesQuery->count(),
                 'sales_total' => (float) $salesQuery->sum('total_amount'),
-                'credit_outstanding' => (float) Sale::query()->posted()->sum('balance_due'),
+                'credit_outstanding' => (float) Sale::query()->posted()->sum('balance_due') + (float) $openingDebtRows->sum('balance_due'),
                 'overdue_credit_count' => Sale::query()
                     ->posted()
                     ->where('sale_type', 'credit')
                     ->where('balance_due', '>', 0)
                     ->whereDate('credit_due_date', '<', $today)
-                    ->count(),
+                    ->count() + $openingDebtRows->filter(fn ($row) => $row->credit_due_date && $row->credit_due_date < $today)->count(),
                 'overdue_credit_value' => (float) Sale::query()
                     ->posted()
                     ->where('sale_type', 'credit')
                     ->where('balance_due', '>', 0)
                     ->whereDate('credit_due_date', '<', $today)
-                    ->sum('balance_due'),
+                    ->sum('balance_due') + (float) $openingDebtRows->filter(fn ($row) => $row->credit_due_date && $row->credit_due_date < $today)->sum('balance_due'),
                 'low_stock_count' => (clone $lowStockBaseQuery)->get()->count(),
                 'pending_follow_up_count' => FollowUpAction::query()->whereIn('status', ['pending', 'sent'])->count(),
                 'expenses_today' => (float) Expense::query()->posted()->whereDate('expense_date', $today)->sum('amount'),

@@ -17,6 +17,10 @@ class DemoSetupSeeder extends Seeder
 {
     public function run(): void
     {
+        if (! app()->environment(['local', 'testing'])) {
+            return;
+        }
+
         $mainStore = Store::query()->firstOrCreate(['name' => 'Demo Main Store'], ['is_active' => true]);
         $cashierRole = Role::query()->firstOrCreate(['name' => 'cashier'], ['description' => 'Cashier']);
         $managerRole = Role::query()->firstOrCreate(['name' => 'manager'], ['description' => 'Manager']);

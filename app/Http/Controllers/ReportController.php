@@ -38,6 +38,7 @@ class ReportController extends Controller
         $purchaseTotal = (float) (clone $purchasesQuery)->sum('total_amount');
         $expenseTotal = (float) (clone $expensesQuery)->sum('amount');
         $returnTotal = (float) (clone $returnsQuery)->sum('returned_total');
+        $refundTotal = (float) (clone $returnsQuery)->sum('refund_amount');
         $cogs = (float) SaleItem::query()
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->where('sales.status', 'posted')
@@ -45,7 +46,7 @@ class ReportController extends Controller
             ->selectRaw('COALESCE(SUM(sale_items.quantity * sale_items.cost_price_snapshot), 0) as cogs')
             ->value('cogs');
         $grossProfit = round($salesTotal - $cogs, 2);
-        $netProfit = round($grossProfit - $expenseTotal, 2);
+        $netProfit = round($grossProfit - $expenseTotal - $refundTotal, 2);
         $collectionTotal = (float) (clone $salesQuery)->sum('amount_paid')
             + (float) CustomerPayment::query()->whereBetween('payment_date', [$fromDate, $toDate])->sum('amount');
 
@@ -70,6 +71,7 @@ class ReportController extends Controller
                 'purchase_total' => $purchaseTotal,
                 'expense_total' => $expenseTotal,
                 'return_total' => $returnTotal,
+                'refund_total' => $refundTotal,
                 'cogs' => $cogs,
                 'gross_profit' => $grossProfit,
                 'net_profit' => $netProfit,
@@ -103,6 +105,14 @@ class ReportController extends Controller
             ->groupBy('payment_mode_id')
             ->pluck('amount', 'payment_mode_id');
 
+        $refundRows = SaleReturn::query()
+            ->where('status', 'posted')
+            ->where('refund_amount', '>', 0)
+            ->whereBetween('return_date', [$fromDate, $toDate])
+            ->selectRaw('payment_mode_id, COALESCE(SUM(refund_amount), 0) as amount')
+            ->groupBy('payment_mode_id')
+            ->pluck('amount', 'payment_mode_id');
+
         $expenseRows = Expense::query()
             ->posted()
             ->whereBetween('expense_date', [$fromDate, $toDate])
@@ -114,6 +124,7 @@ class ReportController extends Controller
             ->merge($salesRows->keys())
             ->merge($customerPaymentRows->keys())
             ->merge($supplierPaymentRows->keys())
+            ->merge($refundRows->keys())
             ->merge($expenseRows->keys())
             ->filter()
             ->unique()
@@ -121,10 +132,11 @@ class ReportController extends Controller
 
         $modeNames = DB::table('payment_modes')->whereIn('id', $modeIds)->pluck('name', 'id');
 
-        $rows = $modeIds->map(function ($modeId) use ($modeNames, $salesRows, $customerPaymentRows, $supplierPaymentRows, $expenseRows) {
+        $rows = $modeIds->map(function ($modeId) use ($modeNames, $salesRows, $customerPaymentRows, $supplierPaymentRows, $refundRows, $expenseRows) {
             $sales = (float) ($salesRows[$modeId] ?? 0);
             $customerPayments = (float) ($customerPaymentRows[$modeId] ?? 0);
             $supplierPayments = (float) ($supplierPaymentRows[$modeId] ?? 0);
+            $refunds = (float) ($refundRows[$modeId] ?? 0);
             $expenses = (float) ($expenseRows[$modeId] ?? 0);
 
             return (object) [
@@ -132,8 +144,9 @@ class ReportController extends Controller
                 'sales_in' => $sales,
                 'customer_in' => $customerPayments,
                 'supplier_out' => $supplierPayments,
+                'refund_out' => $refunds,
                 'expense_out' => $expenses,
-                'net_total' => round(($sales + $customerPayments) - ($supplierPayments + $expenses), 2),
+                'net_total' => round(($sales + $customerPayments) - ($supplierPayments + $refunds + $expenses), 2),
             ];
         })->sortByDesc('net_total')->values();
 
@@ -193,6 +206,7 @@ class ReportController extends Controller
         $discountTotal = (float) Sale::query()->posted()->whereDate('sale_date', $date)->sum('discount_amount');
         $creditIssued = (float) Sale::query()->posted()->whereDate('sale_date', $date)->where('sale_type', 'credit')->sum('balance_due');
         $returnTotal = (float) SaleReturn::query()->where('status', 'posted')->whereDate('return_date', $date)->sum('returned_total');
+        $refundTotal = (float) SaleReturn::query()->where('status', 'posted')->whereDate('return_date', $date)->sum('refund_amount');
         $customerPaymentTotal = (float) CustomerPayment::query()->whereDate('payment_date', $date)->sum('amount');
         $expenseTotal = (float) Expense::query()->posted()->whereDate('expense_date', $date)->sum('amount');
 
@@ -206,12 +220,34 @@ class ReportController extends Controller
         $cashCounted = (float) $shiftRows->sum(fn (CashShift $shift) => (float) ($shift->counted_cash ?? 0));
         $cashDifference = (float) $shiftRows->sum(fn (CashShift $shift) => (float) ($shift->shortage_overage ?? 0));
 
-        $paymentModeRows = Sale::query()
+        $salesPaymentRows = Sale::query()
             ->posted()
             ->whereDate('sale_date', $date)
             ->join('payment_modes', 'payment_modes.id', '=', 'sales.payment_mode_id')
-            ->selectRaw('payment_modes.name as mode_name, COALESCE(SUM(sales.amount_paid), 0) as amount')
-            ->groupBy('payment_modes.name')
+            ->selectRaw('payment_modes.name as mode_name, COALESCE(SUM(sales.amount_paid), 0) as sales_amount, 0 as customer_payment_amount, 0 as refund_amount')
+            ->groupBy('payment_modes.name');
+
+        $customerPaymentRows = CustomerPayment::query()
+            ->whereDate('payment_date', $date)
+            ->join('payment_modes', 'payment_modes.id', '=', 'customer_payments.payment_mode_id')
+            ->selectRaw('payment_modes.name as mode_name, 0 as sales_amount, COALESCE(SUM(customer_payments.amount), 0) as customer_payment_amount, 0 as refund_amount')
+            ->groupBy('payment_modes.name');
+
+        $refundPaymentRows = SaleReturn::query()
+            ->where('status', 'posted')
+            ->where('refund_amount', '>', 0)
+            ->whereDate('return_date', $date)
+            ->join('payment_modes', 'payment_modes.id', '=', 'sale_returns.payment_mode_id')
+            ->selectRaw('payment_modes.name as mode_name, 0 as sales_amount, 0 as customer_payment_amount, COALESCE(SUM(sale_returns.refund_amount), 0) as refund_amount')
+            ->groupBy('payment_modes.name');
+
+        $paymentModeRows = DB::query()
+            ->fromSub(
+                $salesPaymentRows->unionAll($customerPaymentRows)->unionAll($refundPaymentRows),
+                'payment_breakdown'
+            )
+            ->selectRaw('mode_name, SUM(sales_amount) as sales_amount, SUM(customer_payment_amount) as customer_payment_amount, SUM(refund_amount) as refund_amount, SUM(sales_amount + customer_payment_amount - refund_amount) as amount')
+            ->groupBy('mode_name')
             ->orderByDesc('amount')
             ->get();
 
@@ -222,6 +258,7 @@ class ReportController extends Controller
                 'discount_total' => $discountTotal,
                 'credit_issued' => $creditIssued,
                 'return_total' => $returnTotal,
+                'refund_total' => $refundTotal,
                 'customer_payment_total' => $customerPaymentTotal,
                 'expense_total' => $expenseTotal,
                 'cash_expected' => $cashExpected,
@@ -238,11 +275,24 @@ class ReportController extends Controller
         $today = now()->startOfDay();
         $rows = Customer::query()
             ->where('is_system', false)
-            ->with(['creditSales' => fn ($query) => $query->posted()->where('balance_due', '>', 0)])
+            ->with([
+                'creditSales' => fn ($query) => $query->posted()->where('balance_due', '>', 0),
+                'openingBalancePayments' => fn ($query) => $query->posted(),
+            ])
             ->orderBy('name')
             ->get()
             ->map(function (Customer $customer) use ($today) {
-                $buckets = $this->agingBuckets($customer->creditSales, $today, 'credit_due_date', 'balance_due');
+                $documents = $customer->creditSales->values();
+                $openingOutstanding = $customer->openingBalanceOutstanding();
+
+                if ($openingOutstanding > 0) {
+                    $documents = $documents->push((object) [
+                        'credit_due_date' => $customer->opening_balance_date ?? optional($customer->created_at)?->toDateString(),
+                        'balance_due' => $openingOutstanding,
+                    ]);
+                }
+
+                $buckets = $this->agingBuckets($documents, $today, 'credit_due_date', 'balance_due');
 
                 return (object) [
                     'customer' => $customer,

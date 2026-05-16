@@ -28,6 +28,7 @@
         <div class="card"><div class="label">Sales</div><div class="value money">{{ $currency }} {{ number_format($summary['sales_total'], 0) }}</div></div>
         <div class="card"><div class="label">Discounts</div><div class="value money">{{ $currency }} {{ number_format($summary['discount_total'], 0) }}</div></div>
         <div class="card"><div class="label">Returns</div><div class="value money">{{ $currency }} {{ number_format($summary['return_total'], 0) }}</div></div>
+        <div class="card"><div class="label">Refunds</div><div class="value money">{{ $currency }} {{ number_format($summary['refund_total'], 0) }}</div></div>
         <div class="card"><div class="label">Customer Payments</div><div class="value money">{{ $currency }} {{ number_format($summary['customer_payment_total'], 0) }}</div></div>
         <div class="card"><div class="label">Expenses</div><div class="value money">{{ $currency }} {{ number_format($summary['expense_total'], 0) }}</div></div>
         <div class="card"><div class="label">Credit Issued</div><div class="value money">{{ $currency }} {{ number_format($summary['credit_issued'], 0) }}</div></div>
@@ -56,7 +57,7 @@
                     <thead>
                         <tr>
                             <th>Method</th>
-                            <th>Collected</th>
+                            <th>Net Movement</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -65,7 +66,12 @@
                                 <td>
                                     <div class="table-title">{{ $row->mode_name }}</div>
                                 </td>
-                                <td class="money">{{ $currency }} {{ number_format((float) $row->amount, 0) }}</td>
+                                <td class="money">
+                                    <div class="cell-stack">
+                                        <div>{{ $currency }} {{ number_format((float) $row->amount, 0) }}</div>
+                                        <div class="table-meta">Sales {{ number_format((float) $row->sales_amount, 0) }} / Customer {{ number_format((float) $row->customer_payment_amount, 0) }} / Refunds {{ number_format((float) $row->refund_amount, 0) }}</div>
+                                    </div>
+                                </td>
                             </tr>
                         @empty
                             <tr>

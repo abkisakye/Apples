@@ -9,6 +9,7 @@ use App\Models\CapitalSource;
 use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\FollowUpAction;
+use App\Models\InventoryTransaction;
 use App\Models\PaymentMode;
 use App\Models\Product;
 use App\Models\ProductUnit;
@@ -36,6 +37,26 @@ class WorkflowTest extends TestCase
         $this->signInAsRole('admin');
     }
 
+    private function seedStock(Store $store, ProductUnit $unit, int $quantity, string $date = '2026-03-24', ?string $referenceNo = null): void
+    {
+        $referenceNo = $referenceNo ?? strtoupper(uniqid('SEED-', true));
+
+        InventoryTransaction::create([
+            'transaction_date' => $date,
+            'store_id' => $store->id,
+            'product_id' => $unit->product_id,
+            'product_unit_id' => $unit->id,
+            'reference_type' => 'test_seed',
+            'reference_id' => crc32($referenceNo.$unit->id.$store->id.$date.$quantity),
+            'reference_no' => $referenceNo,
+            'movement_type' => 'purchase',
+            'quantity_in' => $quantity,
+            'quantity_out' => 0,
+            'unit_cost' => $unit->cost_price ?? 0,
+            'unit_price' => $unit->selling_price ?? 0,
+        ]);
+    }
+
     public function test_cash_sale_posting_creates_sale_items_and_inventory_transaction(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
@@ -49,6 +70,7 @@ class WorkflowTest extends TestCase
             'cost_price' => 350,
             'is_active' => true,
         ]);
+        $this->seedStock($store, $unit, 10);
 
         $response = $this->post('/sales', [
             'sale_date' => '2026-03-25',
@@ -101,6 +123,7 @@ class WorkflowTest extends TestCase
         $response = $this->post('/customer-payments', [
             'payment_date' => '2026-03-25',
             'customer_id' => $customer->id,
+            'account_reference_type' => 'sale',
             'sale_id' => $sale->id,
             'payment_mode_id' => $paymentMode->id,
             'amount' => 200,
@@ -117,6 +140,36 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseCount('customer_payments', 1);
     }
 
+    public function test_customer_payment_can_reduce_opening_balance_without_fake_sale(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $customer = Customer::create([
+            'name' => 'Legacy Credit Customer',
+            'opening_balance' => 500,
+            'opening_balance_date' => '2026-03-01',
+            'is_active' => true,
+        ]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        $actingUser = $this->app['auth']->user();
+        $actingUser->update(['default_store_id' => $store->id]);
+
+        $response = $this->post('/customer-payments', [
+            'payment_date' => '2026-03-25',
+            'customer_id' => $customer->id,
+            'account_reference_type' => 'opening_balance',
+            'payment_mode_id' => $paymentMode->id,
+            'amount' => 200,
+        ]);
+
+        $payment = \App\Models\CustomerPayment::query()->firstOrFail();
+        $response->assertRedirect('/customer-payments/'.$payment->id);
+
+        $this->assertNull($payment->sale_id);
+        $this->assertSame('opening_balance', $payment->account_reference_type);
+        $this->assertEquals(300.0, (float) $customer->fresh()->openingBalanceOutstanding());
+    }
+
     public function test_partial_amount_received_turns_sale_into_credit_with_balance(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
@@ -130,6 +183,7 @@ class WorkflowTest extends TestCase
             'cost_price' => 1200,
             'is_active' => true,
         ]);
+        $this->seedStock($store, $unit, 10);
 
         $response = $this->post('/sales', [
             'sale_date' => '2026-03-25',
@@ -168,6 +222,7 @@ class WorkflowTest extends TestCase
             'cost_price' => 1800,
             'is_active' => true,
         ]);
+        $this->seedStock($store, $unit, 10);
 
         $response = $this->post('/sales', [
             'sale_date' => '2026-03-25',
@@ -191,6 +246,73 @@ class WorkflowTest extends TestCase
         $this->assertEquals(6000.0, (float) $sale->amount_paid);
         $this->assertEquals(7000.0, (float) $sale->cash_tendered);
         $this->assertEquals(1000.0, (float) $sale->change_given);
+    }
+
+    public function test_walk_in_customer_cannot_receive_credit(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $walkInCustomer = Customer::create(['name' => 'Walk-in Customer', 'is_walk_in' => true, 'is_system' => true, 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Milk', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Pack',
+            'selling_price' => 3000,
+            'cost_price' => 2000,
+            'is_active' => true,
+        ]);
+        $this->seedStock($store, $unit, 5);
+
+        $this->post('/sales', [
+            'sale_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'customer_id' => $walkInCustomer->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 1000,
+            'credit_period_days' => 7,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_price' => 3000],
+            ],
+        ])->assertSessionHasErrors('customer_id');
+    }
+
+    public function test_cashier_cannot_override_sale_price_without_approval(): void
+    {
+        $store = Store::create(['name' => 'Counter Store', 'is_active' => true]);
+        $cashMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Counter Customer', 'is_active' => true]);
+        $product = Product::create(['name' => 'Tea', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Pack',
+            'selling_price' => 4000,
+            'cost_price' => 2600,
+            'is_active' => true,
+        ]);
+        $this->seedStock($store, $unit, 6);
+
+        $cashierRole = \App\Models\Role::query()->updateOrCreate(
+            ['name' => 'cashier'],
+            ['description' => 'Cashier', 'permissions' => ['dashboard.view', 'sales.view', 'sales.manage']]
+        );
+        $cashier = User::factory()->create([
+            'role_id' => $cashierRole->id,
+            'default_store_id' => $store->id,
+            'is_active' => true,
+        ]);
+        $cashier->roles()->sync([$cashierRole->id]);
+        $this->actingAs($cashier);
+
+        $this->post('/sales', [
+            'sale_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'payment_mode_id' => $cashMode->id,
+            'amount_paid' => 1000,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_price' => 1000],
+            ],
+        ])->assertSessionHasErrors('items.0.unit_price');
     }
 
     public function test_customer_can_be_quick_added_during_sale_entry(): void
@@ -1108,6 +1230,7 @@ class WorkflowTest extends TestCase
             'barcode' => '12345001',
             'is_active' => true,
         ]);
+        $this->seedStock($store, $unit, 4);
 
         $sale = Sale::create([
             'sale_no' => 'INV-EX-1',
@@ -1299,6 +1422,7 @@ class WorkflowTest extends TestCase
             'is_active' => true,
             'is_pos_unit' => true,
         ]);
+        $this->seedStock($store, $unit, 2);
 
         $sale = Sale::create([
             'sale_no' => 'INV-CORR-1',
@@ -1446,6 +1570,7 @@ class WorkflowTest extends TestCase
             'selling_price' => 1500,
             'is_active' => true,
         ]);
+        $this->seedStock($storeA, $unit, 6);
 
         $transferResponse = $this->post('/stock/transfers', [
             'transfer_date' => '2026-03-25',
@@ -2264,6 +2389,7 @@ class WorkflowTest extends TestCase
             'cost_price' => 1500,
             'is_active' => true,
         ]);
+        $this->seedStock($store, $unit, 4);
 
         $this->post('/sales', [
             'sale_date' => '2026-04-17',
@@ -2611,14 +2737,34 @@ class WorkflowTest extends TestCase
 
         $this->get('/users/'.$user->id.'/role')
             ->assertOk()
-            ->assertSee('Assign Role');
+            ->assertSee('Assign Roles');
 
         $this->put('/users/'.$user->id.'/role', [
-            'role_id' => $managerRole->id,
+            'role_ids' => [$managerRole->id],
         ])->assertRedirect('/users');
 
         $user->refresh();
         $this->assertSame($managerRole->id, $user->role_id);
+    }
+
+    public function test_user_permissions_combine_across_multiple_roles(): void
+    {
+        \App\Models\Role::query()->create([
+            'name' => 'sales_officer',
+            'description' => 'Sales Officer',
+            'permissions' => ['dashboard.view', 'sales.manage'],
+        ]);
+        \App\Models\Role::query()->create([
+            'name' => 'stock_helper',
+            'description' => 'Stock Helper',
+            'permissions' => ['stock.manage'],
+        ]);
+
+        $this->signInWithRoles(['sales_officer', 'stock_helper']);
+
+        $this->get('/')->assertOk();
+        $this->get('/sales/create')->assertOk();
+        $this->get('/stock/adjustments/create')->assertOk();
     }
 
     public function test_permissions_matrix_can_be_updated_from_one_page(): void
@@ -2753,6 +2899,7 @@ class WorkflowTest extends TestCase
         $customerPaymentResponse = $this->post('/customer-payments', [
             'payment_date' => '2026-04-03',
             'customer_id' => $customer->id,
+            'account_reference_type' => 'sale',
             'sale_id' => $sale->id,
             'payment_mode_id' => $cashMode->id,
             'amount' => 5000,
@@ -2913,7 +3060,7 @@ class WorkflowTest extends TestCase
             ->assertSee('Daily Supplier')
             ->assertSee('9,000');
 
-        $this->get('/reports/financial-summary')
+        $this->get('/reports/financial-summary?from=2026-04-01&to=2026-04-30')
             ->assertOk()
             ->assertSee('Financial Summary')
             ->assertSee('36,000')

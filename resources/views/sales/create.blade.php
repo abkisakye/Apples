@@ -7,7 +7,7 @@
         'name' => $customer->name,
         'is_walk_in' => (bool) $customer->is_walk_in,
         'location' => $customer->location,
-        'credit' => (float) ($customer->outstanding_credit ?? 0),
+        'credit' => round((float) ($customer->outstanding_credit ?? 0) + max((float) ($customer->opening_balance ?? 0) - (float) ($customer->opening_payments_total ?? 0), 0), 2),
         'search' => strtolower(trim(implode(' ', array_filter([
             $customer->name,
             $customer->location,
@@ -34,17 +34,17 @@
     <style>
         .sale-workspace {
             display: grid;
-            grid-template-columns: minmax(0, 1.5fr) minmax(360px, .9fr);
-            gap: 12px;
+            grid-template-columns: minmax(0, 1.55fr) minmax(320px, .85fr);
+            gap: 10px;
             align-items: start;
         }
         .sale-lane {
             display: grid;
-            gap: 12px;
+            gap: 10px;
         }
         .sale-workspace .panel {
-            padding: 12px;
-            border-radius: 18px;
+            padding: 10px;
+            border-radius: 16px;
         }
         .sale-hero {
             display: grid;
@@ -66,10 +66,10 @@
         .sale-panel-subtitle,
         .sale-meta-note,
         .keypad-note {
-            margin: 4px 0 0;
+            margin: 2px 0 0;
             color: var(--muted);
-            font-size: .8rem;
-            line-height: 1.4;
+            font-size: .74rem;
+            line-height: 1.3;
         }
         .sale-badges {
             display: flex;
@@ -152,12 +152,12 @@
         .sale-kpis {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 8px;
+            gap: 6px;
         }
         .sale-kpi {
             border: 1px solid color-mix(in srgb, var(--line) 84%, var(--brand) 16%);
             border-radius: 16px;
-            padding: 10px 11px;
+            padding: 8px 9px;
             background:
                 radial-gradient(circle at top right, rgba(212, 175, 55, 0.16), transparent 44%),
                 linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(246, 249, 246, .98) 100%);
@@ -176,9 +176,9 @@
         }
         .sale-product-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
-            gap: 7px;
-            max-height: calc(100vh - 320px);
+            grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+            gap: 6px;
+            max-height: calc(100vh - 292px);
             overflow-y: auto;
             padding-right: 2px;
         }
@@ -192,23 +192,23 @@
         }
         .sale-product-card {
             display: grid;
-            gap: 8px;
-            padding: 9px;
-            border-radius: 15px;
+            gap: 6px;
+            padding: 8px;
+            border-radius: 13px;
             border: 1px solid color-mix(in srgb, var(--line) 82%, var(--brand) 18%);
             background:
                 radial-gradient(circle at top right, rgba(212, 175, 55, 0.14), transparent 42%),
                 linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(246, 249, 246, .98) 100%);
-            min-height: 118px;
+            min-height: 102px;
         }
         .sale-product-card strong {
             display: block;
-            font-size: .84rem;
+            font-size: .79rem;
             line-height: 1.2;
         }
         .sale-product-meta {
             color: var(--muted);
-            font-size: .7rem;
+            font-size: .66rem;
             line-height: 1.28;
         }
         .sale-product-footer {
@@ -243,9 +243,9 @@
         }
         .sale-bill-shell {
             position: sticky;
-            top: 12px;
+            top: 10px;
             display: grid;
-            gap: 12px;
+            gap: 10px;
         }
         .sale-bill-top {
             display: grid;
@@ -253,7 +253,7 @@
         }
         .sale-mini-grid {
             display: grid;
-            grid-template-columns: minmax(170px, .68fr) minmax(0, 1.32fr);
+            grid-template-columns: 168px minmax(0, 1fr);
             gap: 8px;
             align-items: start;
         }
@@ -311,7 +311,7 @@
         .customer-results {
             display: grid;
             gap: 6px;
-            max-height: 220px;
+            max-height: 184px;
             overflow-y: auto;
             padding-right: 2px;
         }
@@ -385,29 +385,29 @@
         }
         .sale-cart-wrap {
             display: grid;
-            gap: 8px;
+            gap: 6px;
         }
         .bill-list {
             display: grid;
-            gap: 8px;
-            max-height: 360px;
+            gap: 7px;
+            max-height: 248px;
             overflow-y: auto;
             padding-right: 2px;
         }
         .bill-empty {
-            padding: 20px 14px;
+            padding: 16px 12px;
             border-radius: 16px;
             border: 1px dashed color-mix(in srgb, var(--line-strong) 76%, var(--brand) 24%);
             background: rgba(248, 250, 248, 0.98);
             text-align: center;
             color: var(--muted);
-            font-size: .84rem;
+            font-size: .8rem;
         }
         .bill-row {
             display: grid;
-            gap: 8px;
-            padding: 10px;
-            border-radius: 16px;
+            gap: 7px;
+            padding: 8px;
+            border-radius: 14px;
             border: 1px solid color-mix(in srgb, var(--line) 84%, var(--brand) 16%);
             background: #fff;
         }
@@ -419,13 +419,13 @@
         }
         .bill-row-title strong {
             display: block;
-            font-size: .88rem;
+            font-size: .82rem;
             line-height: 1.25;
         }
         .bill-row-sub {
             margin-top: 2px;
             color: var(--muted);
-            font-size: .75rem;
+            font-size: .7rem;
         }
         .bill-remove {
             min-width: 34px;
@@ -440,7 +440,7 @@
         .bill-row-grid {
             display: grid;
             grid-template-columns: minmax(0, 1.1fr) minmax(0, .92fr) minmax(0, .82fr);
-            gap: 8px;
+            gap: 6px;
         }
         .bill-label {
             font-size: .68rem;
@@ -494,15 +494,15 @@
         }
         .sale-total-stack {
             display: grid;
-            gap: 8px;
+            gap: 6px;
         }
         .sale-total-box {
             display: flex;
             justify-content: space-between;
             gap: 10px;
             align-items: center;
-            padding: 11px 12px;
-            border-radius: 16px;
+            padding: 9px 10px;
+            border-radius: 14px;
             border: 1px solid color-mix(in srgb, var(--line) 84%, var(--brand) 16%);
             background: rgba(249, 251, 249, 0.98);
         }
@@ -513,7 +513,7 @@
             letter-spacing: .06em;
         }
         .sale-total-box strong {
-            font-size: .92rem;
+            font-size: .88rem;
         }
         .sale-total-box.grand {
             background: linear-gradient(135deg, rgba(6, 104, 56, 0.1) 0%, rgba(212, 175, 55, 0.12) 100%);
@@ -525,7 +525,7 @@
         .sale-payment-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
+            gap: 6px;
         }
         .sale-actions-row {
             display: flex;
@@ -561,8 +561,8 @@
             gap: 8px;
         }
         .sale-key {
-            min-height: 48px;
-            border-radius: 14px;
+            min-height: 42px;
+            border-radius: 12px;
             border: 1px solid color-mix(in srgb, var(--line) 76%, var(--brand) 24%);
             background: linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(245, 248, 245, .98) 100%);
             color: var(--ink);
@@ -768,7 +768,7 @@
                 <div class="sale-search-row">
                     <div>
                         <input type="text" id="scan-search" class="sale-input" placeholder="Scan barcode or code">
-                        <div id="scan-status" class="scan-status">Use this box for scanner input. Press Enter after scan if your scanner does not auto-submit.</div>
+                        <div id="scan-status" class="scan-status">Scan item and press Enter if needed.</div>
                     </div>
                     <input type="text" id="product-search" class="sale-input" placeholder="Search product, barcode, code, or part number">
                 </div>
@@ -796,8 +796,8 @@
             <section class="panel">
                 <div class="sale-section-head">
                     <div>
-                        <h3>Product Tiles</h3>
-                        <p>Tap an item once to add it. The bill updates immediately on the right.</p>
+                        <h3>Products</h3>
+                        <p>Tap once to add.</p>
                     </div>
                 </div>
                 <div class="sale-results-meta">
@@ -813,15 +813,15 @@
             <section class="panel sale-bill-top">
                 <div class="sale-section-head">
                     <div>
-                        <h3>Bill And Customer</h3>
-                        <p>Choose the customer first, then capture payment after the basket is ready.</p>
+                        <h3>Sale Details</h3>
+                        <p>Choose date and customer.</p>
                     </div>
                     <div id="sale-kind-badge" class="sale-kind-pill">Cash Sale</div>
                 </div>
 
                 @if ($requiresShift && ! $activeShift)
                     <div class="bill-empty" style="text-align:left;">
-                        Open a cashier shift before posting sales from this account. This keeps day cash and cashier accountability accurate.
+                        Open a cash shift before posting sales.
                     </div>
                 @endif
 
@@ -847,20 +847,20 @@
                 </div>
 
                 <div id="selected-customer-chip" class="selected-customer-chip empty">No customer selected yet</div>
-                <div id="quick-customer-status" class="quick-customer-status">Pick a customer first. Use walk-in only when you do not need a named customer account.</div>
+                <div id="quick-customer-status" class="quick-customer-status">Choose customer.</div>
             </section>
 
             <section class="panel sale-cart-wrap">
                 <div class="sale-section-head">
                     <div>
                         <h3>Selected Products</h3>
-                        <p>Adjust quantity or price directly from the selected items list.</p>
+                        <p>Qty, price, total.</p>
                     </div>
                     <button type="button" id="clear-cart" class="button-link">Clear Sale</button>
                 </div>
 
                 <div id="cart-empty" class="bill-empty">
-                    No items on the bill yet. Search or scan a product to begin.
+                    No products selected.
                 </div>
                 <div id="cart-list" class="bill-list"></div>
                 <div id="sale-items-hidden"></div>
@@ -870,7 +870,7 @@
                 <div class="sale-section-head">
                     <div>
                         <h3>Checkout</h3>
-                        <p>Totals update instantly. If payment is short, the balance remains as customer credit.</p>
+                        <p>Paid, balance, change.</p>
                     </div>
                 </div>
 
@@ -919,7 +919,7 @@
                     <label class="sale-field">
                         <span>Payment Mode</span>
                         <select name="payment_mode_id" class="sale-select">
-                            <option value="">Auto-select from balance</option>
+                            <option value="">Choose mode</option>
                             @foreach ($paymentModes as $mode)
                                 <option value="{{ $mode->id }}" @selected((string) old('payment_mode_id') === (string) $mode->id)>{{ $mode->name }}</option>
                             @endforeach
@@ -965,14 +965,14 @@
 
                 <div class="sale-actions-row">
                     <button type="button" id="fill-total" class="button-link">Use Full Payment</button>
-                    <button type="submit" class="sale-primary-button">Save Sale</button>
+                    <button type="submit" class="sale-primary-button">Post Sale</button>
                 </div>
             </section>
 
             <section class="panel sale-keypad">
                 <div>
                     <h3 class="sale-panel-title">Cashier Keypad</h3>
-                    <p class="keypad-note">Tap a quantity, price, discount, amount received, or credit days field, then use the keypad for quick entry.</p>
+                    <p class="keypad-note">Tap a field, then enter values here.</p>
                 </div>
                 <div class="sale-keypad-grid" id="sale-keypad">
                     <button type="button" class="sale-key" data-keypad="7">7</button>
@@ -1104,6 +1104,7 @@
             const mobileFillTotalButton = document.getElementById('mobile-fill-total');
             const cashierDiscountLimit = Number(@json($cashierDiscountLimit));
             const requiresApprovalPin = @json($requiresApprovalPin);
+            const canOverridePrices = @json($canOverridePrices);
 
             const initialItems = [];
             @foreach (old('items', $prefillSale['items']) as $oldItem)
@@ -1189,8 +1190,8 @@
                 return {
                     value: customer.name,
                     meta: customer.is_walk_in
-                        ? 'Walk-in customer. Complete full payment unless you switch to a named customer.'
-                        : ([customer.location, customer.credit > 0 ? `${money(customer.credit)} credit` : null].filter(Boolean).join(' / ') || 'Saved customer account'),
+                        ? 'Walk-in customer. Full payment only.'
+                        : ([customer.location, customer.credit > 0 ? `${money(customer.credit)} credit` : null].filter(Boolean).join(' / ') || 'Saved account'),
                 };
             }
 
@@ -1242,7 +1243,7 @@
 
                 if (productResultsNote) {
                     productResultsNote.textContent = needle.length < 1
-                        ? 'Showing the first quick-pick items. Start typing to search the full product list.'
+                        ? 'Quick pick items. Start typing to search all products.'
                         : `Search checks the full product list for "${searchInput.value.trim()}".`;
                 }
 
@@ -1311,7 +1312,7 @@
                         </div>
                         <div class="bill-row-grid">
                             <div>
-                                <div class="bill-label">Quantity</div>
+                                <div class="bill-label">Qty</div>
                                 <div class="qty-box">
                                     <button type="button" data-qty-minus="${index}">-</button>
                                     <input type="number" min="1" step="1" value="${item.quantity}" data-qty-input="${index}" data-keypad-input="integer">
@@ -1319,11 +1320,11 @@
                                 </div>
                             </div>
                             <div>
-                                <div class="bill-label">Unit Price</div>
-                                <input type="number" min="0" step="0.01" value="${item.price}" data-price-input="${index}" data-keypad-input="decimal">
+                                <div class="bill-label">Price</div>
+                                <input type="number" min="0" step="0.01" value="${item.price}" data-price-input="${index}" data-keypad-input="decimal" ${canOverridePrices ? '' : 'readonly aria-readonly="true"'}>
                             </div>
                             <div>
-                                <div class="bill-label">Line Total</div>
+                                <div class="bill-label">Total</div>
                                 <div class="bill-line-total">${money(Number(item.quantity) * Number(item.price))}</div>
                             </div>
                         </div>
@@ -1372,7 +1373,7 @@
                     customerSearch.value = triggerCopy.value;
                 }
                 quickCustomerStatus.textContent = activeCustomer?.is_walk_in && saleBalance() > 0
-                    ? 'Walk-in customer selected. Complete full payment or choose a named customer to continue on credit.'
+                    ? 'Walk-in must pay in full.'
                     : triggerCopy.meta;
 
                 if (saleBalance() > 0) {
@@ -1395,11 +1396,11 @@
                     <div class="customer-result">
                         <div>
                             <strong>${customer.name}${customer.is_walk_in ? ' (Walk-in)' : ''}</strong>
-                            <div class="sale-product-meta">${[customer.location, customer.credit > 0 ? `${money(customer.credit)} credit` : null].filter(Boolean).join(' / ') || 'Saved customer account'}</div>
+                            <div class="sale-product-meta">${[customer.location, customer.credit > 0 ? `${money(customer.credit)} credit` : null].filter(Boolean).join(' / ') || 'Saved account'}</div>
                         </div>
                         <button type="button" class="button-link" data-customer-pick="${customer.id}">${selectedId === String(customer.id) ? 'Selected' : 'Select'}</button>
                     </div>
-                `).join('') || `<div class="bill-empty">No customer matched that search.</div>`;
+                `).join('') || `<div class="bill-empty">No customer found.</div>`;
             }
 
             function selectCustomer(customerId) {
@@ -1535,7 +1536,7 @@
 
             scanInput?.addEventListener('input', () => {
                 if (String(scanInput.value || '').trim() === '') {
-                    setScanStatus('Use this box for scanner input. Press Enter after scan if your scanner does not auto-submit.');
+                    setScanStatus('Scan item and press Enter if needed.');
                 }
             });
 
@@ -1595,6 +1596,10 @@
 
                 const priceInput = event.target.closest('[data-price-input]');
                 if (priceInput) {
+                    if (!canOverridePrices) {
+                        priceInput.value = cart[Number(priceInput.dataset.priceInput)].price;
+                        return;
+                    }
                     const index = Number(priceInput.dataset.priceInput);
                     cart[index].price = Math.max(Number(priceInput.value || 0), 0);
                     renderCart();
@@ -1643,7 +1648,7 @@
             customerUseWalkIn.addEventListener('click', () => {
                 const customer = walkInCustomer();
                 if (!customer) {
-                    quickCustomerStatus.textContent = 'No walk-in customer record is available yet.';
+                    quickCustomerStatus.textContent = 'No walk-in customer record is available.';
                     return;
                 }
 

@@ -4,6 +4,9 @@ namespace App\Providers;
 
 use App\Models\BusinessSetting;
 use App\Support\AccessService;
+use App\Support\ApprovalPinService;
+use App\Support\StockAvailabilityService;
+use App\Support\StoreAssignmentService;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
@@ -18,6 +21,9 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(AccessService::class, fn ($app) => new AccessService($app['request']));
+        $this->app->scoped(ApprovalPinService::class, fn () => new ApprovalPinService());
+        $this->app->scoped(StoreAssignmentService::class, fn () => new StoreAssignmentService());
+        $this->app->scoped(StockAvailabilityService::class, fn () => new StockAvailabilityService());
     }
 
     /**
@@ -27,6 +33,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Paginator::defaultView('vendor.pagination.default');
         Paginator::defaultSimpleView('vendor.pagination.simple-default');
+        $this->loadBusinessSettings();
 
         View::composer('*', function ($view): void {
             $this->loadBusinessSettings();

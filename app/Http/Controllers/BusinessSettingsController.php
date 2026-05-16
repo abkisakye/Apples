@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BusinessSetting;
+use App\Support\ApprovalPinService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -52,13 +53,12 @@ class BusinessSettingsController extends Controller
                 'invoice_footer' => config('business.invoice_footer', ''),
                 'statement_footer' => config('business.statement_footer', ''),
                 'logo_url' => config('business.logo_url', ''),
-                'admin_approval_pin' => config('business.admin_approval_pin', ''),
                 'cashier_discount_limit' => config('business.cashier_discount_limit', 0),
             ], $settings),
         ]);
     }
 
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request, ApprovalPinService $approvalPinService): RedirectResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -91,6 +91,13 @@ class BusinessSettingsController extends Controller
             $logoUrl = Storage::url($path);
         }
 
+        $existingPin = BusinessSetting::query()->where('key', 'admin_approval_pin')->value('value');
+        $pinToStore = $existingPin ?? '';
+
+        if (array_key_exists('admin_approval_pin', $validated) && trim((string) ($validated['admin_approval_pin'] ?? '')) !== '') {
+            $pinToStore = $approvalPinService->makeHash(trim((string) $validated['admin_approval_pin']));
+        }
+
         $toSave = [
             'name' => $validated['name'],
             'tagline' => $validated['tagline'] ?? '',
@@ -103,7 +110,7 @@ class BusinessSettingsController extends Controller
             'invoice_footer' => $validated['invoice_footer'] ?? '',
             'statement_footer' => $validated['statement_footer'] ?? '',
             'logo_url' => $logoUrl,
-            'admin_approval_pin' => $validated['admin_approval_pin'] ?? '',
+            'admin_approval_pin' => $pinToStore,
             'cashier_discount_limit' => (string) round((float) ($validated['cashier_discount_limit'] ?? 0), 2),
         ];
 

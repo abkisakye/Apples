@@ -91,6 +91,11 @@
                     <div class="field-tip">Only use this for balances brought in from the old system.</div>
                 </label>
                 <label class="form-field">
+                    <span>Opening Balance Date</span>
+                    <input type="date" name="opening_balance_date" value="{{ old('opening_balance_date', optional($customer->opening_balance_date)->toDateString() ?? now()->toDateString()) }}">
+                    <div class="field-tip">Use the date the carried debt was already outstanding from the old system.</div>
+                </label>
+                <label class="form-field">
                     <span>Credit Limit</span>
                     <input type="number" step="0.01" min="0" name="credit_limit" value="{{ old('credit_limit', $customer->credit_limit ?? 0) }}">
                     <div class="field-tip">Leave zero if this customer should not receive credit at the counter.</div>

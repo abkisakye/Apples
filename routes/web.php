@@ -38,7 +38,7 @@ Route::middleware('guest')->group(function (): void {
 
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-    Route::post('/access/preview-role', [AccessPreviewController::class, 'update'])->name('access.preview-role');
+    Route::post('/access/preview-role', [AccessPreviewController::class, 'update'])->middleware('ability:users.manage')->name('access.preview-role');
     Route::get('/change-password', [PasswordManagementController::class, 'changeForm'])->name('password.change');
     Route::post('/change-password', [PasswordManagementController::class, 'change'])->name('password.change.update');
 

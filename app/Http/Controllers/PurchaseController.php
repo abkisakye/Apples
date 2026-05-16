@@ -10,6 +10,7 @@ use App\Models\Store;
 use App\Models\Supplier;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
+use App\Support\StoreAssignmentService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -139,7 +140,12 @@ class PurchaseController extends Controller
         return view('purchases.print', compact('purchase'));
     }
 
-    public function store(Request $request, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function store(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'purchase_date' => ['required', 'date'],
@@ -174,8 +180,9 @@ class PurchaseController extends Controller
             ->whereIn('id', $items->pluck('product_unit_id'))
             ->get()
             ->keyBy('id');
+        $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), app(\App\Support\AccessService::class));
 
-        $purchase = DB::transaction(function () use ($validated, $items, $productUnits, $documentNumberService) {
+        $purchase = DB::transaction(function () use ($validated, $items, $productUnits, $documentNumberService, $storeId) {
             $preparedItems = $items->map(function (array $item) use ($productUnits) {
                 /** @var ProductUnit|null $unit */
                 $unit = $productUnits->get((int) $item['product_unit_id']);
@@ -214,7 +221,7 @@ class PurchaseController extends Controller
                 'purchase_no' => $documentNumberService->make('purchase', $validated['purchase_date']),
                 'purchase_date' => $validated['purchase_date'],
                 'supplier_id' => $validated['supplier_id'],
-                'store_id' => $validated['store_id'],
+                'store_id' => $storeId,
                 'purchase_type' => $purchaseType,
                 'payment_mode_id' => $paymentModeId,
                 'supplier_invoice_no' => $validated['supplier_invoice_no'] ?? null,

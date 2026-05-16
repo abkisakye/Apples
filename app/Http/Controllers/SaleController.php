@@ -13,6 +13,9 @@ use App\Models\Store;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Support\AccessService;
+use App\Support\ApprovalPinService;
+use App\Support\StockAvailabilityService;
+use App\Support\StoreAssignmentService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -108,9 +111,10 @@ class SaleController extends Controller
             'customers' => Customer::query()
                 ->where('is_active', true)
                 ->withSum(['sales as outstanding_credit' => fn ($query) => $query->posted()->where('sale_type', 'credit')], 'balance_due')
+                ->withSum(['openingBalancePayments as opening_payments_total' => fn ($query) => $query->posted()], 'amount')
                 ->orderByDesc('is_walk_in')
                 ->orderBy('name')
-                ->get(['id', 'name', 'is_walk_in', 'location']),
+                ->get(['id', 'name', 'is_walk_in', 'location', 'opening_balance']),
             'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'productUnits' => ProductUnit::query()
                 ->with('product:id,name,code')
@@ -131,6 +135,7 @@ class SaleController extends Controller
             'cashierDiscountLimit' => (float) config('business.cashier_discount_limit', 0),
             'requiresShift' => $this->requiresCashShift(app(AccessService::class)),
             'requiresApprovalPin' => ! app(AccessService::class)->can('sales.override'),
+            'canOverridePrices' => app(AccessService::class)->can('sales.override'),
         ]);
     }
 
@@ -171,7 +176,14 @@ class SaleController extends Controller
         return view('sales.print', compact('sale'));
     }
 
-    public function store(Request $request, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function store(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService,
+        StockAvailabilityService $stockAvailabilityService,
+        ApprovalPinService $approvalPinService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'sale_date' => ['required', 'date'],
@@ -209,12 +221,13 @@ class SaleController extends Controller
             ->keyBy('id');
 
         $access = app(AccessService::class);
+        $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), $access);
 
         if ($this->requiresCashShift($access)) {
             $activeShift = CashShift::query()
                 ->open()
                 ->where('user_id', auth()->id())
-                ->where('store_id', $validated['store_id'])
+                ->where('store_id', $storeId)
                 ->latest('opened_at')
                 ->first();
 
@@ -225,12 +238,57 @@ class SaleController extends Controller
             }
         }
 
-        $sale = DB::transaction(function () use ($validated, $items, $productUnits, $documentNumberService, $access) {
-            $preparedItems = $items->map(function (array $item) use ($productUnits) {
+        $saleContext = DB::transaction(function () use (
+            $validated,
+            $items,
+            $productUnits,
+            $documentNumberService,
+            $access,
+            $storeId,
+            $stockAvailabilityService,
+            $approvalPinService
+        ) {
+            $customerId = (int) ($validated['customer_id'] ?? 0);
+            if (! $customerId) {
+                throw ValidationException::withMessages([
+                    'customer_id' => 'Choose a customer before saving this sale.',
+                ]);
+            }
+
+            $customer = Customer::query()->findOrFail($customerId);
+            $priceOverrideApproved = $access->can('sales.override') || $approvalPinService->verify($validated['approval_pin'] ?? null);
+            $priceOverrides = [];
+
+            $preparedItems = $items->map(function (array $item, int $index) use ($productUnits, $priceOverrideApproved, &$priceOverrides) {
                 /** @var ProductUnit|null $unit */
                 $unit = $productUnits->get((int) $item['product_unit_id']);
+                if (! $unit) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.product_unit_id" => 'One selected product is no longer available.',
+                    ]);
+                }
+
                 $quantity = max((int) $item['quantity'], 1);
-                $unitPrice = round((float) ($item['unit_price'] ?? $unit?->selling_price ?? 0), 2);
+                $catalogPrice = round((float) $unit->selling_price, 2);
+                $requestedPrice = round((float) ($item['unit_price'] ?? $catalogPrice), 2);
+
+                if ($requestedPrice !== $catalogPrice && ! $priceOverrideApproved) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.unit_price" => "Price override for {$unit->product?->name} requires override access or the admin approval PIN.",
+                    ]);
+                }
+
+                if ($requestedPrice !== $catalogPrice) {
+                    $priceOverrides[] = [
+                        'product_unit_id' => $unit->id,
+                        'product_name' => $unit->product?->name,
+                        'unit_name' => $unit->unit_name,
+                        'catalog_price' => $catalogPrice,
+                        'override_price' => $requestedPrice,
+                    ];
+                }
+
+                $unitPrice = $requestedPrice;
                 $lineTotal = round($quantity * $unitPrice, 2);
 
                 return [
@@ -259,24 +317,43 @@ class SaleController extends Controller
             $isCredit = $requestedType === 'credit' || $enteredAmount < $netTotal;
             $saleType = $isCredit ? 'credit' : 'cash';
 
-            if (empty($validated['customer_id'])) {
-                throw ValidationException::withMessages([
-                    'customer_id' => 'Choose a customer before saving this sale.',
-                ]);
-            }
-
-            $customerId = $validated['customer_id'];
             $cashTendered = $saleType === 'cash' ? $enteredAmount : null;
             $amountApplied = min($enteredAmount, $netTotal);
             $balanceDue = max($netTotal - $amountApplied, 0);
             $changeGiven = $saleType === 'cash' ? max($enteredAmount - $netTotal, 0) : 0;
-            $paymentModeId = $validated['payment_mode_id']
-                ?? $this->defaultPaymentModeId($saleType === 'credit' ? 'Credit' : 'Cash');
+
+            if ($customer->is_walk_in && $balanceDue > 0) {
+                throw ValidationException::withMessages([
+                    'customer_id' => 'Walk-in customer cannot carry credit. Choose a named customer or complete full payment.',
+                ]);
+            }
+
+            if ($amountApplied > 0 && empty($validated['payment_mode_id'])) {
+                throw ValidationException::withMessages([
+                    'payment_mode_id' => 'Choose the payment mode before posting a paid sale.',
+                ]);
+            }
+
+            $paymentModeId = $amountApplied > 0
+                ? (int) $validated['payment_mode_id']
+                : ($saleType === 'credit' ? $this->defaultPaymentModeId('Credit') : null);
+
+            $correctionSourceSale = null;
+            $correctionRestockByUnit = [];
+
+            if (! empty($validated['corrected_from_sale_id'])) {
+                $correctionSourceSale = Sale::query()->with('items')->findOrFail($validated['corrected_from_sale_id']);
+                $this->guardCorrectionEligibility($correctionSourceSale);
+                $correctionRestockByUnit = $correctionSourceSale->items
+                    ->groupBy('product_unit_id')
+                    ->map(fn ($group) => (int) round((float) $group->sum('quantity')))
+                    ->all();
+            }
 
             $sale = Sale::create([
                 'sale_no' => $documentNumberService->make($saleType === 'credit' ? 'credit_sale' : 'cash_sale', $validated['sale_date']),
                 'sale_date' => $validated['sale_date'],
-                'store_id' => $validated['store_id'],
+                'store_id' => $storeId,
                 'customer_id' => $customerId,
                 'sale_type' => $saleType,
                 'payment_mode_id' => $paymentModeId,
@@ -303,6 +380,14 @@ class SaleController extends Controller
             foreach ($preparedItems as $item) {
                 /** @var ProductUnit $unit */
                 $unit = $item['unit'];
+                $availableQuantity = $stockAvailabilityService->availableQuantity($storeId, $unit->id)
+                    + (int) ($correctionRestockByUnit[$unit->id] ?? 0);
+
+                if ($item['quantity'] > $availableQuantity) {
+                    throw ValidationException::withMessages([
+                        'items' => "{$unit->product?->name} - {$unit->unit_name} has only {$availableQuantity} available for this correction at the selected store.",
+                    ]);
+                }
                 $allocatedDiscount = $discountAmount > 0
                     ? round(($item['line_total'] / max($subtotal, 0.01)) * $discountAmount, 2)
                     : 0;
@@ -342,10 +427,9 @@ class SaleController extends Controller
                 ]);
             }
 
-            if (! empty($validated['corrected_from_sale_id'])) {
+            if ($correctionSourceSale) {
                 /** @var Sale $sourceSale */
-                $sourceSale = Sale::query()->with(['items', 'payments', 'returns'])->findOrFail($validated['corrected_from_sale_id']);
-                $this->guardCorrectionEligibility($sourceSale);
+                $sourceSale = $correctionSourceSale->loadMissing(['items', 'payments', 'returns']);
                 $this->voidSaleRecord($sourceSale, 'Corrected and reposted as '.$sale->sale_no, false);
                 $sourceSale->update(['replaced_by_sale_id' => $sale->id]);
                 $sale->update(['corrected_from_sale_id' => $sourceSale->id]);
@@ -376,14 +460,20 @@ class SaleController extends Controller
                 ]);
             }
 
-            return $sale;
+            return [
+                'sale' => $sale,
+                'price_overrides' => $priceOverrides,
+            ];
         });
+        /** @var Sale $sale */
+        $sale = $saleContext['sale'];
 
         $auditLogService->record('sale.posted', $sale, "Sale {$sale->sale_no} posted.", [
             'sale_type' => $sale->sale_type,
             'total_amount' => $sale->total_amount,
             'corrected_from_sale_id' => $sale->corrected_from_sale_id,
             'exchange_return_id' => $validated['exchange_return_id'] ?? null,
+            'price_overrides' => $saleContext['price_overrides'],
         ]);
 
         return redirect()
@@ -507,9 +597,7 @@ class SaleController extends Controller
             return;
         }
 
-        $configuredPin = (string) config('business.admin_approval_pin', '');
-
-        if ($configuredPin !== '' && hash_equals($configuredPin, (string) $approvalPin)) {
+        if (app(ApprovalPinService::class)->verify($approvalPin)) {
             return;
         }
 

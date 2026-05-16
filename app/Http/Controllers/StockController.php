@@ -11,6 +11,9 @@ use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Services\ExcelExportService;
+use App\Support\AccessService;
+use App\Support\StockAvailabilityService;
+use App\Support\StoreAssignmentService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -123,7 +126,13 @@ class StockController extends Controller
         ]);
     }
 
-    public function transferStore(Request $request, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function transferStore(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService,
+        StockAvailabilityService $stockAvailabilityService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'transfer_date' => ['required', 'date'],
@@ -147,17 +156,20 @@ class StockController extends Controller
 
         $units = ProductUnit::query()->whereIn('id', $items->pluck('product_unit_id'))->get()->keyBy('id');
         $referenceNo = $documentNumberService->make('stock_transfer', $validated['transfer_date']);
+        $fromStoreId = $storeAssignmentService->resolveStoreId((int) $validated['from_store_id'], $request->user(), app(AccessService::class), 'from_store_id');
+        $toStoreId = (int) $validated['to_store_id'];
 
-        DB::transaction(function () use ($validated, $items, $units, $referenceNo) {
+        DB::transaction(function () use ($validated, $items, $units, $referenceNo, $fromStoreId, $toStoreId, $stockAvailabilityService) {
             foreach ($items as $index => $item) {
                 /** @var ProductUnit $unit */
                 $unit = $units->get((int) $item['product_unit_id']);
                 $quantity = max((int) $item['quantity'], 1);
                 $referenceId = abs(crc32($referenceNo.'-'.$index));
+                $stockAvailabilityService->ensureAvailable($fromStoreId, $unit, $quantity, 'items');
 
                 InventoryTransaction::create([
                     'transaction_date' => $validated['transfer_date'],
-                    'store_id' => $validated['from_store_id'],
+                    'store_id' => $fromStoreId,
                     'product_id' => $unit->product_id,
                     'product_unit_id' => $unit->id,
                     'reference_type' => 'stock_transfer',
@@ -172,7 +184,7 @@ class StockController extends Controller
 
                 InventoryTransaction::create([
                     'transaction_date' => $validated['transfer_date'],
-                    'store_id' => $validated['to_store_id'],
+                    'store_id' => $toStoreId,
                     'product_id' => $unit->product_id,
                     'product_unit_id' => $unit->id,
                     'reference_type' => 'stock_transfer',
@@ -189,8 +201,8 @@ class StockController extends Controller
 
         $auditLogService->record('stock_transfer.posted', null, "Stock transfer {$referenceNo} posted.", [
             'reference_no' => $referenceNo,
-            'from_store_id' => $validated['from_store_id'],
-            'to_store_id' => $validated['to_store_id'],
+            'from_store_id' => $fromStoreId,
+            'to_store_id' => $toStoreId,
         ]);
 
         return redirect()
@@ -318,7 +330,13 @@ class StockController extends Controller
         ]);
     }
 
-    public function adjustmentStore(Request $request, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function adjustmentStore(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService,
+        StockAvailabilityService $stockAvailabilityService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'adjustment_date' => ['required', 'date'],
@@ -343,17 +361,22 @@ class StockController extends Controller
 
         $units = ProductUnit::query()->whereIn('id', $items->pluck('product_unit_id'))->get()->keyBy('id');
         $referenceNo = $documentNumberService->make('stock_adjustment', $validated['adjustment_date']);
+        $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), app(AccessService::class));
 
-        DB::transaction(function () use ($validated, $items, $units, $referenceNo) {
+        DB::transaction(function () use ($validated, $items, $units, $referenceNo, $storeId, $stockAvailabilityService) {
             foreach ($items as $index => $item) {
                 /** @var ProductUnit $unit */
                 $unit = $units->get((int) $item['product_unit_id']);
                 $quantity = max((int) $item['quantity'], 1);
                 $referenceId = abs(crc32($referenceNo.'-'.$index));
 
+                if ($validated['adjustment_type'] === 'decrease') {
+                    $stockAvailabilityService->ensureAvailable($storeId, $unit, $quantity, 'items');
+                }
+
                 InventoryTransaction::create([
                     'transaction_date' => $validated['adjustment_date'],
-                    'store_id' => $validated['store_id'],
+                    'store_id' => $storeId,
                     'product_id' => $unit->product_id,
                     'product_unit_id' => $unit->id,
                     'reference_type' => 'stock_adjustment',
@@ -370,7 +393,7 @@ class StockController extends Controller
 
         $auditLogService->record('stock_adjustment.posted', null, "Stock adjustment {$referenceNo} posted.", [
             'reference_no' => $referenceNo,
-            'store_id' => $validated['store_id'],
+            'store_id' => $storeId,
             'adjustment_type' => $validated['adjustment_type'],
         ]);
 
@@ -388,7 +411,13 @@ class StockController extends Controller
             ->with('auto_print_document', true);
     }
 
-    public function countStore(Request $request, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function countStore(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService,
+        StockAvailabilityService $stockAvailabilityService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'action' => ['required', 'in:draft,post'],
@@ -431,8 +460,10 @@ class StockController extends Controller
             ]);
         }
 
+        $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), app(AccessService::class));
+
         $unitIds = $countedItems->pluck('product_unit_id')->map(fn ($id) => (int) $id)->unique()->values();
-        $systemRows = $this->stockSnapshot($validated['store_id'], $unitIds->all());
+        $systemRows = $this->stockSnapshot($storeId, $unitIds->all());
         $units = ProductUnit::query()
             ->with('product:id,name')
             ->whereIn('id', $unitIds)
@@ -449,7 +480,7 @@ class StockController extends Controller
                 return null;
             }
 
-            $systemQty = max((int) round((float) $snapshot->balance_qty), 0);
+            $systemQty = (int) round((float) $snapshot->balance_qty);
             $physicalQty = max((int) ($item['physical_count'] ?? 0), 0);
             $varianceQty = $physicalQty - $systemQty;
 
@@ -502,8 +533,22 @@ class StockController extends Controller
 
         $mergedRows = $preservedRows->concat($currentRows)->values();
         $mergedVarianceRows = $mergedRows->filter(fn (array $item) => (int) $item['variance_qty'] !== 0)->values();
+        $postingUnits = ProductUnit::query()
+            ->with('product:id,name')
+            ->whereIn('id', $mergedVarianceRows->pluck('product_unit_id')->unique()->all())
+            ->get()
+            ->keyBy('id');
 
-        $count = DB::transaction(function () use ($validated, $mergedRows, $mergedVarianceRows, $existingCount, $documentNumberService) {
+        $count = DB::transaction(function () use (
+            $validated,
+            $mergedRows,
+            $mergedVarianceRows,
+            $existingCount,
+            $documentNumberService,
+            $storeId,
+            $stockAvailabilityService,
+            $postingUnits
+        ) {
             $count = $existingCount;
 
             if ($count) {
@@ -515,7 +560,7 @@ class StockController extends Controller
 
                 $count->update([
                     'count_date' => $validated['count_date'],
-                    'store_id' => $validated['store_id'],
+                    'store_id' => $storeId,
                     'user_id' => auth()->id(),
                     'assigned_user_id' => $validated['assigned_user_id'] ?? null,
                     'section_name' => $validated['section_name'] ?? null,
@@ -530,7 +575,7 @@ class StockController extends Controller
                 $count = StockCount::query()->create([
                     'count_no' => $documentNumberService->make('stock_count', $validated['count_date']),
                     'count_date' => $validated['count_date'],
-                    'store_id' => $validated['store_id'],
+                    'store_id' => $storeId,
                     'user_id' => auth()->id(),
                     'assigned_user_id' => $validated['assigned_user_id'] ?? null,
                     'section_name' => $validated['section_name'] ?? null,
@@ -554,9 +599,22 @@ class StockController extends Controller
 
             if ($validated['action'] === 'post') {
                 foreach ($mergedVarianceRows as $item) {
+                    if ((int) $item['variance_qty'] < 0) {
+                        $unit = $postingUnits->get((int) $item['product_unit_id']);
+                        if ($unit) {
+                            $stockAvailabilityService->ensureAvailable(
+                                $storeId,
+                                $unit,
+                                (int) $item['quantity_adjusted'],
+                                'items',
+                                "{$unit->product?->name} - {$unit->unit_name} no longer has enough stock to post this count reduction. Refresh the count and try again."
+                            );
+                        }
+                    }
+
                     InventoryTransaction::create([
                         'transaction_date' => $validated['count_date'],
-                        'store_id' => $validated['store_id'],
+                        'store_id' => $storeId,
                         'product_id' => $item['product_id'],
                         'product_unit_id' => $item['product_unit_id'],
                         'reference_type' => 'stock_count',
@@ -577,13 +635,13 @@ class StockController extends Controller
         if ($validated['action'] === 'draft') {
             $auditLogService->record('stock_count.draft_saved', null, "Physical stock count draft {$count->count_no} saved.", [
                 'reference_no' => $count->count_no,
-                'store_id' => $validated['store_id'],
+                'store_id' => $storeId,
                 'line_count' => $mergedRows->count(),
             ]);
 
             $redirectParams = [
                 'draft_id' => $count->id,
-                'store_id' => $validated['store_id'],
+                'store_id' => $storeId,
                 'q' => trim((string) ($validated['q'] ?? '')),
                 'count_focus' => $validated['count_focus'] ?? 'all',
                 'show_status' => 'pending',
@@ -606,7 +664,7 @@ class StockController extends Controller
 
         $auditLogService->record('stock_count.posted', null, "Physical stock count {$count->count_no} posted.", [
             'reference_no' => $count->count_no,
-            'store_id' => $validated['store_id'],
+            'store_id' => $storeId,
             'line_count' => $mergedRows->count(),
         ]);
 

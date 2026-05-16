@@ -5,7 +5,7 @@
     <div class="page-head">
         <div>
             <h2>Customer Payment {{ $payment->payment_no }}</h2>
-            <p>Simple payment confirmation for supermarket follow-up. Use this page to confirm who paid, which sale it was applied to, and what balance remains.</p>
+            <p>Confirm the customer, the account paid, and the balance left after this payment.</p>
         </div>
         <div class="actions">
             <a href="{{ route('customer-payments.print', $payment) }}" target="_blank" class="button-link">Full Document</a>
@@ -21,7 +21,7 @@
         <div class="card"><div class="label">Customer</div><div class="value">{{ $payment->customer?->name ?? '-' }}</div></div>
         <div class="card"><div class="label">Amount</div><div class="value money">{{ $currency }} {{ number_format((float) $payment->amount, 0) }}</div></div>
         <div class="card"><div class="label">Store</div><div class="value">{{ $payment->store?->name ?? '-' }}</div></div>
-        <div class="card"><div class="label">Remaining Balance</div><div class="value money">{{ $currency }} {{ number_format((float) ($payment->sale?->balance_due ?? 0), 0) }}</div></div>
+        <div class="card"><div class="label">Remaining Balance</div><div class="value money">{{ $currency }} {{ number_format((float) $accountSummary['remaining_balance'], 0) }}</div></div>
     </section>
 
     <section class="grid-two">
@@ -42,17 +42,19 @@
         </div>
 
         <div class="panel">
-            <h3>Applied Sale</h3>
+            <h3>Applied Account</h3>
             <table>
                 <tbody>
-                    <tr><th style="text-align:left; width:38%;">Sale No</th><td>{{ $payment->sale?->sale_no ?? '-' }}</td></tr>
-                    <tr><th style="text-align:left;">Sale Date</th><td>{{ optional($payment->sale?->sale_date)->format('d M Y') ?? '-' }}</td></tr>
-                    <tr><th style="text-align:left;">Sale Type</th><td>{{ $payment->sale ? ucfirst($payment->sale->sale_type) : '-' }}</td></tr>
-                    <tr><th style="text-align:left;">Sale Total</th><td>{{ $currency }} {{ number_format((float) ($payment->sale?->total_amount ?? 0), 0) }}</td></tr>
-                    <tr><th style="text-align:left;">Balance After Payment</th><td>{{ $currency }} {{ number_format((float) ($payment->sale?->balance_due ?? 0), 0) }}</td></tr>
+                    <tr><th style="text-align:left; width:38%;">Account Type</th><td>{{ $accountSummary['account_label'] === 'Opening Balance' ? 'Opening Balance' : 'Sale' }}</td></tr>
+                    <tr><th style="text-align:left;">Reference</th><td>{{ $accountSummary['account_reference'] }}</td></tr>
+                    <tr><th style="text-align:left;">Account Date</th><td>{{ $payment->account_reference_type === 'opening_balance' ? optional($payment->customer?->opening_balance_date)->format('d M Y') : (optional($payment->sale?->sale_date)->format('d M Y') ?? '-') }}</td></tr>
+                    <tr><th style="text-align:left;">Account Total</th><td>{{ $currency }} {{ number_format((float) $accountSummary['account_total'], 0) }}</td></tr>
+                    <tr><th style="text-align:left;">Balance After Payment</th><td>{{ $currency }} {{ number_format((float) $accountSummary['remaining_balance'], 0) }}</td></tr>
                 </tbody>
             </table>
-            @if ($payment->sale)
+            @if ($payment->account_reference_type === 'opening_balance')
+                <p class="list-note">This payment reduced the customer opening debt carried in from the old system.</p>
+            @elseif ($payment->sale)
                 <p class="list-note">This payment was posted against sale {{ $payment->sale->sale_no }} and reduced the customer balance immediately.</p>
             @endif
             <div class="actions" style="margin-top: 14px;">

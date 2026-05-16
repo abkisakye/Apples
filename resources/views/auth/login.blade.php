@@ -242,8 +242,8 @@
                         <span>Track low stock, overdue credit, follow-ups, and day-to-day movement without leaving the dashboard.</span>
                     </div>
                     <div class="hero-card">
-                        <strong>Demo shortcut</strong>
-                        <span>Default admin login: <strong>`admin`</strong> or <strong>`admin@apples.local`</strong> with password <strong>`password`</strong>.</span>
+                        <strong>Controlled access</strong>
+                        <span>Use named staff accounts with the right roles and store assignment for day-to-day work.</span>
                     </div>
                 </div>
             </div>
@@ -277,7 +277,7 @@
                 </div>
 
                 <div class="footer-note">
-                    Use the demo admin account only for setup, training, and presentation. Day-to-day work should use named staff accounts with the right role and store assignment.
+                    Sign in with your assigned staff account. If you cannot access the system, contact the person managing setup and user accounts.
                 </div>
             </div>
         </div>

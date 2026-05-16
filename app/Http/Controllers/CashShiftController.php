@@ -6,11 +6,13 @@ use App\Models\CashShift;
 use App\Models\CustomerPayment;
 use App\Models\Expense;
 use App\Models\Sale;
+use App\Models\SaleReturn;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Support\AccessService;
+use App\Support\StoreAssignmentService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -59,7 +61,12 @@ class CashShiftController extends Controller
         ]);
     }
 
-    public function store(Request $request, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function store(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService
+    ): RedirectResponse
     {
         if (CashShift::query()->open()->where('user_id', auth()->id())->exists()) {
             throw ValidationException::withMessages([
@@ -75,10 +82,11 @@ class CashShiftController extends Controller
         ]);
 
         $openedAt = Carbon::parse($validated['opened_at']);
+        $storeId = $storeAssignmentService->resolveStoreId((int) ($validated['store_id'] ?? auth()->user()?->default_store_id), $request->user(), app(AccessService::class));
 
         $shift = CashShift::query()->create([
             'shift_no' => $documentNumberService->make('cash_shift', $openedAt->toDateString()),
-            'store_id' => $validated['store_id'] ?? auth()->user()?->default_store_id,
+            'store_id' => $storeId,
             'user_id' => auth()->id(),
             'opened_at' => $openedAt,
             'opening_balance' => round((float) $validated['opening_balance'], 2),
@@ -176,10 +184,7 @@ class CashShiftController extends Controller
             ->where('created_by', $cashShift->user_id)
             ->when($cashShift->store_id, fn ($query) => $query->where('store_id', $cashShift->store_id))
             ->whereBetween('created_at', [$openedAt, $closedAt])
-            ->where(function ($query) {
-                $query->where('sale_type', 'cash')
-                    ->orWhereHas('paymentMode', fn ($modeQuery) => $modeQuery->whereRaw('UPPER(name) = ?', ['CASH']));
-            })
+            ->whereHas('paymentMode', fn ($modeQuery) => $modeQuery->whereRaw('UPPER(name) = ?', ['CASH']))
             ->sum('amount_paid');
 
         $cashCustomerPayments = (float) CustomerPayment::query()
@@ -188,6 +193,15 @@ class CashShiftController extends Controller
             ->whereBetween('created_at', [$openedAt, $closedAt])
             ->whereHas('paymentMode', fn ($modeQuery) => $modeQuery->whereRaw('UPPER(name) = ?', ['CASH']))
             ->sum('amount');
+
+        $cashRefunds = (float) SaleReturn::query()
+            ->where('created_by', $cashShift->user_id)
+            ->when($cashShift->store_id, fn ($query) => $query->where('store_id', $cashShift->store_id))
+            ->whereBetween('created_at', [$openedAt, $closedAt])
+            ->where('status', 'posted')
+            ->where('refund_amount', '>', 0)
+            ->whereHas('paymentMode', fn ($modeQuery) => $modeQuery->whereRaw('UPPER(name) = ?', ['CASH']))
+            ->sum('refund_amount');
 
         $cashExpenses = (float) Expense::query()
             ->posted()
@@ -200,8 +214,9 @@ class CashShiftController extends Controller
         return [
             'cash_sales_total' => round($cashSales, 2),
             'cash_customer_payments_total' => round($cashCustomerPayments, 2),
+            'cash_refunds_total' => round($cashRefunds, 2),
             'cash_expenses_total' => round($cashExpenses, 2),
-            'expected_cash' => round((float) $cashShift->opening_balance + $cashSales + $cashCustomerPayments - $cashExpenses, 2),
+            'expected_cash' => round((float) $cashShift->opening_balance + $cashSales + $cashCustomerPayments - $cashRefunds - $cashExpenses, 2),
         ];
     }
 

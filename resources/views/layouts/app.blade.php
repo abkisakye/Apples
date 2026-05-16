@@ -909,9 +909,14 @@
                 ['label' => 'Roles', 'route' => 'roles.index', 'match' => 'roles.*', 'ability' => 'users.manage', 'mark' => 'RL'],
                 ['label' => 'Business Settings', 'route' => 'settings.business.edit', 'match' => 'settings.business.*', 'ability' => 'business.manage', 'mark' => 'BS'],
                 ['label' => 'Master Data', 'route' => 'master-data.index', 'route_params' => ['resource' => 'stores'], 'match' => 'master-data.*', 'ability' => 'business.manage', 'mark' => 'MD'],
-                ['label' => 'Change Password', 'route' => 'password.change', 'match' => 'password.change*', 'ability' => null, 'mark' => 'PW'],
                 ['label' => 'Activity Log', 'route' => 'activity-logs.index', 'match' => 'activity-logs.*', 'ability' => 'activity_logs.view', 'mark' => 'LG'],
                 ['label' => 'Users', 'route' => 'users.index', 'match' => 'users.*', 'ability' => 'users.manage', 'mark' => 'US'],
+            ],
+        ],
+        [
+            'label' => 'Account',
+            'items' => [
+                ['label' => 'Change Password', 'route' => 'password.change', 'match' => 'password.change*', 'ability' => null, 'mark' => 'PW'],
             ],
         ],
     ])
@@ -925,7 +930,7 @@
                 <h1>{{ config('business.name', 'Apples Of Gold') }}</h1>
                 <p>{{ config('business.tagline', 'Business Management System') }}</p>
             </div>
-            @if (($currentUser->role?->name ?? null) === 'admin')
+            @if (app()->environment('local') && $access->hasRole('admin'))
                 <form method="post" action="{{ route('access.preview-role') }}" class="role-preview">
                     @csrf
                     <label for="preview_role">View As Role</label>
@@ -981,6 +986,7 @@
                                 <div class="topbar-chip topbar-chip-store">Store: {{ $currentUser->defaultStore->name }}</div>
                             @endif
                         </div>
+                        <a href="{{ route('password.change') }}" class="button-link">Change Password</a>
                         <form method="post" action="{{ route('logout') }}" class="topbar-form">
                             @csrf
                             <button type="submit" class="topbar-logout">Log Out</button>

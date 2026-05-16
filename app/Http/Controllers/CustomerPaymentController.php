@@ -8,6 +8,9 @@ use App\Models\PaymentMode;
 use App\Models\Sale;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
+use App\Support\AccessService;
+use App\Support\StoreAssignmentService;
+use Illuminate\Validation\Rule;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -55,21 +58,52 @@ class CustomerPaymentController extends Controller
     public function create(Request $request): View
     {
         $customerId = $request->integer('customer_id');
+        $access = app(AccessService::class);
+        $defaultStoreId = auth()->user()?->default_store_id;
+        $customers = Customer::query()
+            ->where('is_system', false)
+            ->withSum(['sales as outstanding_credit' => fn ($query) => $query->posted()->where('sale_type', 'credit')], 'balance_due')
+            ->withSum(['openingBalancePayments as opening_payments_total' => fn ($query) => $query->posted()], 'amount')
+            ->orderBy('name')
+            ->get(['id', 'name', 'location', 'opening_balance', 'opening_balance_date']);
+
+        $openingBalanceRows = $customers
+            ->map(function (Customer $customer) {
+                $openingOutstanding = round(max((float) $customer->opening_balance - (float) ($customer->opening_payments_total ?? 0), 0), 2);
+
+                if ($openingOutstanding <= 0) {
+                    return null;
+                }
+
+                return (object) [
+                    'id' => null,
+                    'account_reference_type' => 'opening_balance',
+                    'sale_no' => 'Opening Balance',
+                    'sale_date' => $customer->opening_balance_date,
+                    'customer_id' => $customer->id,
+                    'customer' => $customer,
+                    'store' => null,
+                    'balance_due' => $openingOutstanding,
+                    'credit_due_date' => $customer->opening_balance_date,
+                ];
+            })
+            ->filter()
+            ->values();
 
         return view('customer_payments.create', [
-            'customers' => Customer::query()
-                ->where('is_system', false)
-                ->withSum(['sales as outstanding_credit' => fn ($query) => $query->posted()->where('sale_type', 'credit')], 'balance_due')
-                ->orderBy('name')
-                ->get(['id', 'name', 'location']),
+            'customers' => $customers,
             'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'outstandingSales' => Sale::query()
                 ->with(['customer:id,name', 'store:id,name'])
                 ->posted()
                 ->where('balance_due', '>', 0)
                 ->when($customerId > 0, fn ($query) => $query->where('customer_id', $customerId))
+                ->when($defaultStoreId && ! $access->can('sales.override') && ! $access->hasRole('admin') && ! $access->hasRole('manager'), fn ($query) => $query->where('store_id', $defaultStoreId))
                 ->orderBy('sale_date')
                 ->get(['id', 'sale_no', 'sale_date', 'customer_id', 'store_id', 'balance_due', 'credit_due_date']),
+            'openingBalanceRows' => $customerId > 0
+                ? $openingBalanceRows->where('customer_id', $customerId)->values()
+                : $openingBalanceRows,
             'recentPayments' => CustomerPayment::query()
                 ->with(['customer:id,name', 'sale:id,sale_no'])
                 ->latest('payment_date')
@@ -82,66 +116,105 @@ class CustomerPaymentController extends Controller
     public function show(CustomerPayment $customerPayment): View
     {
         $customerPayment->load([
-            'customer:id,name,phone,location',
+            'customer:id,name,phone,location,opening_balance,opening_balance_date',
             'sale:id,sale_no,sale_date,sale_type,balance_due,total_amount',
             'store:id,name',
             'paymentMode:id,name',
         ]);
 
-        return view('customer_payments.show', ['payment' => $customerPayment]);
+        return view('customer_payments.show', [
+            'payment' => $customerPayment,
+            'accountSummary' => $this->paymentAccountSummary($customerPayment),
+        ]);
     }
 
     public function print(CustomerPayment $customerPayment): View
     {
         $customerPayment->load([
-            'customer:id,name,phone,location',
+            'customer:id,name,phone,location,opening_balance,opening_balance_date',
             'sale:id,sale_no,sale_date,sale_type,balance_due,total_amount',
             'store:id,name',
             'paymentMode:id,name',
         ]);
 
-        return view('customer_payments.print', ['payment' => $customerPayment]);
+        return view('customer_payments.print', [
+            'payment' => $customerPayment,
+            'accountSummary' => $this->paymentAccountSummary($customerPayment),
+        ]);
     }
 
-    public function store(Request $request, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function store(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'payment_date' => ['required', 'date'],
             'customer_id' => ['required', 'exists:customers,id'],
-            'sale_id' => ['required', 'exists:sales,id'],
-            'payment_mode_id' => ['nullable', 'exists:payment_modes,id'],
+            'account_reference_type' => ['required', Rule::in(['sale', 'opening_balance'])],
+            'sale_id' => ['nullable', 'exists:sales,id'],
+            'payment_mode_id' => ['required', 'exists:payment_modes,id'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'reference_no' => ['nullable', 'string', 'max:255'],
             'cheque_number' => ['nullable', 'string', 'max:255'],
             'remarks' => ['nullable', 'string'],
         ]);
 
-        /** @var Sale $sale */
-        $sale = Sale::query()->posted()->findOrFail($validated['sale_id']);
-
-        if ((int) $sale->customer_id !== (int) $validated['customer_id']) {
-            throw ValidationException::withMessages([
-                'sale_id' => 'The selected sale does not belong to the selected customer.',
-            ]);
-        }
+        $customer = Customer::query()->findOrFail($validated['customer_id']);
+        $sale = null;
 
         $amount = round((float) $validated['amount'], 2);
-        $balanceDue = round((float) $sale->balance_due, 2);
 
-        if ($balanceDue <= 0 || $amount > $balanceDue) {
-            throw ValidationException::withMessages([
-                'amount' => 'Payment amount must not exceed the outstanding balance.',
-            ]);
+        if ($validated['account_reference_type'] === 'sale') {
+            if (empty($validated['sale_id'])) {
+                throw ValidationException::withMessages([
+                    'sale_id' => 'Choose the open sale before recording the payment.',
+                ]);
+            }
+
+            /** @var Sale $sale */
+            $sale = Sale::query()->posted()->findOrFail($validated['sale_id']);
+
+            if ((int) $sale->customer_id !== (int) $validated['customer_id']) {
+                throw ValidationException::withMessages([
+                    'sale_id' => 'The selected sale does not belong to the selected customer.',
+                ]);
+            }
+
+            $balanceDue = round((float) $sale->balance_due, 2);
+
+            if ($balanceDue <= 0 || $amount > $balanceDue) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Payment amount must not exceed the outstanding balance.',
+                ]);
+            }
+        } else {
+            $openingOutstanding = $customer->openingBalanceOutstanding();
+
+            if ($openingOutstanding <= 0 || $amount > $openingOutstanding) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Payment amount must not exceed the opening balance still owed.',
+                ]);
+            }
         }
 
-        $payment = DB::transaction(function () use ($validated, $sale, $amount, $documentNumberService) {
+        $storeId = $storeAssignmentService->resolveStoreId(
+            (int) ($sale?->store_id ?? auth()->user()?->default_store_id),
+            $request->user(),
+            app(AccessService::class)
+        );
+
+        $payment = DB::transaction(function () use ($validated, $sale, $customer, $amount, $documentNumberService, $storeId) {
             $payment = CustomerPayment::create([
                 'payment_no' => $documentNumberService->make('customer_payment', $validated['payment_date']),
                 'payment_date' => $validated['payment_date'],
                 'customer_id' => $validated['customer_id'],
-                'sale_id' => $sale->id,
-                'store_id' => $sale->store_id,
-                'payment_mode_id' => $validated['payment_mode_id'] ?? null,
+                'sale_id' => $sale?->id,
+                'account_reference_type' => $validated['account_reference_type'],
+                'store_id' => $storeId,
+                'payment_mode_id' => $validated['payment_mode_id'],
                 'amount' => $amount,
                 'reference_no' => $validated['reference_no'] ?? null,
                 'cheque_number' => $validated['cheque_number'] ?? null,
@@ -150,10 +223,12 @@ class CustomerPaymentController extends Controller
                 'created_by' => auth()->id(),
             ]);
 
-            $sale->update([
-                'amount_paid' => round((float) $sale->amount_paid + $amount, 2),
-                'balance_due' => round((float) $sale->balance_due - $amount, 2),
-            ]);
+            if ($sale) {
+                $sale->update([
+                    'amount_paid' => round((float) $sale->amount_paid + $amount, 2),
+                    'balance_due' => round((float) $sale->balance_due - $amount, 2),
+                ]);
+            }
 
             return $payment;
         });
@@ -161,12 +236,35 @@ class CustomerPaymentController extends Controller
         $auditLogService->record('customer_payment.posted', $payment, "Customer payment {$payment->payment_no} posted.", [
             'amount' => $payment->amount,
             'sale_id' => $payment->sale_id,
+            'account_reference_type' => $payment->account_reference_type,
+            'customer_opening_balance_remaining' => $validated['account_reference_type'] === 'opening_balance'
+                ? $customer->fresh()->openingBalanceOutstanding()
+                : null,
         ]);
 
         return redirect()
             ->route('customer-payments.show', $payment)
             ->with('status', "Customer payment {$payment->payment_no} posted successfully.")
             ->with('auto_print_receipt', true);
+    }
+
+    private function paymentAccountSummary(CustomerPayment $payment): array
+    {
+        $accountType = $payment->account_reference_type === 'opening_balance' ? 'opening_balance' : 'sale';
+        $remainingBalance = $accountType === 'opening_balance'
+            ? $payment->customer?->openingBalanceOutstanding() ?? 0
+            : (float) ($payment->sale?->balance_due ?? 0);
+
+        return [
+            'account_label' => $accountType === 'opening_balance' ? 'Opening Balance' : 'Sale',
+            'account_reference' => $accountType === 'opening_balance'
+                ? 'Opening Balance'
+                : ($payment->sale?->sale_no ?? '-'),
+            'account_total' => $accountType === 'opening_balance'
+                ? (float) ($payment->customer?->opening_balance ?? 0)
+                : (float) ($payment->sale?->total_amount ?? 0),
+            'remaining_balance' => (float) $remainingBalance,
+        ];
     }
 
     private function periodRange(string $period): array

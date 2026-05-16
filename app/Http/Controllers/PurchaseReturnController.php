@@ -9,6 +9,9 @@ use App\Models\PurchaseReturn;
 use App\Models\PurchaseReturnItem;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
+use App\Support\AccessService;
+use App\Support\StockAvailabilityService;
+use App\Support\StoreAssignmentService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,6 +23,7 @@ class PurchaseReturnController extends Controller
     public function create(Purchase $purchase): View
     {
         $purchase->load(['supplier:id,name,phone,country', 'store:id,name', 'items.product:id,name', 'items.productUnit:id,unit_name']);
+        $this->guardReturnEligibility($purchase);
 
         $returnedByItem = PurchaseReturnItem::query()
             ->selectRaw('purchase_item_id, COALESCE(SUM(quantity), 0) as returned_qty')
@@ -46,7 +50,14 @@ class PurchaseReturnController extends Controller
         ]);
     }
 
-    public function store(Request $request, Purchase $purchase, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function store(
+        Request $request,
+        Purchase $purchase,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService,
+        StockAvailabilityService $stockAvailabilityService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'return_date' => ['required', 'date'],
@@ -59,6 +70,8 @@ class PurchaseReturnController extends Controller
         ]);
 
         $purchase->load(['items', 'supplier', 'store']);
+        $this->guardReturnEligibility($purchase);
+        $storeAssignmentService->resolveStoreId((int) $purchase->store_id, $request->user(), app(AccessService::class), 'purchase');
 
         $selectedRows = collect($validated['items'])
             ->filter(fn (array $row) => ! empty($row['purchase_item_id']) && (int) ($row['quantity'] ?? 0) > 0)
@@ -77,7 +90,7 @@ class PurchaseReturnController extends Controller
             ->groupBy('purchase_item_id')
             ->pluck('returned_qty', 'purchase_item_id');
 
-        $return = DB::transaction(function () use ($validated, $purchase, $selectedRows, $returnedByItem, $documentNumberService) {
+        $return = DB::transaction(function () use ($validated, $purchase, $selectedRows, $returnedByItem, $documentNumberService, $stockAvailabilityService) {
             $purchaseItems = $purchase->items->keyBy('id');
 
             $prepared = $selectedRows->map(function (array $row) use ($purchaseItems, $returnedByItem) {
@@ -111,6 +124,12 @@ class PurchaseReturnController extends Controller
             $refundAmount = $validated['return_type'] === 'refund' ? round($overRecovered, 2) : 0;
             $supplierCreditAmount = in_array($validated['return_type'], ['supplier_credit', 'exchange'], true) ? round($overRecovered, 2) : 0;
 
+            if ($refundAmount > 0 && empty($validated['payment_mode_id'])) {
+                throw ValidationException::withMessages([
+                    'payment_mode_id' => 'Choose how the supplier refund was received before posting this return.',
+                ]);
+            }
+
             $return = PurchaseReturn::query()->create([
                 'return_no' => $documentNumberService->make('purchase_return', $validated['return_date']),
                 'return_date' => $validated['return_date'],
@@ -124,10 +143,17 @@ class PurchaseReturnController extends Controller
                 'supplier_credit_amount' => $supplierCreditAmount,
                 'status' => 'posted',
                 'remarks' => $validated['remarks'] ?? null,
+                'created_by' => auth()->id(),
             ]);
 
             foreach ($prepared as $row) {
                 $purchaseItem = $row['purchase_item'];
+                $stockAvailabilityService->ensureAvailable(
+                    (int) $purchase->store_id,
+                    $purchaseItem->productUnit,
+                    (int) $row['quantity'],
+                    'items'
+                );
 
                 $returnItem = $return->items()->create([
                     'purchase_item_id' => $purchaseItem->id,
@@ -200,5 +226,14 @@ class PurchaseReturnController extends Controller
         ]);
 
         return view('purchase_returns.print', compact('purchaseReturn'));
+    }
+
+    private function guardReturnEligibility(Purchase $purchase): void
+    {
+        if ($purchase->status !== 'posted') {
+            throw ValidationException::withMessages([
+                'purchase' => 'Only posted purchases can accept return documents.',
+            ]);
+        }
     }
 }

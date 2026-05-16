@@ -38,8 +38,13 @@ class PasswordManagementController extends Controller
             $auditLogService->record('password.reset.requested', $user, 'Password reset requested.', ['email' => $user->email]);
         }
 
-        return back()->with('status', 'If the account exists, a password reset link has been prepared.')
-            ->with('reset_link_preview', $link);
+        $response = back()->with('status', 'If the account exists, a password reset link has been prepared.');
+
+        if (app()->environment('local') && $link) {
+            $response->with('reset_link_preview', $link);
+        }
+
+        return $response;
     }
 
     public function resetForm(Request $request, string $token): View

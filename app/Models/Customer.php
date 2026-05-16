@@ -13,6 +13,7 @@ class Customer extends Model
     {
         return [
             'opening_balance' => 'decimal:2',
+            'opening_balance_date' => 'date',
             'credit_limit' => 'decimal:2',
             'is_walk_in' => 'boolean',
             'is_system' => 'boolean',
@@ -30,6 +31,11 @@ class Customer extends Model
         return $this->hasMany(CustomerPayment::class);
     }
 
+    public function openingBalancePayments(): HasMany
+    {
+        return $this->hasMany(CustomerPayment::class)->where('account_reference_type', 'opening_balance');
+    }
+
     public function saleReturns(): HasMany
     {
         return $this->hasMany(SaleReturn::class);
@@ -38,5 +44,14 @@ class Customer extends Model
     public function creditSales(): HasMany
     {
         return $this->hasMany(Sale::class)->where('sale_type', 'credit')->where('status', 'posted');
+    }
+
+    public function openingBalanceOutstanding(): float
+    {
+        $paymentsTotal = $this->relationLoaded('openingBalancePayments')
+            ? (float) $this->openingBalancePayments->where('status', 'posted')->sum('amount')
+            : (float) $this->openingBalancePayments()->where('status', 'posted')->sum('amount');
+
+        return round(max((float) $this->opening_balance - $paymentsTotal, 0), 2);
     }
 }

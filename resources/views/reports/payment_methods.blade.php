@@ -3,7 +3,7 @@
 @section('content')
     @php($currency = config('business.currency', 'UGX'))
     @php($totalInflow = (float) $rows->sum(fn ($row) => $row->sales_in + $row->customer_in))
-    @php($totalOutflow = (float) $rows->sum(fn ($row) => $row->supplier_out + $row->expense_out))
+    @php($totalOutflow = (float) $rows->sum(fn ($row) => $row->supplier_out + $row->refund_out + $row->expense_out))
     <div class="page-head">
         <div>
             <h2>Payment Method Breakdown</h2>
@@ -68,6 +68,7 @@
                             <td class="money">
                                 <div class="cell-stack">
                                     <div>Supplier payments: {{ $currency }} {{ number_format($row->supplier_out, 0) }}</div>
+                                    <div class="table-meta">Refunds: {{ $currency }} {{ number_format($row->refund_out, 0) }}</div>
                                     <div class="table-meta">Expenses: {{ $currency }} {{ number_format($row->expense_out, 0) }}</div>
                                 </div>
                             </td>

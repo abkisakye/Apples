@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -25,17 +26,30 @@ class AuthController extends Controller
         ]);
 
         $login = Str::lower(trim($credentials['login']));
+        $throttleKey = Str::transliterate($login).'|'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+
+            return back()->withErrors([
+                'login' => "Too many sign-in attempts. Try again in {$seconds} seconds.",
+            ])->onlyInput('login');
+        }
+
         $user = \App\Models\User::query()
             ->whereRaw('LOWER(username) = ?', [$login])
             ->orWhereRaw('LOWER(email) = ?', [$login])
             ->first();
 
         if (! $user || ! $user->is_active || ! Hash::check($credentials['password'], $user->password)) {
+            RateLimiter::hit($throttleKey, 60);
+
             return back()->withErrors([
                 'login' => 'The provided credentials do not match our records.',
             ])->onlyInput('login');
         }
 
+        RateLimiter::clear($throttleKey);
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
         $auditLogService->record('auth.login', $request->user(), 'User signed in.');

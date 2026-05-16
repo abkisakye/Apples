@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -75,9 +76,29 @@ class User extends Authenticatable
         return $this->belongsTo(Role::class);
     }
 
+    public function roles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class)->withTimestamps();
+    }
+
     public function defaultStore(): BelongsTo
     {
         return $this->belongsTo(Store::class, 'default_store_id');
+    }
+
+    public function assignedRoleNames(): array
+    {
+        if ($this->relationLoaded('roles')) {
+            $names = $this->roles->pluck('name')->filter()->values()->all();
+        } else {
+            $names = $this->roles()->pluck('name')->filter()->values()->all();
+        }
+
+        if ($this->role?->name && ! in_array($this->role->name, $names, true)) {
+            array_unshift($names, $this->role->name);
+        }
+
+        return array_values(array_unique(array_filter($names)));
     }
 
     public function legacyDepartmentName(): ?string
@@ -110,6 +131,14 @@ class User extends Authenticatable
 
     public function displayRoleName(): string
     {
-        return Str::headline($this->role?->name ?? 'none');
+        $roles = $this->assignedRoleNames();
+
+        if ($roles === []) {
+            return Str::headline($this->role?->name ?? 'none');
+        }
+
+        return collect($roles)
+            ->map(fn (string $role) => Str::headline($role))
+            ->implode(', ');
     }
 }

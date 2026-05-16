@@ -116,9 +116,10 @@ class AccessService
         $user = Auth::user();
 
         if ($user) {
-            $actualRole = $user->relationLoaded('role') ? ($user->role?->name ?? 'cashier') : ($user->role()->value('name') ?? 'cashier');
+            $assignedRoles = $this->userRoles($user);
+            $actualRole = $assignedRoles[0] ?? ($user->role?->name ?? 'cashier');
 
-            if ($actualRole === 'admin' && $this->request->session()->has('preview_role')) {
+            if (in_array('admin', $assignedRoles, true) && $this->request->session()->has('preview_role')) {
                 return $this->request->session()->get('preview_role', 'admin');
             }
 
@@ -135,9 +136,73 @@ class AccessService
 
     public function can(string $ability): bool
     {
-        $role = $this->currentRole();
-        $abilities = $this->matrix()[$role] ?? [];
+        $abilities = $this->abilitiesForCurrentUser();
 
         return in_array('*', $abilities, true) || in_array($ability, $abilities, true);
+    }
+
+    public function hasRole(string $roleName): bool
+    {
+        $user = Auth::user();
+
+        if (! $user) {
+            return $roleName === 'guest';
+        }
+
+        return in_array($roleName, $this->userRoles($user), true);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function abilitiesForCurrentUser(): array
+    {
+        $user = Auth::user();
+
+        if (! $user) {
+            return $this->matrix()['guest'] ?? [];
+        }
+
+        $abilities = collect($this->userRoles($user))
+            ->flatMap(fn (string $roleName) => $this->matrix()[$roleName] ?? [])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($this->hasRole('admin') && $this->request->session()->has('preview_role')) {
+            $previewRole = (string) $this->request->session()->get('preview_role', 'admin');
+            $previewAbilities = $this->matrix()[$previewRole] ?? [];
+
+            if ($previewAbilities !== []) {
+                return $previewAbilities;
+            }
+        }
+
+        return $abilities;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function userRoles($user): array
+    {
+        $roles = [];
+
+        if ($user->relationLoaded('roles')) {
+            $roles = $user->roles->pluck('name')->filter()->values()->all();
+        } elseif (method_exists($user, 'roles')) {
+            $roles = $user->roles()->pluck('name')->filter()->values()->all();
+        }
+
+        $primaryRole = $user->relationLoaded('role')
+            ? ($user->role?->name)
+            : ($user->role()->value('name'));
+
+        if ($primaryRole && ! in_array($primaryRole, $roles, true)) {
+            array_unshift($roles, $primaryRole);
+        }
+
+        return array_values(array_unique(array_filter($roles))) ?: ['cashier'];
     }
 }

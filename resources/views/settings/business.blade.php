@@ -44,7 +44,7 @@
                     </label>
                     <label class="form-field">
                         <span>Admin Approval PIN</span>
-                        <input type="text" name="admin_approval_pin" value="{{ old('admin_approval_pin', $settings['admin_approval_pin']) }}" placeholder="Used for cashier override approvals">
+                        <input type="password" name="admin_approval_pin" value="" placeholder="Leave blank to keep the current approval PIN">
                     </label>
                 </div>
 
@@ -121,7 +121,7 @@
                     </tr>
                     <tr>
                         <th style="text-align:left;">Admin Approval PIN</th>
-                        <td>Used when a sales person needs approval for sensitive sales actions while the admin is away.</td>
+                        <td>Used when a sales person needs approval for sensitive sales actions while the admin is away. The current PIN is kept hidden.</td>
                     </tr>
                 </tbody>
             </table>

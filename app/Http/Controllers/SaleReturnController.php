@@ -10,6 +10,7 @@ use App\Models\SaleReturnItem;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Support\AccessService;
+use App\Support\ApprovalPinService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -119,6 +120,7 @@ class SaleReturnController extends Controller
                 'store_credit_amount' => $settlement['store_credit_amount'],
                 'status' => 'posted',
                 'remarks' => $validated['remarks'] ?? null,
+                'created_by' => auth()->id(),
             ]);
 
             foreach ($prepared as $row) {
@@ -314,9 +316,7 @@ class SaleReturnController extends Controller
             return;
         }
 
-        $configuredPin = (string) config('business.admin_approval_pin', '');
-
-        if ($configuredPin !== '' && hash_equals($configuredPin, (string) $approvalPin)) {
+        if (app(ApprovalPinService::class)->verify($approvalPin)) {
             return;
         }
 
