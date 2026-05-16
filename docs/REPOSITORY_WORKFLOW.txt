@@ -1,0 +1,63 @@
+Repository Workflow
+===================
+
+This project uses a simple branch model so releases stay stable while version 2 work continues safely.
+
+Main Rules
+----------
+
+- `main` is the stable branch.
+- `version-2.0.0-dev` is the active integration branch for version 2 work.
+- release tags such as `v1.0.0` mark stable milestones.
+
+Recommended Flow
+----------------
+
+1. Pull the latest branch state.
+2. Make changes on `version-2.0.0-dev` or a short-lived feature branch created from it.
+3. Test the change locally.
+4. Commit with a clear message.
+5. Push to GitHub.
+6. Open or update a pull request into `main` when the batch is ready for review or release.
+
+Useful Commands
+---------------
+
+Update local branches:
+
+`git checkout main`
+`git pull`
+`git checkout version-2.0.0-dev`
+`git pull`
+
+Start a short feature branch:
+
+`git checkout version-2.0.0-dev`
+`git checkout -b feature/your-change-name`
+
+Push a branch:
+
+`git push -u origin feature/your-change-name`
+
+Push the main development branch:
+
+`git push`
+
+Open release work back toward main:
+
+- create a pull request from `version-2.0.0-dev` to `main`
+
+Release Pattern
+---------------
+
+- keep version-building work on `version-2.0.0-dev`
+- merge tested work into `main`
+- tag the new stable release, for example `v2.0.0`
+
+Operational Advice
+------------------
+
+- avoid working directly on `main` unless it is a small emergency fix
+- keep commit messages short and meaningful
+- push frequently enough that the remote stays current
+- before important releases, verify `main`, tags, and pull requests are in sync

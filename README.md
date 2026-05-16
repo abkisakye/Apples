@@ -2,13 +2,20 @@
 
 Laravel-based replacement for the legacy Microsoft Access business system.
 
+## Repository
+
+- GitHub repository: [abkisakye/Apples](https://github.com/abkisakye/Apples)
+- stable branch: `main`
+- active development branch: `version-2.0.0-dev`
+- release tag baseline: `v1.0.0`
+
 ## Versioning
 
 - current release baseline: `v1.0.0`
 - active improvement branch: `version-2.0.0-dev`
-- release notes: [CHANGELOG](C:/wamp64/www/Apples/CHANGELOG.md)
-- version 2 planning: [Version 2 Roadmap](C:/wamp64/www/Apples/docs/VERSION_2_ROADMAP.txt)
-- version 2 backlog: [Version 2 Build Backlog](C:/wamp64/www/Apples/docs/V2_BUILD_BACKLOG.txt)
+- release notes: [CHANGELOG](CHANGELOG.md)
+- version 2 planning: [Version 2 Roadmap](docs/VERSION_2_ROADMAP.txt)
+- version 2 backlog: [Version 2 Build Backlog](docs/V2_BUILD_BACKLOG.txt)
 
 ## What The System Covers
 
@@ -42,6 +49,16 @@ Default local admin:
 - `php artisan ops:go-live-check`
 - `php artisan ops:backup-database`
 
+## Git Workflow
+
+1. Keep `main` as the stable branch.
+2. Do ongoing work in `version-2.0.0-dev` or a short-lived feature branch from it.
+3. Commit locally with clear messages.
+4. Push changes to GitHub.
+5. Open a pull request into `main` when a release-ready batch is complete.
+
+See [Repository Workflow](docs/REPOSITORY_WORKFLOW.txt) for the fuller branch and release flow.
+
 ## Production Notes
 
 - local development currently uses SQLite
@@ -50,11 +67,12 @@ Default local admin:
 
 ## Project Docs
 
-- [Go Live Checklist](C:/wamp64/www/Apples/docs/GO_LIVE_CHECKLIST.txt)
-- [Deployment Guide](C:/wamp64/www/Apples/docs/DEPLOYMENT_GUIDE.txt)
-- [Pilot Install Guide](C:/wamp64/www/Apples/docs/PILOT_INSTALL_GUIDE.txt)
-- [Permissions Matrix](C:/wamp64/www/Apples/docs/PERMISSIONS_MATRIX.txt)
-- [Backup And Restore](C:/wamp64/www/Apples/docs/BACKUP_AND_RESTORE.txt)
-- [Data Migration Cleanup](C:/wamp64/www/Apples/docs/DATA_MIGRATION_CLEANUP.txt)
-- [UAT Checklist](C:/wamp64/www/Apples/docs/UAT_CHECKLIST.txt)
-- [User Training Guide](C:/wamp64/www/Apples/docs/USER_TRAINING_GUIDE.txt)
+- [Go Live Checklist](docs/GO_LIVE_CHECKLIST.txt)
+- [Deployment Guide](docs/DEPLOYMENT_GUIDE.txt)
+- [Pilot Install Guide](docs/PILOT_INSTALL_GUIDE.txt)
+- [Permissions Matrix](docs/PERMISSIONS_MATRIX.txt)
+- [Backup And Restore](docs/BACKUP_AND_RESTORE.txt)
+- [Data Migration Cleanup](docs/DATA_MIGRATION_CLEANUP.txt)
+- [UAT Checklist](docs/UAT_CHECKLIST.txt)
+- [User Training Guide](docs/USER_TRAINING_GUIDE.txt)
+- [Repository Workflow](docs/REPOSITORY_WORKFLOW.txt)
