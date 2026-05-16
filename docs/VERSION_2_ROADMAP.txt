@@ -1,0 +1,136 @@
+# Version 2 Roadmap
+
+Generated on 26 Apr 2026
+
+## Purpose
+
+This roadmap defines what should make version 2 materially better than the `v1.0.0` baseline.
+
+Version 1 already covers the core business cycle.
+
+Version 2 should focus on making the system:
+
+- more sellable
+- easier to operate daily
+- safer for multi-client use
+- stronger for production rollout
+
+## Main Product Goals
+
+### 1. Stronger Daily Operations
+
+Focus on the pages staff use most often:
+
+- sales desk
+- purchase entry
+- customer payments
+- supplier payments
+- stock adjustment and count
+
+The goal is to make these screens faster, more guided, and more comfortable on tablets and small screens.
+
+### 2. Better Client Readiness
+
+The system is now being shown to real supermarket owners.
+
+Version 2 should therefore improve:
+
+- buyer-facing polish
+- wording consistency
+- cleaner print output
+- simpler first-time user experience
+
+### 3. Safer Business Separation
+
+Version 1 can support one demo user at a time, but not true client-by-client separation.
+
+Version 2 should prepare for one of these models:
+
+1. one deployment per business
+2. one codebase with business-level separation
+
+Even if full multi-tenancy is not implemented immediately, the code and deployment plan should move in that direction.
+
+### 4. Better Reporting And Control
+
+Reports already exist, but version 2 should strengthen:
+
+- manager-facing summaries
+- reconciliation clarity
+- stock explanation and auditability
+- profit and movement understanding
+
+### 5. Production Hardening
+
+Version 2 should reduce the gap between demo use and real deployment by improving:
+
+- MySQL-first production setup
+- environment handling
+- backup/restore procedure
+- go-live readiness
+- release discipline
+
+## Recommended Version 2 Themes
+
+### Theme A. Workflow Polish
+
+- compact cashier-first UI pass across all daily pages
+- guided form behavior and inline validation
+- cleaner action menus and list behavior
+- better phone and tablet layouts
+
+### Theme B. Business Data Isolation
+
+- define and implement the preferred business separation model
+- reduce dependence on one shared demo database
+- make owner/client handover safer
+
+### Theme C. Reporting Upgrade
+
+- tighter report filters
+- cleaner summaries by role
+- improved daily closing and manager review experience
+- more professional export and print structure
+
+### Theme D. Operational Safety
+
+- better audit coverage for sensitive actions
+- clearer correction, void, return, and reversal controls
+- stronger restore and data recovery routine
+
+## Priority Order
+
+### Priority 1
+
+- daily workflow polish
+- mobile and tablet compactness
+- print and statement consistency
+
+### Priority 2
+
+- business separation design
+- stronger reports and reconciliation experience
+- safer operational controls
+
+### Priority 3
+
+- richer dashboards
+- advanced exports
+- barcode workflow and scanning improvements
+
+## Suggested Delivery Order
+
+1. tighten the highest-frequency daily screens
+2. improve print and manager-facing reports
+3. prepare business separation strategy
+4. harden production and release operations
+5. add optional premium features
+
+## Definition Of Success
+
+Version 2 should feel successful if:
+
+- a cashier can complete the core flow faster than in version 1
+- a manager can understand business position faster from the dashboard and reports
+- a prospect can see a clearer jump from Access to a modern system
+- the system is safer to deploy for more than one real client

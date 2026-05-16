@@ -1,0 +1,164 @@
+# Pilot Install Guide
+
+This guide is for installing Apples on one supermarket computer for pilot usage before full go-live.
+
+## Best Pilot Setup
+
+For pilot use, the safest setup is:
+
+- install the app on one main computer inside the shop
+- use MySQL on that same computer
+- let staff access it through that computer first
+- only open LAN access after the main computer is working well
+
+This keeps the pilot simple and easier to support.
+
+## What To Carry With You
+
+Before you leave for the site, make sure you have:
+
+- the full `Apples` project folder
+- PHP 8.2+ working on the computer, or WAMP/XAMPP already installed
+- MySQL or MariaDB available
+- Composer available if you may need to refresh dependencies
+- a copy of the current database backup if you want pilot data preloaded
+- the login credentials you want the pilot user to use
+- printer access if receipts will be tested
+
+## Recommended Pilot Environment
+
+Use a pilot environment close to production, but still simple:
+
+- `APP_ENV=production`
+- `APP_DEBUG=false`
+- `DB_CONNECTION=mysql`
+- `MAIL_MAILER=log`
+- `SESSION_SECURE_COOKIE=false` if the pilot is on plain `http://`
+
+Use [`.env.mysql.example`](C:/wamp64/www/Apples/.env.mysql.example) or [`.env.pilot.example`](C:/wamp64/www/Apples/.env.pilot.example) as the starting point.
+
+## Installation Steps On The Pilot Computer
+
+1. Copy the whole [Apples](C:/wamp64/www/Apples) folder to the pilot computer.
+2. Create a MySQL database, for example `apples_pilot`.
+3. Create a MySQL user for the app.
+4. Copy `.env.pilot.example` to `.env`.
+5. Update these values in `.env`:
+   - `APP_URL`
+   - `DB_HOST`
+   - `DB_PORT`
+   - `DB_DATABASE`
+   - `DB_USERNAME`
+   - `DB_PASSWORD`
+   - business name, phone, address, and receipt footer
+6. Run the setup helper:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\pilot_setup_windows.ps1
+```
+
+If you need legacy/imported data as part of the pilot:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\pilot_setup_windows.ps1 -WithImport
+```
+
+## If You Need To Start Empty
+
+For a clean pilot with no legacy business data:
+
+- use a new MySQL database
+- run normal migration and seed only
+- create only the pilot staff accounts you want
+- enter a few sample products manually, or import a small clean list
+
+## If You Need To Carry Existing Data
+
+If you want the pilot computer to reflect the current app:
+
+- back up the current database first
+- restore that backup into the pilot MySQL database
+- then run:
+
+```powershell
+php artisan migrate --force
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+## Starting The App
+
+For a quick pilot launch:
+
+```powershell
+php artisan serve --host=0.0.0.0 --port=8081
+```
+
+Then open it on the pilot computer:
+
+- `http://127.0.0.1:8081`
+
+If other computers on the same network need to reach it, use the pilot computer IP:
+
+- `http://PILOT-PC-IP:8081`
+
+Example:
+
+- `http://192.168.1.25:8081`
+
+## Firewall Note
+
+If other computers cannot open the app, allow the chosen port through Windows Firewall.
+
+For this project, the important port is usually:
+
+- `8081`
+
+## First Checks Before Handing It Over
+
+Log in and confirm:
+
+- dashboard opens
+- one product page opens
+- one customer page opens
+- one sale can be created
+- one receipt can be printed
+- one report page loads
+- one stock page loads
+
+## Pilot-Day Checklist
+
+Before leaving the site:
+
+- confirm correct store name and branding
+- confirm the printer is selected correctly
+- confirm one cashier can log in
+- confirm one manager/admin can log in
+- confirm date and timezone are correct
+- confirm backups can be taken
+- confirm the pilot user knows the login URL
+
+## Recommended Pilot Rule
+
+For the first pilot round:
+
+- use one branch/store only
+- use one main cashier flow first
+- avoid changing too much data structure on day one
+- collect notes after real usage, then improve
+
+## Quick Rollback Option
+
+If the pilot setup gets messy:
+
+- take a fresh backup
+- replace the pilot database with the last clean backup
+- run `php artisan config:clear`
+- restart the app server
+
+## Related Docs
+
+- [Deployment Guide](C:/wamp64/www/Apples/docs/DEPLOYMENT_GUIDE.txt)
+- [Go Live Checklist](C:/wamp64/www/Apples/docs/GO_LIVE_CHECKLIST.txt)
+- [Backup And Restore](C:/wamp64/www/Apples/docs/BACKUP_AND_RESTORE.txt)

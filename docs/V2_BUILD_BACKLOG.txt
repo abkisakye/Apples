@@ -1,0 +1,45 @@
+# Version 2 Build Backlog
+
+Generated on 26 Apr 2026
+
+## Now
+
+These are the strongest items to build first on `version-2.0.0-dev`.
+
+- full cashier-focused UI pass across sales, payments, and receipts
+- compact daily-use layout pass across purchases, stock, and statements
+- print and PDF theme cleanup for all business documents
+- list-page cleanup for dense data tables, actions, filters, and pagination
+- wording consistency sweep across forms, alerts, and printouts
+
+## Next
+
+- manager dashboard upgrade with clearer summaries and drill-down links
+- stronger reconciliation views for cash, credit, purchases, and returns
+- guided operational corrections for posted documents
+- better return, refund, exchange, and reversal flow polish
+- report usability pass page by page
+
+## Important Architecture Work
+
+- decide the business separation model for real client rollout
+- reduce assumptions that one shared environment is acceptable
+- prepare MySQL-first deployment baseline and environment templates
+- tighten release process for future tagged versions
+
+## Later / Optional
+
+- barcode scanning workflow
+- richer dashboard charts
+- premium PDF/export experience
+- smarter stock count assignment by section or staff
+- deeper analytics for product movement and profit
+
+## Working Rule For This Branch
+
+Changes on version 2 should be judged against four questions:
+
+1. does this make daily work faster?
+2. does this make the system easier to sell?
+3. does this make real deployment safer?
+4. does this reduce confusion for normal users?

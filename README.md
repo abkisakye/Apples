@@ -2,6 +2,14 @@
 
 Laravel-based replacement for the legacy Microsoft Access business system.
 
+## Versioning
+
+- current release baseline: `v1.0.0`
+- active improvement branch: `version-2.0.0-dev`
+- release notes: [CHANGELOG](C:/wamp64/www/Apples/CHANGELOG.md)
+- version 2 planning: [Version 2 Roadmap](C:/wamp64/www/Apples/docs/VERSION_2_ROADMAP.txt)
+- version 2 backlog: [Version 2 Build Backlog](C:/wamp64/www/Apples/docs/V2_BUILD_BACKLOG.txt)
+
 ## What The System Covers
 
 - sales and receipt/invoice printing
@@ -42,11 +50,11 @@ Default local admin:
 
 ## Project Docs
 
-- [Go Live Checklist](C:/wamp64/www/Apples/docs/GO_LIVE_CHECKLIST.md)
-- [Deployment Guide](C:/wamp64/www/Apples/docs/DEPLOYMENT_GUIDE.md)
-- [Permissions Matrix](C:/wamp64/www/Apples/docs/PERMISSIONS_MATRIX.md)
-- [Backup And Restore](C:/wamp64/www/Apples/docs/BACKUP_AND_RESTORE.md)
-- [Data Migration Cleanup](C:/wamp64/www/Apples/docs/DATA_MIGRATION_CLEANUP.md)
-- [UAT Checklist](C:/wamp64/www/Apples/docs/UAT_CHECKLIST.md)
-- [User Training Guide](C:/wamp64/www/Apples/docs/USER_TRAINING_GUIDE.md)
-- [Demo Script](C:/wamp64/www/Apples/docs/DEMO_SCRIPT.md)
+- [Go Live Checklist](C:/wamp64/www/Apples/docs/GO_LIVE_CHECKLIST.txt)
+- [Deployment Guide](C:/wamp64/www/Apples/docs/DEPLOYMENT_GUIDE.txt)
+- [Pilot Install Guide](C:/wamp64/www/Apples/docs/PILOT_INSTALL_GUIDE.txt)
+- [Permissions Matrix](C:/wamp64/www/Apples/docs/PERMISSIONS_MATRIX.txt)
+- [Backup And Restore](C:/wamp64/www/Apples/docs/BACKUP_AND_RESTORE.txt)
+- [Data Migration Cleanup](C:/wamp64/www/Apples/docs/DATA_MIGRATION_CLEANUP.txt)
+- [UAT Checklist](C:/wamp64/www/Apples/docs/UAT_CHECKLIST.txt)
+- [User Training Guide](C:/wamp64/www/Apples/docs/USER_TRAINING_GUIDE.txt)
