@@ -104,7 +104,7 @@
                                     @else
                                         <div class="table-title">No linked sale</div>
                                     @endif
-                                    <div class="table-meta">{{ $payment->store?->name ?? 'No store assigned' }}</div>
+                                    <div class="table-meta">{{ $payment->store?->name ?? config('business.name', 'Apples Of Gold') }}</div>
                                     <div class="table-meta">{{ $payment->reference_no ?: $payment->cheque_number ?: 'No reference' }}</div>
                                 </div>
                             </td>

@@ -54,7 +54,7 @@
                             <div class="cell-stack">
                                 <div class="table-title"><a href="{{ route('purchases.show', $purchase) }}">{{ $purchase->purchase_no }}</a></div>
                                 <div class="table-meta">{{ optional($purchase->purchase_date)->format('d M Y') ?: '-' }}</div>
-                                <div class="table-meta">{{ $purchase->store?->name ?? 'No store assigned' }}</div>
+                                <div class="table-meta">{{ $purchase->store?->name ?? config('business.name', 'Apples Of Gold') }}</div>
                             </div>
                         </td>
                         <td>

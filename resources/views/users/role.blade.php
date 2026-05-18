@@ -82,8 +82,8 @@
                         <td>{{ $user->displayRoleName() }}</td>
                     </tr>
                     <tr>
-                        <th style="text-align:left;">Default Store</th>
-                        <td>{{ $user->defaultStore?->name ?? '-' }}</td>
+                        <th style="text-align:left;">Shop</th>
+                        <td>{{ $user->defaultStore?->name ?? config('business.name', 'Apples Of Gold') }}</td>
                     </tr>
                     <tr>
                         <th style="text-align:left;">Status</th>

@@ -103,7 +103,7 @@
                             <div class="cell-stack">
                                 <div class="table-title"><a href="{{ route('sales.show', $sale) }}">{{ $sale->sale_no }}</a></div>
                                 <div class="table-meta">{{ optional($sale->sale_date)->format('d M Y') ?: '-' }}</div>
-                                <div class="table-meta">{{ $sale->store?->name ?? 'No store assigned' }}</div>
+                                <div class="table-meta">{{ $sale->store?->name ?? config('business.name', 'Apples Of Gold') }}</div>
                             </div>
                         </td>
                         <td>

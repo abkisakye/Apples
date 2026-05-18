@@ -108,7 +108,7 @@
                                 <td>
                                     <div class="cell-stack">
                                         <div class="table-title">{{ $shift->user?->name ?? '-' }}</div>
-                                        <div class="table-meta">{{ $shift->store?->name ?? 'No store assigned' }}</div>
+                                        <div class="table-meta">{{ $shift->store?->name ?? config('business.name', 'Apples Of Gold') }}</div>
                                     </div>
                                 </td>
                                 <td class="money">

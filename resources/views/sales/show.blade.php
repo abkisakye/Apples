@@ -228,7 +228,7 @@
     @if (session('auto_print_document'))
         <script>
             (() => {
-                const printUrl = @json(route('sales.print', $sale));
+                const printUrl = @json(route('sales.print', ['sale' => $sale, 'theme' => 'thermal']));
                 const popup = window.open(printUrl, '_blank', 'noopener,noreferrer');
                 if (popup) {
                     popup.focus();

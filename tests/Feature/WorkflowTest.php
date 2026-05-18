@@ -359,6 +359,7 @@ class WorkflowTest extends TestCase
 
         $this->get('/sales/'.$sale->id)->assertOk()->assertSee($sale->sale_no);
         $this->get('/sales/'.$sale->id.'/print')->assertOk()->assertSee($sale->sale_no);
+        $this->get('/sales/'.$sale->id.'/print?theme=thermal')->assertOk()->assertSee($sale->sale_no)->assertSee('Cash Sale Receipt');
     }
 
     public function test_purchase_posting_creates_purchase_items_and_inventory_transaction(): void
@@ -1293,7 +1294,7 @@ class WorkflowTest extends TestCase
             ->assertSee('Replacement for '.$saleReturn->return_no)
             ->assertSee('Exchange return')
             ->assertSee('Juice - Bottle')
-            ->assertSee('Scan barcode or code');
+            ->assertSee('Scan barcode / code');
 
         $replacementResponse = $this->post('/sales', [
             'sale_date' => '2026-03-26',

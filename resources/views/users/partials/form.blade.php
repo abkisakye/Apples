@@ -28,7 +28,7 @@
 <div class="page-head">
     <div>
         <h2>{{ $title }}</h2>
-        <p>Set the user roles, default store, and login details.</p>
+        <p>Set the user roles, shop assignment, and login details.</p>
     </div>
     <div class="actions">
         <a href="{{ route('users.index') }}" class="button-link">Back to Users</a>
@@ -57,9 +57,9 @@
                     <input type="email" name="email" value="{{ old('email', $user->email) }}" required>
                 </label>
                 <label class="form-field">
-                    <span>Default Store</span>
+                    <span>Shop</span>
                     <select name="default_store_id">
-                        <option value="">No default store</option>
+                        <option value="">Apples Of Gold</option>
                         @foreach ($stores as $store)
                             <option value="{{ $store->id }}" @selected((string) old('default_store_id', $user->default_store_id) === (string) $store->id)>{{ $store->name }}</option>
                         @endforeach
@@ -100,7 +100,7 @@
 
     <div class="panel">
         <h3>Account Guidance</h3>
-        <p class="list-note">Keep usernames short and easy to type at the counter. Use role and store assignment to guide what each staff member can see and do.</p>
+        <p class="list-note">Keep usernames short and easy to type at the counter. Use roles to guide what each staff member can see and do.</p>
         <table>
             <tbody>
                 <tr>
@@ -112,8 +112,8 @@
                     <td>Assign one or more roles so one person can safely cover sales, stock, or supervision when needed.</td>
                 </tr>
                 <tr>
-                    <th style="text-align:left;">Store Assignment</th>
-                    <td>Use a default store where staff mainly work so entry pages feel faster and posting stays restricted.</td>
+                    <th style="text-align:left;">Shop Assignment</th>
+                    <td>This installation uses one shop: Apples Of Gold. Staff transactions are posted there automatically.</td>
                 </tr>
                 <tr>
                     <th style="text-align:left;">Password Note</th>

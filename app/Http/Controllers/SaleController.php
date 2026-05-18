@@ -171,6 +171,7 @@ class SaleController extends Controller
             'items.product:id,name',
             'items.productUnit:id,unit_name',
             'payments.paymentMode:id,name',
+            'createdBy:id,name,username',
         ]);
 
         return view('sales.print', compact('sale'));

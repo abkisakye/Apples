@@ -137,7 +137,7 @@
                     </label>
                     <div class="form-field">
                         <span>Store</span>
-                        <div class="store-pill">{{ $currentStore?->name ?? 'No store assigned' }}</div>
+                        <div class="store-pill">{{ $currentStore?->name ?? config('business.name', 'Apples Of Gold') }}</div>
                     </div>
                     <div class="form-field" style="grid-column: 1 / -1;">
                         <span>Supplier</span>

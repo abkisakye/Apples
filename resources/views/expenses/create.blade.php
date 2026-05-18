@@ -23,7 +23,7 @@
                     <label class="form-field">
                         <span>Store</span>
                         <select name="store_id">
-                            <option value="">Use my default store</option>
+                            <option value="">Apples Of Gold</option>
                             @foreach ($stores as $store)
                                 <option value="{{ $store->id }}" @selected((string) old('store_id', $defaultStoreId) === (string) $store->id)>{{ $store->name }}</option>
                             @endforeach

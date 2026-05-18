@@ -56,7 +56,7 @@
                         <td>
                             <div class="cell-stack">
                                 <div class="table-title">{{ optional($transaction->transaction_date)->format('d M Y') ?: '-' }}</div>
-                                <div class="table-meta">{{ $transaction->store?->name ?? 'No store assigned' }}</div>
+                                <div class="table-meta">{{ $transaction->store?->name ?? config('business.name', 'Apples Of Gold') }}</div>
                                 <div class="status-inline">
                                     <span class="badge {{ in_array($transaction->movement_type, ['sale', 'transfer_out', 'adjustment_out', 'count_out'], true) ? 'credit' : 'success' }}">
                                         {{ \Illuminate\Support\Str::headline($transaction->movement_type) }}

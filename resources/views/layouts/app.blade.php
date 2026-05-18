@@ -982,9 +982,7 @@
                         <div class="topbar-meta">
                             <div class="topbar-chip topbar-chip-date">{{ now()->format('D, d M Y') }}</div>
                             <div class="topbar-chip topbar-chip-role">User: {{ $currentUser->username ?: $currentUser->name }}</div>
-                            @if ($currentUser->defaultStore?->name)
-                                <div class="topbar-chip topbar-chip-store">Store: {{ $currentUser->defaultStore->name }}</div>
-                            @endif
+                            <div class="topbar-chip topbar-chip-store">Shop: {{ $currentUser->defaultStore?->name ?? config('business.name', 'Apples Of Gold') }}</div>
                         </div>
                         <a href="{{ route('password.change') }}" class="button-link">Change Password</a>
                         <form method="post" action="{{ route('logout') }}" class="topbar-form">

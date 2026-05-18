@@ -17,27 +17,185 @@
     @php($printedAt = now())
     @if ($thermal)
         <style>
-            @page { size: 80mm auto; margin: 4mm; }
-            body { font-family: "Courier New", monospace; font-size: 12px; }
-            .toolbar { display: none; }
-            .page { max-width: 76mm; padding: 0; margin: 0 auto; border: 0; box-shadow: none; }
-            .header { border-bottom: 1px dashed #777; margin-bottom: 8px; }
-            .brand-name, .doc-name { font-size: 16px; color: #000; }
-            .brand-tagline, .brand-meta, .doc-meta, .doc-label { font-size: 11px; color: #000; }
-            .section-kicker, .panel-title, .metric-value { color: #000; }
-            .header, .overview, .content, .signature-row,
-            .header tbody, .overview tbody, .content tbody, .signature-row tbody,
-            .header tr, .overview tr, .content tr, .signature-row tr,
-            .header td, .overview td, .content td, .signature-row td { display: block; width: 100%; }
-            .doc-block { text-align: left; margin-top: 8px; }
-            .overview, .content, .signature-row { margin: 0; border-spacing: 0; }
-            .overview td, .content td { margin-bottom: 8px; border: 0; padding: 0 0 8px; }
-            .panel { border: 0; padding: 6px 0; min-height: 0; }
-            .ledger th { background: none; color: #000; border-bottom: 1px dashed #777; border-top: 0; border-left: 0; border-right: 0; }
-            .ledger td { border-left: 0; border-right: 0; border-top: 0; border-bottom: 1px dotted #bbb; }
-            .footer-note { text-align: center; border-top: 1px dashed #777; color: #000; }
+            @page { size: 80mm auto; margin: 3mm; }
+            * { box-sizing: border-box; }
+            body {
+                margin: 0;
+                background: #fff;
+                color: #000;
+                font-family: "Courier New", Consolas, monospace;
+                font-size: 11px;
+                line-height: 1.25;
+            }
+            .toolbar {
+                max-width: 80mm;
+                margin: 0 auto;
+                padding: 8px 0;
+                text-align: center;
+            }
+            .toolbar button {
+                border: 0;
+                border-radius: 8px;
+                padding: 8px 12px;
+                background: #111;
+                color: #fff;
+                font-weight: 700;
+            }
+            .thermal-receipt {
+                width: 74mm;
+                margin: 0 auto;
+                padding: 0;
+            }
+            .center { text-align: center; }
+            .brand {
+                font-size: 15px;
+                font-weight: 900;
+                text-transform: uppercase;
+                letter-spacing: .04em;
+            }
+            .muted { color: #000; }
+            .rule {
+                margin: 6px 0;
+                border-top: 1px dashed #000;
+            }
+            .receipt-title {
+                font-weight: 900;
+                text-align: center;
+                text-transform: uppercase;
+                margin: 5px 0;
+            }
+            .receipt-row {
+                display: flex;
+                justify-content: space-between;
+                gap: 6px;
+            }
+            .receipt-row span:first-child {
+                flex: 1;
+            }
+            .receipt-row strong,
+            .receipt-row span:last-child {
+                text-align: right;
+                white-space: nowrap;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th,
+            td {
+                padding: 2px 0;
+                vertical-align: top;
+            }
+            th {
+                border-bottom: 1px dashed #000;
+                font-size: 10px;
+                text-align: left;
+            }
+            .qty,
+            .money {
+                text-align: right;
+                white-space: nowrap;
+            }
+            .item-name {
+                max-width: 36mm;
+                word-break: break-word;
+            }
+            .totals {
+                margin-top: 4px;
+            }
+            .grand-total {
+                font-size: 14px;
+                font-weight: 900;
+            }
+            .footer {
+                margin-top: 8px;
+                text-align: center;
+                font-size: 10px;
+            }
+            @media print {
+                .toolbar { display: none; }
+            }
         </style>
     @endif
+
+    @if ($thermal)
+        <div class="toolbar"><button onclick="window.print()">Print Receipt</button></div>
+
+        <div class="thermal-receipt">
+            <div class="center">
+                <div class="brand">{{ strtoupper(config('business.name', 'Apples Of Gold')) }}</div>
+                @if (config('business.tagline'))
+                    <div>{{ config('business.tagline') }}</div>
+                @endif
+                @if (config('business.address'))
+                    <div>{{ config('business.address') }}</div>
+                @endif
+                @if (config('business.phone'))
+                    <div>Tel: {{ config('business.phone') }}</div>
+                @endif
+            </div>
+
+            <div class="rule"></div>
+            <div class="receipt-title">{{ $sale->sale_type === 'cash' ? 'Cash Sale Receipt' : 'Credit Sale Invoice' }}</div>
+            <div class="receipt-row"><span>No:</span><strong>{{ $sale->sale_no }}</strong></div>
+            <div class="receipt-row"><span>Date:</span><strong>{{ optional($sale->sale_date)->format('d M Y') }}</strong></div>
+            <div class="receipt-row"><span>Time:</span><strong>{{ $printedAt->format('H:i') }}</strong></div>
+            <div class="receipt-row"><span>Cashier:</span><strong>{{ $sale->createdBy?->name ?? $sale->createdBy?->username ?? '-' }}</strong></div>
+            <div class="receipt-row"><span>Customer:</span><strong>{{ $customerName }}</strong></div>
+            <div class="rule"></div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th class="qty">Qty</th>
+                        <th class="money">Price</th>
+                        <th class="money">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($sale->items as $item)
+                        <tr>
+                            <td class="item-name">{{ $item->product?->name ?? '-' }}</td>
+                            <td class="qty">{{ number_format((float) $item->quantity, 0) }}</td>
+                            <td class="money">{{ number_format((float) $item->unit_price, 0) }}</td>
+                            <td class="money">{{ number_format((float) $item->line_total, 0) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+
+            <div class="rule"></div>
+            <div class="totals">
+                <div class="receipt-row"><span>Subtotal</span><strong>{{ $currency }} {{ number_format((float) $sale->subtotal, 0) }}</strong></div>
+                @if ((float) $sale->discount_amount > 0)
+                    <div class="receipt-row"><span>Discount</span><strong>{{ $currency }} {{ number_format((float) $sale->discount_amount, 0) }}</strong></div>
+                @endif
+                <div class="receipt-row grand-total"><span>Total</span><strong>{{ $currency }} {{ number_format((float) $sale->total_amount, 0) }}</strong></div>
+                <div class="receipt-row"><span>Paid</span><strong>{{ $currency }} {{ number_format((float) $paidAmount, 0) }}</strong></div>
+                @if ($sale->change_given > 0)
+                    <div class="receipt-row"><span>Change</span><strong>{{ $currency }} {{ number_format((float) $sale->change_given, 0) }}</strong></div>
+                @endif
+                @if ($sale->balance_due > 0)
+                    <div class="receipt-row"><span>Balance</span><strong>{{ $currency }} {{ number_format((float) $sale->balance_due, 0) }}</strong></div>
+                    <div class="receipt-row"><span>Due</span><strong>{{ optional($sale->credit_due_date)->format('d M Y') ?: '-' }}</strong></div>
+                @endif
+                <div class="receipt-row"><span>Mode</span><strong>{{ $sale->paymentMode?->name ?? '-' }}</strong></div>
+            </div>
+
+            @if ($sale->remarks)
+                <div class="rule"></div>
+                <div>Note: {{ $sale->remarks }}</div>
+            @endif
+
+            <div class="rule"></div>
+            <div class="footer">
+                {{ $sale->sale_type === 'cash'
+                    ? config('business.receipt_footer', 'Thank you for shopping with Apples Of Gold.')
+                    : config('business.invoice_footer', 'Please settle outstanding balances by the due date shown.') }}
+            </div>
+        </div>
+    @else
 
     <div class="toolbar"><button onclick="window.print()">Print</button></div>
 
@@ -153,5 +311,6 @@
                 : config('business.invoice_footer', 'Please settle outstanding balances by the due date shown on this invoice.') }}
         </div>
     </div>
+    @endif
 </body>
 </html>

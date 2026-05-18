@@ -2,39 +2,43 @@
 
 namespace App\Support;
 
+use App\Models\Store;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
 
 class StoreAssignmentService
 {
+    private const OPERATING_SHOP_NAME = 'Apples Of Gold';
+
     public function resolveStoreId(?int $requestedStoreId, ?User $user, AccessService $access, string $field = 'store_id'): int
     {
-        $defaultStoreId = $user?->default_store_id ? (int) $user->default_store_id : null;
-        $requestedStoreId = $requestedStoreId ?: $defaultStoreId;
+        $operatingStoreId = $this->operatingStoreId();
+        $assignedStoreId = $user?->default_store_id ? (int) $user->default_store_id : $operatingStoreId;
+        $requestedStoreId = $requestedStoreId ?: $assignedStoreId;
 
-        if (! $requestedStoreId) {
+        if (! $requestedStoreId && ! $assignedStoreId) {
             throw ValidationException::withMessages([
-                $field => 'Assign a default store to this user before posting transactions from this account.',
+                $field => 'Create the Apples Of Gold shop record before posting transactions.',
             ]);
         }
 
-        if ($this->canChooseAnyStore($user, $access)) {
+        if (! $this->isSingleShopMode() && $this->canChooseAnyStore($user, $access)) {
             return (int) $requestedStoreId;
         }
 
-        if (! $defaultStoreId) {
+        if (! $assignedStoreId) {
             throw ValidationException::withMessages([
-                $field => 'This user does not have an assigned store yet.',
+                $field => 'This user is not linked to the Apples Of Gold shop yet.',
             ]);
         }
 
-        if ((int) $requestedStoreId !== $defaultStoreId) {
+        if ($requestedStoreId && (int) $requestedStoreId !== $assignedStoreId) {
             throw ValidationException::withMessages([
-                $field => 'You can only post transactions to your assigned store from this account.',
+                $field => 'Transactions can only be posted to Apples Of Gold from this account.',
             ]);
         }
 
-        return $defaultStoreId;
+        return $assignedStoreId;
     }
 
     public function canChooseAnyStore(?User $user, AccessService $access): bool
@@ -42,5 +46,21 @@ class StoreAssignmentService
         return $access->hasRole('admin')
             || $access->hasRole('manager')
             || $access->can('sales.override');
+    }
+
+    public function operatingStoreId(): ?int
+    {
+        return Store::query()
+            ->where('name', self::OPERATING_SHOP_NAME)
+            ->value('id')
+            ?: Store::query()
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->value('id');
+    }
+
+    private function isSingleShopMode(): bool
+    {
+        return Store::query()->where('is_active', true)->count() <= 1;
     }
 }

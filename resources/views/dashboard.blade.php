@@ -233,7 +233,7 @@
     @endif
 
     <section class="cards">
-        <div class="card"><div class="label">Stores</div><div class="value">{{ number_format($stats['stores']) }}</div></div>
+        <div class="card"><div class="label">Shop</div><div class="value">{{ config('business.name', 'Apples Of Gold') }}</div></div>
         <div class="card"><div class="label">Customers</div><div class="value">{{ number_format($stats['customers']) }}</div></div>
         <div class="card"><div class="label">Suppliers</div><div class="value">{{ number_format($stats['suppliers']) }}</div></div>
         <div class="card"><div class="label">Products</div><div class="value">{{ number_format($stats['products']) }}</div></div>

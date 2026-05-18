@@ -631,12 +631,337 @@
             font-size: .83rem;
             line-height: 1.4;
         }
+        /* Counter-style POS overrides: keep the cashier workflow on one normal screen. */
+        .sale-hero.panel {
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            border-radius: 14px;
+        }
+        .sale-hero-top {
+            align-items: center;
+        }
+        .sale-hero-top h2 {
+            font-size: 1.08rem;
+        }
+        .sale-hero-note {
+            display: none;
+        }
+        .sale-hero-actions {
+            display: none;
+        }
+        .sale-badge {
+            min-height: 30px;
+            padding: 0 9px;
+            font-size: .74rem;
+        }
+        .sale-workspace {
+            grid-template-columns: minmax(270px, .78fr) minmax(430px, 1.36fr) minmax(292px, .82fr);
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 8px;
+            height: calc(100vh - 150px);
+            min-height: 560px;
+            overflow: hidden;
+            align-items: stretch;
+        }
+        .sale-lane {
+            min-height: 0;
+        }
+        .sale-bill-shell {
+            display: contents;
+        }
+        .sale-workspace .panel {
+            padding: 8px;
+            border-radius: 13px;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .sale-search-panel {
+            gap: 7px;
+        }
+        .sale-section-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .sale-section-head h3,
+        .sale-panel-title {
+            font-size: .92rem;
+            line-height: 1.05;
+        }
+        .sale-section-head p,
+        .sale-panel-subtitle,
+        .sale-meta-note,
+        .keypad-note,
+        .quick-customer-status,
+        .scan-status {
+            font-size: .68rem;
+            line-height: 1.18;
+        }
+        .sale-input,
+        .customer-search-input,
+        .sale-select {
+            min-height: 34px;
+            padding: 7px 9px;
+            border-radius: 10px;
+            font-size: .8rem;
+        }
+        .sale-search-row {
+            grid-template-columns: 1fr;
+            gap: 5px;
+        }
+        .sale-kpis {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 5px;
+        }
+        .sale-kpi {
+            padding: 6px 7px;
+            border-radius: 11px;
+        }
+        .sale-kpi-label {
+            font-size: .58rem;
+        }
+        .sale-kpi-value {
+            margin-top: 3px;
+            font-size: .78rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sale-product-grid {
+            grid-template-columns: 1fr;
+            gap: 5px;
+            max-height: calc(100vh - 330px);
+            min-height: 0;
+        }
+        .sale-product-card {
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 7px;
+            min-height: 0;
+            padding: 6px 7px;
+            border-radius: 10px;
+        }
+        .sale-product-card strong {
+            font-size: .75rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sale-product-meta {
+            margin-top: 2px;
+            font-size: .61rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sale-product-footer {
+            margin-top: 0;
+            align-items: center;
+        }
+        .sale-product-price {
+            min-height: 26px;
+            padding: 0 7px;
+            font-size: .68rem;
+        }
+        .sale-add-button {
+            min-height: 28px;
+            padding: 0 9px;
+            border-radius: 9px;
+            font-size: .7rem;
+        }
+        .sale-bill-top {
+            grid-column: 2;
+            grid-row: 1;
+        }
+        .sale-cart-wrap {
+            grid-column: 2;
+            grid-row: 2;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+        }
+        .sale-checkout-panel {
+            grid-column: 3;
+            grid-row: 1 / span 2;
+            display: grid;
+            grid-template-rows: auto auto auto auto auto;
+            align-content: start;
+            overflow-y: auto !important;
+        }
+        .sale-keypad {
+            grid-column: 1;
+            grid-row: 2;
+            align-self: end;
+            gap: 6px;
+        }
+        .sale-mini-grid {
+            grid-template-columns: 136px minmax(0, 1fr);
+            gap: 6px;
+        }
+        .sale-field {
+            gap: 3px;
+        }
+        .sale-field span,
+        .bill-label {
+            font-size: .58rem;
+            letter-spacing: .05em;
+        }
+        .selected-customer-chip {
+            min-height: 28px;
+            padding: 0 8px;
+            font-size: .7rem;
+        }
+        .customer-dropdown {
+            padding: 7px;
+        }
+        .customer-results {
+            max-height: 156px;
+            gap: 5px;
+        }
+        .customer-result {
+            padding: 6px 7px;
+            border-radius: 10px;
+        }
+        .customer-result strong {
+            font-size: .75rem;
+        }
+        .bill-list {
+            gap: 4px;
+            max-height: none;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        .bill-empty {
+            padding: 12px 10px;
+            border-radius: 12px;
+            font-size: .76rem;
+        }
+        .bill-row {
+            grid-template-columns: minmax(0, 1fr) 142px 88px 98px 30px;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 6px;
+            border-radius: 10px;
+        }
+        .bill-row-top,
+        .bill-row-grid {
+            display: contents;
+        }
+        .bill-row-title {
+            grid-column: 1;
+        }
+        .bill-row-title strong {
+            font-size: .76rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .bill-row-sub {
+            font-size: .58rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .bill-row-grid > div:nth-child(1) {
+            grid-column: 2;
+        }
+        .bill-row-grid > div:nth-child(2) {
+            grid-column: 3;
+        }
+        .bill-row-grid > div:nth-child(3) {
+            grid-column: 4;
+        }
+        .bill-remove {
+            grid-column: 5;
+            grid-row: 1;
+            min-width: 28px;
+            height: 30px;
+            border-radius: 8px;
+        }
+        .qty-box {
+            grid-template-columns: 28px minmax(0, 1fr) 28px;
+            gap: 3px;
+        }
+        .qty-box button {
+            min-width: 28px;
+            height: 30px;
+            border-radius: 8px;
+        }
+        .qty-box input,
+        .bill-row-grid input,
+        .sale-payment-grid input {
+            min-height: 30px;
+            padding: 5px 7px;
+            border-radius: 9px;
+            font-size: .76rem;
+        }
+        .bill-line-total {
+            min-height: 30px;
+            padding: 0 7px;
+            border-radius: 9px;
+            font-size: .72rem;
+        }
+        .sale-total-stack {
+            gap: 4px;
+        }
+        .sale-total-box {
+            padding: 6px 7px;
+            border-radius: 10px;
+        }
+        .sale-total-box span {
+            font-size: .6rem;
+        }
+        .sale-total-box strong {
+            font-size: .76rem;
+        }
+        .sale-total-box.grand strong {
+            font-size: 1.42rem;
+        }
+        .sale-payment-grid {
+            grid-template-columns: 1fr;
+            gap: 5px;
+        }
+        .sale-textarea {
+            min-height: 48px;
+            padding: 7px 9px;
+            border-radius: 10px;
+            font-size: .78rem;
+        }
+        .sale-actions-row {
+            gap: 6px;
+        }
+        .sale-actions-row .button-link,
+        .sale-actions-row button,
+        .sale-primary-button {
+            min-height: 38px;
+            border-radius: 11px;
+            font-size: .8rem;
+        }
+        .sale-keypad-grid {
+            gap: 5px;
+        }
+        .sale-key {
+            min-height: 34px;
+            border-radius: 9px;
+            font-size: .78rem;
+        }
         @media (max-width: 1180px) {
             .sale-workspace {
                 grid-template-columns: 1fr;
+                height: auto;
+                min-height: 0;
+                overflow: visible;
             }
             .sale-bill-shell {
+                display: grid;
                 position: static;
+            }
+            .sale-bill-top,
+            .sale-cart-wrap,
+            .sale-checkout-panel,
+            .sale-keypad {
+                grid-column: auto;
+                grid-row: auto;
             }
             .sale-product-grid {
                 max-height: none;
@@ -722,7 +1047,7 @@
             <div>
                 <h2>Sales Desk</h2>
                 <p class="sale-hero-note">
-                    Search or scan items, build the bill, capture payment, and post the sale from one cashier-focused screen.
+                    Scan, select products, receive payment, and print.
                 </p>
             </div>
             <div class="sale-badges">
@@ -755,7 +1080,7 @@
                 <div class="sale-section-head">
                     <div>
                         <h3>Find Products</h3>
-                        <p>Use the scanner box for barcode input or type part of the product name, code, or part number.</p>
+                        <p>Scan or type product name.</p>
                     </div>
                 </div>
 
@@ -767,10 +1092,10 @@
 
                 <div class="sale-search-row">
                     <div>
-                        <input type="text" id="scan-search" class="sale-input" placeholder="Scan barcode or code">
-                        <div id="scan-status" class="scan-status">Scan item and press Enter if needed.</div>
+                        <input type="text" id="scan-search" class="sale-input" placeholder="Scan barcode / code">
+                        <div id="scan-status" class="scan-status">Scan and press Enter.</div>
                     </div>
-                    <input type="text" id="product-search" class="sale-input" placeholder="Search product, barcode, code, or part number">
+                    <input type="text" id="product-search" class="sale-input" placeholder="Find product">
                 </div>
 
                 <div class="sale-kpis">
@@ -797,7 +1122,7 @@
                 <div class="sale-section-head">
                     <div>
                         <h3>Products</h3>
-                        <p>Tap once to add.</p>
+                        <p>Click Add.</p>
                     </div>
                 </div>
                 <div class="sale-results-meta">
@@ -814,7 +1139,7 @@
                 <div class="sale-section-head">
                     <div>
                         <h3>Sale Details</h3>
-                        <p>Choose date and customer.</p>
+                        <p>Date and customer.</p>
                     </div>
                     <div id="sale-kind-badge" class="sale-kind-pill">Cash Sale</div>
                 </div>
@@ -834,7 +1159,7 @@
                         <span>Customer</span>
                         <input type="hidden" name="customer_id" id="sale-customer" value="{{ old('customer_id', $prefillSale['customer_id']) }}">
                         <div class="customer-picker">
-                            <input type="text" id="customer-search" class="customer-search-input" placeholder="Search customer by name or place" autocomplete="off">
+                            <input type="text" id="customer-search" class="customer-search-input" placeholder="Customer name" autocomplete="off">
                             <div id="customer-dropdown" class="customer-dropdown" aria-hidden="true">
                                 <div id="customer-results" class="customer-results"></div>
                                 <div class="quick-actions">
@@ -866,11 +1191,11 @@
                 <div id="sale-items-hidden"></div>
             </section>
 
-            <section class="panel">
+            <section class="panel sale-checkout-panel">
                 <div class="sale-section-head">
                     <div>
                         <h3>Checkout</h3>
-                        <p>Paid, balance, change.</p>
+                        <p>Pay and save.</p>
                     </div>
                 </div>
 
@@ -917,7 +1242,7 @@
 
                 <div class="sale-payment-grid">
                     <label class="sale-field">
-                        <span>Payment Mode</span>
+                        <span>Payment</span>
                         <select name="payment_mode_id" class="sale-select">
                             <option value="">Choose mode</option>
                             @foreach ($paymentModes as $mode)
@@ -926,11 +1251,11 @@
                         </select>
                     </label>
                     <label class="sale-field">
-                        <span>Amount Received</span>
+                        <span>Paid</span>
                         <input type="number" step="0.01" min="0" name="amount_paid" id="amount-paid" value="{{ old('amount_paid', $prefillSale['amount_paid']) }}" data-keypad-input="decimal">
                     </label>
                     <label class="sale-field">
-                        <span>Discount Amount</span>
+                        <span>Discount</span>
                         <input type="number" step="0.01" min="0" name="discount_amount" id="discount-amount" value="{{ old('discount_amount', $prefillSale['discount_amount']) }}" data-keypad-input="decimal">
                     </label>
                     <label class="sale-field" id="credit-period-wrap">
@@ -950,35 +1275,35 @@
                 <div style="height: 8px;"></div>
 
                 <label class="sale-field" id="approval-pin-wrap" @if (! old('approval_pin')) hidden @endif>
-                    <span>Admin Approval PIN</span>
-                    <input type="password" name="approval_pin" id="approval-pin" class="sale-input" value="{{ old('approval_pin') }}" placeholder="Needed for large discount approvals">
+                    <span>Admin PIN</span>
+                    <input type="password" name="approval_pin" id="approval-pin" class="sale-input" value="{{ old('approval_pin') }}" placeholder="For approval">
                 </label>
 
                 <div style="height: 8px;"></div>
 
                 <label class="sale-field">
                     <span>Remarks</span>
-                    <textarea name="remarks" class="sale-textarea">{{ old('remarks', $prefillSale['remarks']) }}</textarea>
+                    <textarea name="remarks" class="sale-textarea" placeholder="Optional note">{{ old('remarks', $prefillSale['remarks']) }}</textarea>
                 </label>
 
                 <div style="height: 12px;"></div>
 
                 <div class="sale-actions-row">
-                    <button type="button" id="fill-total" class="button-link">Use Full Payment</button>
-                    <button type="submit" class="sale-primary-button">Post Sale</button>
+                    <button type="button" id="fill-total" class="button-link">Paid Full</button>
+                    <button type="submit" class="sale-primary-button">Checkout</button>
                 </div>
             </section>
 
             <section class="panel sale-keypad">
                 <div>
                     <h3 class="sale-panel-title">Cashier Keypad</h3>
-                    <p class="keypad-note">Tap a field, then enter values here.</p>
+                    <p class="keypad-note">Tap a number field first.</p>
                 </div>
                 <div class="sale-keypad-grid" id="sale-keypad">
                     <button type="button" class="sale-key" data-keypad="7">7</button>
                     <button type="button" class="sale-key" data-keypad="8">8</button>
                     <button type="button" class="sale-key" data-keypad="9">9</button>
-                    <button type="button" class="sale-key action" data-keypad-action="backspace">⌫</button>
+                    <button type="button" class="sale-key action" data-keypad-action="backspace">Back</button>
                     <button type="button" class="sale-key" data-keypad="4">4</button>
                     <button type="button" class="sale-key" data-keypad="5">5</button>
                     <button type="button" class="sale-key" data-keypad="6">6</button>
@@ -1007,7 +1332,7 @@
             </div>
             <div class="sale-mobile-actions">
                 <button type="button" id="mobile-fill-total" class="button-link">Full</button>
-                <button type="submit" class="sale-primary-button">Save Sale</button>
+                <button type="submit" class="sale-primary-button">Checkout</button>
             </div>
         </div>
     </form>
@@ -1017,7 +1342,7 @@
             <div class="sale-modal-head">
                 <div>
                     <h3 class="sale-panel-title">Add Customer</h3>
-                    <p class="sale-panel-subtitle">Create a customer quickly and continue selling without leaving the sales desk.</p>
+                    <p class="sale-panel-subtitle">Save and continue the sale.</p>
                 </div>
                 <button type="button" id="quick-customer-close" class="modal-close" aria-label="Close">×</button>
             </div>
@@ -1036,7 +1361,7 @@
                 </label>
             </div>
             <div class="sale-actions-row" style="margin-top: 16px;">
-                <button type="button" id="quick-customer-save" class="sale-primary-button">Save Customer</button>
+                <button type="button" id="quick-customer-save" class="sale-primary-button">Save</button>
                 <button type="button" id="quick-customer-cancel" class="button-link">Cancel</button>
             </div>
         </div>
@@ -1183,14 +1508,14 @@
                 if (!customer) {
                     return {
                         value: '',
-                        meta: 'Choose a customer first. Use the walk-in record only when you do not need a named account.',
+                        meta: 'Choose customer or use walk-in.',
                     };
                 }
 
                 return {
                     value: customer.name,
                     meta: customer.is_walk_in
-                        ? 'Walk-in customer. Full payment only.'
+                        ? 'Walk-in: full payment only.'
                         : ([customer.location, customer.credit > 0 ? `${money(customer.credit)} credit` : null].filter(Boolean).join(' / ') || 'Saved account'),
                 };
             }
@@ -1243,8 +1568,8 @@
 
                 if (productResultsNote) {
                     productResultsNote.textContent = needle.length < 1
-                        ? 'Quick pick items. Start typing to search all products.'
-                        : `Search checks the full product list for "${searchInput.value.trim()}".`;
+                        ? 'Quick pick. Type to search all products.'
+                        : `Searching all products for "${searchInput.value.trim()}".`;
                 }
 
                 if (productResultsCount) {
@@ -1521,7 +1846,7 @@
                 const match = findScanMatch(scanInput.value);
 
                 if (!match) {
-                    setScanStatus('No exact barcode or code match was found. Use the search box to browse the item.', 'error');
+                    setScanStatus('No exact match. Use Find product.', 'error');
                     searchInput.value = scanInput.value;
                     renderSearchResults();
                     searchInput.focus();
@@ -1536,7 +1861,7 @@
 
             scanInput?.addEventListener('input', () => {
                 if (String(scanInput.value || '').trim() === '') {
-                    setScanStatus('Scan item and press Enter if needed.');
+                    setScanStatus('Scan and press Enter.');
                 }
             });
 

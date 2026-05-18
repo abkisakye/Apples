@@ -73,7 +73,7 @@
                 <h3>3. Adjustment Details</h3>
                 <div class="compact-grid" style="margin-top:14px;">
                     <label class="form-field"><span>Adjustment Date</span><input type="date" name="adjustment_date" value="{{ old('adjustment_date', now()->toDateString()) }}" required></label>
-                    <div class="form-field"><span>Store</span><div class="store-pill">{{ $currentStore?->name ?? 'No store assigned' }}</div></div>
+                    <div class="form-field"><span>Shop</span><div class="store-pill">{{ $currentStore?->name ?? config('business.name', 'Apples Of Gold') }}</div></div>
                     <label class="form-field" style="grid-column:1 / -1;">
                         <span>Adjustment Type</span>
                         <select name="adjustment_type" id="adjustment-type" required>

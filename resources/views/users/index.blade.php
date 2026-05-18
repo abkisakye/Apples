@@ -12,7 +12,7 @@
     <div class="page-head">
         <div>
             <h2>Users</h2>
-            <p>Manage staff accounts, roles, and default store assignments.</p>
+            <p>Manage staff accounts, roles, and the Apples Of Gold shop assignment.</p>
         </div>
         <div class="actions">
             <a href="{{ route('roles.matrix') }}" class="button-link">Permissions Matrix</a>
@@ -37,7 +37,7 @@
             </select>
             <button type="submit">Filter</button>
         </form>
-        <p class="list-note">Use this page to find staff quickly, confirm which store and role they work with, and jump straight into role assignment or account edits.</p>
+        <p class="list-note">Use this page to find staff quickly, confirm their roles, and jump straight into role assignment or account edits.</p>
         <div class="table-wrap">
         <table>
             <thead>
@@ -48,7 +48,7 @@
                     <th>Source</th>
                     <th>Access Department</th>
                     <th>Role</th>
-                    <th>Default Store</th>
+                    <th>Shop</th>
                     <th>Status</th>
                     <th>Action</th>
                 </tr>
@@ -69,7 +69,7 @@
                         </td>
                         <td>{{ $user->legacyDepartmentName() ?? '-' }}</td>
                         <td><span class="badge">{{ $user->displayRoleName() }}</span></td>
-                        <td>{{ $user->defaultStore?->name ?? '-' }}</td>
+                        <td>{{ $user->defaultStore?->name ?? config('business.name', 'Apples Of Gold') }}</td>
                         <td><span class="badge {{ $user->is_active ? 'success' : 'credit' }}">{{ $user->is_active ? 'Active' : 'Inactive' }}</span></td>
                         <td>
                             <div class="action-stack">

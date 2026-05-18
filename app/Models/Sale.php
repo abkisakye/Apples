@@ -42,6 +42,11 @@ class Sale extends Model
         return $this->belongsTo(PaymentMode::class);
     }
 
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(SaleItem::class);

@@ -14,7 +14,7 @@
 
     <div class="actions" style="margin-bottom: 16px;">
         @foreach ([
-            'stores' => 'Stores',
+            'stores' => 'Shop',
             'categories' => 'Categories',
             'payment-modes' => 'Payment Modes',
             'capital-sources' => 'Capital Sources',
