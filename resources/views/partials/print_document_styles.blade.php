@@ -33,6 +33,8 @@ body {
     border-collapse: collapse;
     border-bottom: 3px solid #066838;
     margin-bottom: 16px;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 .header td {
     vertical-align: top;
@@ -107,6 +109,8 @@ body {
     border-collapse: separate;
     border-spacing: 10px 0;
     margin: 0 -10px 16px;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 .overview td {
     width: 33.33%;
@@ -148,6 +152,8 @@ body {
     border-collapse: separate;
     border-spacing: 12px 0;
     margin: 0 -12px 16px;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 .content td {
     width: 50%;
@@ -166,6 +172,8 @@ body {
     background: #ffffff;
     padding: 14px 16px;
     min-height: 118px;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 .profile-name {
     font-size: 18px;
@@ -176,6 +184,13 @@ body {
 .summary-table {
     width: 100%;
     border-collapse: collapse;
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+.summary-table tr,
+.summary-table td {
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 .summary-table td {
     border: 0;
@@ -200,6 +215,14 @@ body {
     width: 100%;
     border-collapse: collapse;
     margin-top: 6px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+.ledger tr,
+.ledger th,
+.ledger td {
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 .ledger th,
 .ledger td {
@@ -231,12 +254,16 @@ body {
     color: #555555;
     font-size: 12px;
     line-height: 1.45;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 .signature-row {
     width: 100%;
     border-collapse: separate;
     border-spacing: 16px 0;
     margin: 22px -16px 0;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 .signature-row td {
     width: 50%;

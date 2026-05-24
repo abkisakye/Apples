@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'Sales'])
+@extends('layouts.app', ['title' => $pageTitle ?? 'Sales'])
 
 @section('content')
     @php($currency = config('business.currency', 'UGX'))
@@ -53,8 +53,8 @@
     </style>
     <div class="page-head">
         <div>
-            <h2>Sales</h2>
-            <p>Review recent sales, spot unpaid balances quickly, and open the full sale record when you need to print or follow up.</p>
+            <h2>{{ $pageTitle ?? 'Sales' }}</h2>
+            <p>Review supermarket sales only. Open a sale to reprint the receipt, check payment, or follow up a customer balance.</p>
         </div>
         <div class="actions">
             @if ($access->can('customer_payments.manage'))
@@ -67,7 +67,7 @@
     </div>
 
     <section class="cards desk-cards">
-        <div class="card"><div class="label">On This Page</div><div class="value">{{ number_format($salesCollection->count()) }}</div></div>
+        <div class="card"><div class="label">{{ $type === 'cash' ? 'Cash Sales' : ($type === 'credit' ? 'Credit Sales' : 'Sales On Page') }}</div><div class="value">{{ number_format($salesCollection->count()) }}</div></div>
         <div class="card"><div class="label">Cash Value</div><div class="value money">{{ $currency }} {{ number_format((float) $cashSales->sum('total_amount'), 0) }}</div></div>
         <div class="card"><div class="label">Credit Value</div><div class="value money">{{ $currency }} {{ number_format((float) $creditSales->sum('total_amount'), 0) }}</div></div>
         <div class="card"><div class="label">Outstanding</div><div class="value money">{{ $currency }} {{ number_format((float) $salesCollection->sum('balance_due'), 0) }}</div></div>
@@ -84,7 +84,7 @@
     </form>
 
     <div class="panel desk-panel">
-        <p class="list-note">Tip: use this page as a cashier queue. Open a sale to reprint the receipt, or jump straight to payment when a customer is settling a credit balance.</p>
+        <p class="list-note">This list shows sales receipts and invoices only. Stock purchases are managed from the Purchases page.</p>
         <div class="table-wrap table-mobile-friendly">
         <table>
             <thead>

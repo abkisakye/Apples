@@ -101,6 +101,48 @@ class WorkflowTest extends TestCase
         ]);
     }
 
+    public function test_cash_sales_index_shows_sales_not_purchase_documents(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Counter Customer', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Stock Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        $sale = Sale::create([
+            'sale_no' => 'RCPT-TEST-CASH',
+            'sale_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 1000,
+            'total_amount' => 1000,
+            'amount_paid' => 1000,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+
+        Purchase::create([
+            'purchase_no' => 'STOCK-PURCHASE-TEST',
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 2500,
+            'total_amount' => 2500,
+            'amount_paid' => 2500,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+
+        $this->get('/sales?type=cash')
+            ->assertOk()
+            ->assertSee('Cash Sales')
+            ->assertSee($sale->sale_no)
+            ->assertDontSee('STOCK-PURCHASE-TEST');
+    }
+
     public function test_customer_payment_reduces_credit_sale_balance(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
@@ -358,7 +400,8 @@ class WorkflowTest extends TestCase
         ]);
 
         $this->get('/sales/'.$sale->id)->assertOk()->assertSee($sale->sale_no);
-        $this->get('/sales/'.$sale->id.'/print')->assertOk()->assertSee($sale->sale_no);
+        $this->get('/sales/'.$sale->id.'/print')->assertOk()->assertSee($sale->sale_no)->assertSee('Cash Sale Receipt');
+        $this->get('/sales/'.$sale->id.'/print?theme=full')->assertOk()->assertSee($sale->sale_no)->assertSee('Sales Receipt');
         $this->get('/sales/'.$sale->id.'/print?theme=thermal')->assertOk()->assertSee($sale->sale_no)->assertSee('Cash Sale Receipt');
     }
 
@@ -1802,18 +1845,18 @@ class WorkflowTest extends TestCase
             ->assertSee('Draft CNT-20260325-0001')
             ->assertSee('already counted')
             ->assertSee('Pending only')
-            ->assertSee('Beans')
-            ->assertDontSee('Rice');
+            ->assertSee('<strong>Beans</strong>', false)
+            ->assertDontSee('<strong>Rice</strong>', false);
 
         $this->get('/stock/counts/create?draft_id=1&show_status=pending')
             ->assertOk()
-            ->assertSee('Beans')
-            ->assertDontSee('Rice');
+            ->assertSee('<strong>Beans</strong>', false)
+            ->assertDontSee('<strong>Rice</strong>', false);
 
         $this->get('/stock/counts/create?draft_id=1&show_status=counted')
             ->assertOk()
-            ->assertSee('Rice')
-            ->assertDontSee('Beans');
+            ->assertSee('<strong>Rice</strong>', false)
+            ->assertDontSee('<strong>Beans</strong>', false);
 
         $this->get('/stock/counts/create?draft_id=1&show_status=all&per_page=1&page=1')
             ->assertOk()
@@ -2177,11 +2220,11 @@ class WorkflowTest extends TestCase
 
         $this->get('/?from=2026-03-25&to=2026-03-25')
             ->assertOk()
-            ->assertSee('Window Sales')
+            ->assertSee('Sales')
             ->assertSee('Gross Profit')
-            ->assertSee('Trading Window Trend')
-            ->assertSee('Top Selling In Window')
-            ->assertSee('Payment Breakdown In Window')
+            ->assertSee('Trading Trend')
+            ->assertSee('Top Selling Products')
+            ->assertSee('Payment Breakdown')
             ->assertSee('Sugar')
             ->assertSee('5,600');
     }
@@ -2696,7 +2739,7 @@ class WorkflowTest extends TestCase
 
         $this->get('/sales/'.$sale->id.'/print')
             ->assertOk()
-            ->assertSee('Client Demo Stores')
+            ->assertSee('CLIENT DEMO STORES')
             ->assertSee('Receipt footer text');
     }
 
@@ -3018,7 +3061,8 @@ class WorkflowTest extends TestCase
         ]);
 
         $this->get('/sales/'.$sale->id)->assertOk()->assertSee($sale->sale_no)->assertSee('Daily Customer');
-        $this->get('/sales/'.$sale->id.'/print')->assertOk()->assertSee($sale->sale_no)->assertSee('Sales Invoice');
+        $this->get('/sales/'.$sale->id.'/print')->assertOk()->assertSee($sale->sale_no)->assertSee('Credit Sale Invoice');
+        $this->get('/sales/'.$sale->id.'/print?theme=full')->assertOk()->assertSee($sale->sale_no)->assertSee('Sales Invoice');
         $this->get('/purchases/'.$purchase->id)->assertOk()->assertSee($purchase->purchase_no)->assertSee('Daily Supplier');
         $this->get('/purchases/'.$purchase->id.'/print')->assertOk()->assertSee($purchase->purchase_no)->assertSee('Purchase Invoice');
         $this->get('/customer-payments/'.$customerPayment->id.'/print')->assertOk()->assertSee($customerPayment->payment_no)->assertSee('Customer Payment Receipt');

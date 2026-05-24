@@ -27,8 +27,8 @@
                     <button type="submit" class="button-link" style="border-color:#efcfac; background:#f8ead7; color:#8b4513;">Void Sale</button>
                 </form>
             @endif
-            <a href="{{ route('sales.print', $sale) }}" target="_blank" class="button-link">Full Print</a>
-            <a href="{{ route('sales.print', ['sale' => $sale, 'theme' => 'thermal']) }}" target="_blank" class="button-link primary">Print Thermal Receipt</a>
+            <a href="{{ route('sales.print', ['sale' => $sale, 'theme' => 'full']) }}" target="_blank" class="button-link">Full A4 Document</a>
+            <a href="{{ route('sales.print', $sale) }}" target="_blank" class="button-link primary">Print Receipt</a>
             <a href="{{ route('sales.index') }}" class="button-link">Back to Sales</a>
         </div>
     </div>
@@ -50,8 +50,8 @@
             @if ($sale->balance_due > 0 && $access->can('customer_payments.manage'))
                 <a href="{{ route('customer-payments.create', ['customer_id' => $sale->customer_id]) }}" class="button-link primary">Post Payment For This Sale</a>
             @endif
-            <a href="{{ route('sales.print', ['sale' => $sale, 'theme' => 'thermal']) }}" target="_blank" class="button-link primary">Print Cashier Receipt</a>
-            <a href="{{ route('sales.print', $sale) }}" target="_blank" class="button-link">Open Full Receipt / Invoice</a>
+            <a href="{{ route('sales.print', $sale) }}" target="_blank" class="button-link primary">Print Cashier Receipt</a>
+            <a href="{{ route('sales.print', ['sale' => $sale, 'theme' => 'full']) }}" target="_blank" class="button-link">Open Full A4 Document</a>
             @if ($access->can('sales.manage'))
                 <a href="{{ route('sales.create') }}" class="button-link">Start Another Sale</a>
             @endif

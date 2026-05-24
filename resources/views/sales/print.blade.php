@@ -1,3 +1,8 @@
+@php
+    $requestedTheme = request()->string('theme')->toString();
+    $thermal = $requestedTheme !== 'full';
+    $isFullTheme = ! $thermal;
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,12 +10,296 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $sale->sale_type === 'cash' ? 'Receipt' : 'Invoice' }} {{ $sale->sale_no }}</title>
     <style>
-        @include('partials.print_document_styles', ['pageWidth' => '860px'])
+        @include('partials.print_document_styles', ['pageWidth' => $isFullTheme ? '700px' : '860px'])
+        @if ($isFullTheme)
+            @page {
+                size: A4;
+                margin: 10mm;
+            }
+            html,
+            body {
+                width: 100%;
+            }
+            body.full-a4-body {
+                background: #ffffff;
+                font-size: 11px;
+                line-height: 1.28;
+            }
+            .full-a4-body .toolbar {
+                max-width: 700px;
+                padding: 8px 0 6px;
+            }
+            .full-a4-body .page.full-document {
+                width: 100%;
+                max-width: 700px;
+                padding: 12px 14px 14px;
+                border: 1px solid #e3dfd1;
+                box-shadow: none;
+                margin: 0 auto;
+            }
+            .full-a4-body .header {
+                display: table;
+                table-layout: fixed;
+                margin-bottom: 10px;
+                border-bottom-width: 2px;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .full-a4-body .header td {
+                padding-bottom: 8px;
+            }
+            .full-a4-body .brand-icon-wrap {
+                width: 44px;
+                padding-right: 8px;
+            }
+            .full-a4-body .brand-icon {
+                width: 38px;
+                height: 38px;
+            }
+            .full-a4-body .brand-name {
+                font-size: 20px;
+                line-height: 1.05;
+            }
+            .full-a4-body .brand-tagline,
+            .full-a4-body .brand-meta,
+            .full-a4-body .doc-meta {
+                font-size: 10px;
+                line-height: 1.35;
+            }
+            .full-a4-body .brand-meta {
+                margin-top: 5px;
+            }
+            .full-a4-body .doc-block {
+                width: 210px;
+            }
+            .full-a4-body .doc-label {
+                font-size: 9px;
+                margin-bottom: 3px;
+            }
+            .full-a4-body .doc-name {
+                font-size: 18px;
+                line-height: 1.1;
+                margin-bottom: 4px;
+            }
+            .full-a4-body .content {
+                display: table;
+                border-collapse: separate;
+                border-spacing: 8px 0;
+                table-layout: fixed;
+                margin: 0 -8px 9px;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .full-a4-body .header tbody,
+            .full-a4-body .content tbody,
+            .full-a4-body .ledger tbody {
+                display: table-row-group;
+            }
+            .full-a4-body .header tr,
+            .full-a4-body .content tr,
+            .full-a4-body .ledger tr {
+                display: table-row;
+            }
+            .full-a4-body .header td,
+            .full-a4-body .content td,
+            .full-a4-body .ledger td,
+            .full-a4-body .ledger th {
+                display: table-cell;
+            }
+            .full-a4-body .content td {
+                width: 50%;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .full-a4-body .panel {
+                min-height: 0;
+                padding: 9px 10px;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .full-a4-body .panel-title {
+                font-size: 9px;
+                margin-bottom: 4px;
+            }
+            .full-a4-body .profile-name {
+                font-size: 14px;
+                margin-bottom: 4px;
+            }
+            .full-a4-body .profile-line,
+            .full-a4-body .detail-copy {
+                font-size: 10.5px;
+                line-height: 1.32;
+            }
+            .full-a4-body .summary-table {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .full-a4-body .summary-table tr {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .full-a4-body .summary-table td {
+                padding: 4px 0;
+                font-size: 10.5px;
+            }
+            .full-a4-body .ledger {
+                display: table;
+                table-layout: fixed;
+                margin: 4px 0 9px;
+                page-break-inside: auto;
+                break-inside: auto;
+            }
+            .full-a4-body .ledger tr {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .full-a4-body .ledger th,
+            .full-a4-body .ledger td {
+                padding: 5px 6px;
+                font-size: 10.5px;
+            }
+            .full-a4-body .ledger th {
+                font-size: 8.5px;
+                letter-spacing: .05em;
+            }
+            .full-a4-body .totals-block,
+            .full-a4-body .footer-note,
+            .full-a4-body .receipt-closing {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .full-a4-body .receipt-closing {
+                page-break-before: auto;
+                break-before: auto;
+            }
+            .full-a4-body .footer-note {
+                margin-top: 8px;
+                padding-top: 7px;
+                font-size: 10.5px;
+                line-height: 1.3;
+            }
+            @media print {
+                @page {
+                    size: A4;
+                    margin: 10mm;
+                }
+                html,
+                body.full-a4-body {
+                    width: auto;
+                    margin: 0;
+                    padding: 0;
+                    background: #ffffff;
+                }
+                .full-a4-body .toolbar {
+                    display: none;
+                }
+                .full-a4-body .page.full-document {
+                    width: 188mm;
+                    max-width: 188mm;
+                    margin: 0 auto;
+                    padding: 4mm 5mm;
+                    border: 1px solid #e3dfd1;
+                    box-shadow: none;
+                }
+                .full-a4-body .header {
+                    margin-bottom: 5mm;
+                    border-bottom-width: 1.5pt;
+                }
+                .full-a4-body .header td {
+                    padding-bottom: 3mm;
+                }
+                .full-a4-body .brand-icon-wrap {
+                    width: 13mm;
+                    padding-right: 2mm;
+                }
+                .full-a4-body .brand-icon {
+                    width: 10mm;
+                    height: 10mm;
+                }
+                .full-a4-body .brand-name {
+                    font-size: 16pt;
+                }
+                .full-a4-body .brand-tagline,
+                .full-a4-body .brand-meta,
+                .full-a4-body .doc-meta,
+                .full-a4-body .profile-line,
+                .full-a4-body .detail-copy,
+                .full-a4-body .summary-table td,
+                .full-a4-body .footer-note {
+                    font-size: 8.2pt;
+                    line-height: 1.25;
+                }
+                .full-a4-body .doc-block {
+                    width: 58mm;
+                }
+                .full-a4-body .doc-label,
+                .full-a4-body .panel-title {
+                    font-size: 7.2pt;
+                }
+                .full-a4-body .doc-name {
+                    font-size: 15pt;
+                    margin-bottom: 2mm;
+                }
+                .full-a4-body .content {
+                    display: table;
+                    border-spacing: 3mm 0;
+                    margin: 0 -3mm 3mm;
+                }
+                .full-a4-body .header tbody,
+                .full-a4-body .content tbody,
+                .full-a4-body .ledger tbody {
+                    display: table-row-group;
+                }
+                .full-a4-body .header tr,
+                .full-a4-body .content tr,
+                .full-a4-body .ledger tr {
+                    display: table-row;
+                }
+                .full-a4-body .header td,
+                .full-a4-body .content td,
+                .full-a4-body .ledger td,
+                .full-a4-body .ledger th {
+                    display: table-cell;
+                }
+                .full-a4-body .content td {
+                    width: 50%;
+                    margin-bottom: 0;
+                }
+                .full-a4-body .panel {
+                    padding: 3mm;
+                    min-height: 0;
+                }
+                .full-a4-body .profile-name {
+                    font-size: 11pt;
+                    margin-bottom: 1.4mm;
+                }
+                .full-a4-body .summary-table td {
+                    padding: 1.35mm 0;
+                }
+                .full-a4-body .ledger {
+                    display: table;
+                    margin: 2mm 0 3mm;
+                    page-break-inside: auto;
+                    break-inside: auto;
+                }
+                .full-a4-body .ledger th,
+                .full-a4-body .ledger td {
+                    padding: 1.55mm 1.8mm;
+                    font-size: 8.2pt;
+                }
+                .full-a4-body .ledger th {
+                    font-size: 7pt;
+                }
+                .full-a4-body .footer-note {
+                    margin-top: 3mm;
+                    padding-top: 2mm;
+                }
+            }
+        @endif
     </style>
 </head>
-<body>
+<body class="{{ $isFullTheme ? 'full-a4-body' : '' }}">
     @php($currency = config('business.currency', 'UGX'))
-    @php($thermal = request()->string('theme')->toString() === 'thermal')
     @php($documentTitle = $sale->sale_type === 'cash' ? 'Sales Receipt' : 'Sales Invoice')
     @php($paidAmount = (float) ($sale->cash_tendered ?: $sale->amount_paid))
     @php($customerName = $sale->customer?->name ?? 'Walk-in customer')
@@ -199,7 +488,7 @@
 
     <div class="toolbar"><button onclick="window.print()">Print</button></div>
 
-    <div class="page">
+    <div class="page full-document">
         @include('partials.print_document_header', [
             'documentLabel' => $documentTitle,
             'documentName' => $sale->sale_no,
@@ -248,6 +537,13 @@
         </table>
 
         <table class="ledger">
+            <colgroup>
+                <col style="width: 34%;">
+                <col style="width: 16%;">
+                <col style="width: 10%;">
+                <col style="width: 20%;">
+                <col style="width: 20%;">
+            </colgroup>
             <thead>
                 <tr>
                     <th>Item</th>
@@ -270,7 +566,7 @@
             </tbody>
         </table>
 
-        <table class="content">
+        <table class="content receipt-closing">
             <tr>
                 <td>
                     <div class="panel">
@@ -286,7 +582,7 @@
                     </div>
                 </td>
                 <td>
-                    <div class="panel">
+                    <div class="panel totals-block">
                         <span class="panel-title">Totals</span>
                         <table class="summary-table">
                             <tr><td>Subtotal</td><td>{{ $currency }} {{ number_format((float) $sale->subtotal, 0) }}</td></tr>

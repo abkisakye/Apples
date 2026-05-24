@@ -44,16 +44,16 @@
                 <option value="week" @selected($period === 'week')>This week</option>
                 <option value="month" @selected($period === 'month')>This month</option>
             </select>
-            <button type="submit">Apply Window</button>
+            <button type="submit">Apply</button>
             <a href="{{ route('dashboard') }}" class="button-link">Reset</a>
         </form>
-        <p class="list-note" style="margin-top: 12px;">This date window drives the trading summary below so management can review today, this week, this month, or a custom range without leaving the dashboard.</p>
+        <p class="list-note" style="margin-top: 12px;">The selected dates drive the trading summary below so management can review today, this week, this month, or a custom range without leaving the dashboard.</p>
     </section>
 
     <section class="cards" style="margin-bottom: 16px;">
-        <div class="card"><div class="label">Window Sales</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['sales_total'], 0) }}</div></div>
-        <div class="card"><div class="label">Window Purchases</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['purchase_total'], 0) }}</div></div>
-        <div class="card"><div class="label">Window Expenses</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['expense_total'], 0) }}</div></div>
+        <div class="card"><div class="label">Sales</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['sales_total'], 0) }}</div></div>
+        <div class="card"><div class="label">Purchases</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['purchase_total'], 0) }}</div></div>
+        <div class="card"><div class="label">Expenses</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['expense_total'], 0) }}</div></div>
         <div class="card"><div class="label">Collections</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['collection_total'], 0) }}</div></div>
         <div class="card"><div class="label">Gross Profit</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['gross_profit'], 0) }}</div></div>
         <div class="card"><div class="label">Net Profit</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['net_profit'], 0) }}</div></div>
@@ -62,8 +62,8 @@
 
     <section class="grid-two" style="margin-bottom: 16px;">
         <div class="panel">
-            <h3>Trading Window Trend</h3>
-            <p class="list-note">Sales, purchases, and expenses inside the selected management window.</p>
+            <h3>Trading Trend</h3>
+            <p class="list-note">Sales, purchases, and expenses inside the selected period.</p>
             <div style="display:grid; gap:10px; margin-top: 14px;">
                 @foreach ($rangeTrend as $point)
                     <div style="display:grid; grid-template-columns: 62px minmax(0,1fr) 110px; gap:10px; align-items:center;">
@@ -90,7 +90,7 @@
         </div>
 
         <div class="panel">
-            <h3>Top Selling In Window</h3>
+            <h3>Top Selling Products</h3>
             <p class="list-note">The strongest-moving items in the selected management period.</p>
             <div class="table-wrap">
                 <table>
@@ -113,14 +113,14 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="3" class="muted">No posted sales were found inside this window.</td>
+                                <td colspan="3" class="muted">No posted sales were found in this period.</td>
                             </tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
             <div style="margin-top: 16px;">
-                <div class="muted" style="margin-bottom:6px;">Payment Breakdown In Window</div>
+                <div class="muted" style="margin-bottom:6px;">Payment Breakdown</div>
                 @forelse ($paymentBreakdown as $row)
                     <div style="display:grid; grid-template-columns: 110px minmax(0,1fr) 110px; gap:10px; align-items:center; margin-top:8px;">
                         <div class="muted">{{ $row->mode_name }}</div>
@@ -130,7 +130,7 @@
                         <div class="money">{{ number_format((float) $row->amount, 0) }}</div>
                     </div>
                 @empty
-                    <div class="muted">No payment activity in this window yet.</div>
+                    <div class="muted">No payment activity in this period yet.</div>
                 @endforelse
             </div>
         </div>

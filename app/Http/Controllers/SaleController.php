@@ -30,20 +30,29 @@ class SaleController extends Controller
     {
         $search = trim((string) $request->string('q'));
         $type = trim((string) $request->string('type'));
+        $type = in_array($type, ['cash', 'credit'], true) ? $type : '';
+        $pageTitle = match ($type) {
+            'cash' => 'Cash Sales',
+            'credit' => 'Credit Sales',
+            default => 'Sales',
+        };
 
         $sales = Sale::query()
             ->with(['customer:id,name', 'store:id,name'])
+            ->whereIn('sale_type', ['cash', 'credit'])
             ->when($search !== '', function ($query) use ($search) {
-                $query->where('sale_no', 'like', "%{$search}%")
-                    ->orWhereHas('customer', fn ($customer) => $customer->where('name', 'like', "%{$search}%"));
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery->where('sale_no', 'like', "%{$search}%")
+                        ->orWhereHas('customer', fn ($customer) => $customer->where('name', 'like', "%{$search}%"));
+                });
             })
-            ->when(in_array($type, ['cash', 'credit'], true), fn ($query) => $query->where('sale_type', $type))
+            ->when($type !== '', fn ($query) => $query->where('sale_type', $type))
             ->latest('sale_date')
             ->latest('id')
             ->paginate(20)
             ->withQueryString();
 
-        return view('sales.index', compact('sales', 'search', 'type'));
+        return view('sales.index', compact('sales', 'search', 'type', 'pageTitle'));
     }
 
     public function create(Request $request): View

@@ -660,11 +660,15 @@
             gap: 8px;
             height: calc(100vh - 150px);
             min-height: 560px;
-            overflow: hidden;
+            overflow: visible;
             align-items: stretch;
         }
         .sale-lane {
+            grid-column: 1;
+            grid-row: 1 / span 2;
+            grid-template-rows: auto minmax(0, 1fr) auto;
             min-height: 0;
+            overflow: hidden;
         }
         .sale-bill-shell {
             display: contents;
@@ -674,6 +678,32 @@
             border-radius: 13px;
             min-height: 0;
             overflow: hidden;
+        }
+        .sale-workspace .panel.sale-bill-top,
+        .sale-bill-top .customer-picker {
+            position: relative;
+            z-index: 300;
+            overflow: visible !important;
+        }
+        .sale-bill-top {
+            isolation: isolate;
+        }
+        .sale-cart-wrap {
+            position: relative;
+            z-index: 10;
+        }
+        .sale-checkout-panel,
+        .sale-lane {
+            position: relative;
+            z-index: 1;
+        }
+        .select2-container--open {
+            z-index: 12000 !important;
+        }
+        .select2-dropdown,
+        .customer-dropdown,
+        .customer-results {
+            z-index: 12001 !important;
         }
         .sale-search-panel {
             gap: 7px;
@@ -698,6 +728,12 @@
             font-size: .68rem;
             line-height: 1.18;
         }
+        .quick-customer-status {
+            min-height: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         .sale-input,
         .customer-search-input,
         .sale-select {
@@ -711,8 +747,7 @@
             gap: 5px;
         }
         .sale-kpis {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 5px;
+            display: none;
         }
         .sale-kpi {
             padding: 6px 7px;
@@ -733,6 +768,14 @@
             gap: 5px;
             max-height: calc(100vh - 330px);
             min-height: 0;
+        }
+        .sale-products-panel {
+            display: grid;
+            grid-template-rows: auto auto minmax(0, 1fr);
+        }
+        .sale-products-panel .sale-product-grid {
+            max-height: none;
+            height: 100%;
         }
         .sale-product-card {
             grid-template-columns: minmax(0, 1fr) auto;
@@ -773,6 +816,8 @@
         .sale-bill-top {
             grid-column: 2;
             grid-row: 1;
+            display: grid;
+            gap: 6px;
         }
         .sale-cart-wrap {
             grid-column: 2;
@@ -790,13 +835,46 @@
         }
         .sale-keypad {
             grid-column: 1;
-            grid-row: 2;
+            grid-row: auto;
             align-self: end;
             gap: 6px;
+            max-height: 188px;
         }
         .sale-mini-grid {
-            grid-template-columns: 136px minmax(0, 1fr);
+            grid-template-columns: 122px minmax(0, 1fr);
             gap: 6px;
+            align-items: end;
+        }
+        .sale-compact-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            align-items: center;
+        }
+        .sale-compact-head h3 {
+            margin: 0;
+            font-size: .88rem;
+        }
+        .sale-inline-status {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .sale-walkin-warning {
+            display: none;
+            min-height: 24px;
+            align-items: center;
+            padding: 0 8px;
+            border-radius: 999px;
+            background: rgba(102, 40, 40, 0.08);
+            color: var(--apple);
+            font-size: .65rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .sale-walkin-warning.is-visible {
+            display: inline-flex;
         }
         .sale-field {
             gap: 3px;
@@ -807,12 +885,14 @@
             letter-spacing: .05em;
         }
         .selected-customer-chip {
+            display: none;
             min-height: 28px;
             padding: 0 8px;
             font-size: .7rem;
         }
         .customer-dropdown {
             padding: 7px;
+            z-index: 12001 !important;
         }
         .customer-results {
             max-height: 156px;
@@ -915,7 +995,7 @@
             font-size: .76rem;
         }
         .sale-total-box.grand strong {
-            font-size: 1.42rem;
+            font-size: 1.34rem;
         }
         .sale-payment-grid {
             grid-template-columns: 1fr;
@@ -941,9 +1021,13 @@
             gap: 5px;
         }
         .sale-key {
-            min-height: 34px;
+            min-height: 30px;
             border-radius: 9px;
             font-size: .78rem;
+        }
+        .sale-keypad .sale-panel-title,
+        .sale-keypad .keypad-note {
+            display: none;
         }
         @media (max-width: 1180px) {
             .sale-workspace {
@@ -966,6 +1050,11 @@
             .sale-product-grid {
                 max-height: none;
             }
+            .sale-lane {
+                grid-column: auto;
+                grid-row: auto;
+                overflow: visible;
+            }
         }
         @media (max-width: 760px) {
             .sale-search-row,
@@ -974,6 +1063,12 @@
             .bill-row-grid,
             .form-grid {
                 grid-template-columns: 1fr;
+            }
+            .sale-inline-status {
+                justify-content: start;
+            }
+            .sale-walkin-warning {
+                width: fit-content;
             }
             .sale-kpis {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -991,7 +1086,7 @@
                 bottom: 12px;
                 top: auto;
                 max-height: min(72vh, 520px);
-                z-index: 90;
+                z-index: 12001 !important;
             }
             .sale-keypad-grid {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1118,7 +1213,7 @@
                 </div>
             </section>
 
-            <section class="panel">
+            <section class="panel sale-products-panel">
                 <div class="sale-section-head">
                     <div>
                         <h3>Products</h3>
@@ -1132,16 +1227,40 @@
                 <div style="height: 8px;"></div>
                 <div id="product-search-results" class="sale-product-grid"></div>
             </section>
+
+            <section class="panel sale-keypad">
+                <div>
+                    <h3 class="sale-panel-title">Keypad</h3>
+                    <p class="keypad-note">Tap a number field first.</p>
+                </div>
+                <div class="sale-keypad-grid" id="sale-keypad">
+                    <button type="button" class="sale-key" data-keypad="7">7</button>
+                    <button type="button" class="sale-key" data-keypad="8">8</button>
+                    <button type="button" class="sale-key" data-keypad="9">9</button>
+                    <button type="button" class="sale-key action" data-keypad-action="backspace">Back</button>
+                    <button type="button" class="sale-key" data-keypad="4">4</button>
+                    <button type="button" class="sale-key" data-keypad="5">5</button>
+                    <button type="button" class="sale-key" data-keypad="6">6</button>
+                    <button type="button" class="sale-key action" data-keypad-action="clear">C</button>
+                    <button type="button" class="sale-key" data-keypad="1">1</button>
+                    <button type="button" class="sale-key" data-keypad="2">2</button>
+                    <button type="button" class="sale-key" data-keypad="3">3</button>
+                    <button type="button" class="sale-key action" data-keypad-action="full">Full</button>
+                    <button type="button" class="sale-key wide" data-keypad="0">0</button>
+                    <button type="button" class="sale-key" data-keypad=".">.</button>
+                    <button type="button" class="sale-key action" data-keypad-action="plus-one">+1</button>
+                </div>
+            </section>
         </div>
 
         <div class="sale-bill-shell">
             <section class="panel sale-bill-top">
-                <div class="sale-section-head">
-                    <div>
-                        <h3>Sale Details</h3>
-                        <p>Date and customer.</p>
+                <div class="sale-compact-head">
+                    <h3>Sale</h3>
+                    <div class="sale-inline-status">
+                        <span id="sale-kind-badge" class="sale-kind-pill">Cash Sale</span>
+                        <span id="walkin-warning" class="sale-walkin-warning">Walk-in must pay in full.</span>
                     </div>
-                    <div id="sale-kind-badge" class="sale-kind-pill">Cash Sale</div>
                 </div>
 
                 @if ($requiresShift && ! $activeShift)
@@ -1294,29 +1413,6 @@
                 </div>
             </section>
 
-            <section class="panel sale-keypad">
-                <div>
-                    <h3 class="sale-panel-title">Cashier Keypad</h3>
-                    <p class="keypad-note">Tap a number field first.</p>
-                </div>
-                <div class="sale-keypad-grid" id="sale-keypad">
-                    <button type="button" class="sale-key" data-keypad="7">7</button>
-                    <button type="button" class="sale-key" data-keypad="8">8</button>
-                    <button type="button" class="sale-key" data-keypad="9">9</button>
-                    <button type="button" class="sale-key action" data-keypad-action="backspace">Back</button>
-                    <button type="button" class="sale-key" data-keypad="4">4</button>
-                    <button type="button" class="sale-key" data-keypad="5">5</button>
-                    <button type="button" class="sale-key" data-keypad="6">6</button>
-                    <button type="button" class="sale-key action" data-keypad-action="clear">C</button>
-                    <button type="button" class="sale-key" data-keypad="1">1</button>
-                    <button type="button" class="sale-key" data-keypad="2">2</button>
-                    <button type="button" class="sale-key" data-keypad="3">3</button>
-                    <button type="button" class="sale-key action" data-keypad-action="full">Full</button>
-                    <button type="button" class="sale-key wide" data-keypad="0">0</button>
-                    <button type="button" class="sale-key" data-keypad=".">.</button>
-                    <button type="button" class="sale-key action" data-keypad-action="plus-one">+1</button>
-                </div>
-            </section>
         </div>
 
         <div class="sale-mobile-bar">
@@ -1410,6 +1506,7 @@
             const keypad = document.getElementById('sale-keypad');
 
             const saleKindBadge = document.getElementById('sale-kind-badge');
+            const walkinWarning = document.getElementById('walkin-warning');
             const customerSummary = document.getElementById('customer-summary');
             const heroCustomerSummary = document.getElementById('hero-customer-summary');
             const selectedCustomerChip = document.getElementById('selected-customer-chip');
@@ -1700,6 +1797,7 @@
                 quickCustomerStatus.textContent = activeCustomer?.is_walk_in && saleBalance() > 0
                     ? 'Walk-in must pay in full.'
                     : triggerCopy.meta;
+                walkinWarning?.classList.toggle('is-visible', Boolean(activeCustomer?.is_walk_in && saleBalance() > 0));
 
                 if (saleBalance() > 0) {
                     saleKindBadge.textContent = 'Credit Sale';
