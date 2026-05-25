@@ -3,6 +3,32 @@
 @section('content')
     @php($currency = config('business.currency', 'UGX'))
     @php($lowItems = $rows->filter(fn ($row) => (float) $row->reorder_level > 0 && (float) $row->balance_qty <= (float) $row->reorder_level))
+    <style>
+        .stock-unit-title {
+            display: grid;
+            gap: 4px;
+        }
+        .stock-product-link {
+            font-weight: 800;
+        }
+        .stock-unit-chip {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            padding: 4px 8px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: var(--panel-soft);
+            color: var(--ink);
+            font-size: .8rem;
+            font-weight: 800;
+        }
+        .stock-unit-chip span {
+            color: var(--muted);
+            font-weight: 700;
+            margin-right: 4px;
+        }
+    </style>
     <div class="page-head">
         <div>
             <h2>Stock Balance</h2>
@@ -64,11 +90,12 @@
                 @foreach ($rows as $row)
                     <tr>
                         <td>
-                            <div class="table-title">
-                                <a href="{{ route('stock.history', $row->id) }}">{{ $row->product_name }}</a>
+                            <div class="stock-unit-title">
+                                <a href="{{ route('stock.history', $row->id) }}" class="stock-product-link">{{ $row->product_name }}</a>
+                                <div class="stock-unit-chip"><span>Unit</span>{{ $row->unit_name }}</div>
                             </div>
                             <div class="table-meta">{{ $row->product_code ?: 'No code' }}</div>
-                            <div class="table-meta">{{ $row->unit_name }} / {{ $row->category_name ?? 'Uncategorized' }}</div>
+                            <div class="table-meta">Category: {{ $row->category_name ?? 'Uncategorized' }}</div>
                         </td>
                         <td>
                             <div class="cell-stack">

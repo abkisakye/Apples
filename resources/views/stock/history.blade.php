@@ -11,8 +11,8 @@
     ])
     <div class="page-head">
         <div>
-            <h2>{{ $productUnit->product?->name }} - {{ $productUnit->unit_name }}</h2>
-            <p>Track how this stock item moved across sales, purchases, transfers, and adjustments, and compare that movement to the current system count when checking physical stock.</p>
+            <h2>{{ $productUnit->product?->name }}</h2>
+            <p><strong>Unit: {{ $productUnit->unit_name }}</strong> &mdash; Track how this stock item moved across sales, purchases, transfers, and adjustments, then compare that movement to the current system count.</p>
         </div>
         <div class="actions">
             <a href="{{ route('stock.history.export', [$productUnit, 'store_id' => $storeId]) }}" class="button-link">Export CSV</a>
