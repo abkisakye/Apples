@@ -52,6 +52,7 @@ class AccessService
             'follow_ups.manage',
             'activity_logs.view',
             'business.manage',
+            'master_data.manage',
             'reports.view',
             'sales.view',
             'sales.manage',

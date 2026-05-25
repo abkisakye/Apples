@@ -27,46 +27,62 @@
         ])))),
     ]))
     <style>
-        .workflow-shell { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(320px,.9fr); gap:16px; align-items:start; }
-        .workflow-stack { display:grid; gap:14px; }
-        .picker-input { width:100%; min-height:48px; padding:12px 14px; border-radius:14px; border:1px solid var(--line); background:#fff; color:var(--ink); font-size:.96rem; }
-        .result-list { display:grid; gap:8px; margin-top:12px; max-height:320px; overflow-y:auto; }
-        .result-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; padding:12px 14px; border-radius:14px; border:1px solid var(--line); background:var(--panel-soft); }
-        .result-card strong { display:block; margin-bottom:4px; }
-        .result-meta { color:var(--muted); font-size:.9rem; line-height:1.4; }
-        .sale-add-button { border:0; border-radius:10px; padding:7px 11px; background:var(--brand); color:#fff; font-weight:700; cursor:pointer; font-size:.8rem; }
-        .cart-remove { border:1px solid #ecd4c0; background:#fff7ef; color:#9a5821; border-radius:10px; padding:7px 10px; cursor:pointer; font-weight:700; font-size:.78rem; }
-        .cart-list { display:grid; gap:10px; }
-        .cart-item { border:1px solid var(--line); border-radius:16px; background:#fff; padding:12px 14px; }
-        .cart-item-head { display:flex; justify-content:space-between; gap:10px; align-items:start; margin-bottom:10px; }
-        .cart-grid, .compact-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-        .cart-grid.three { grid-template-columns:repeat(3,minmax(0,1fr)); }
-        .summary-card { position:sticky; top:18px; }
-        .summary-inline-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
-        .summary-inline-stat { border:1px solid var(--line); border-radius:12px; padding:7px 9px; background:var(--panel-soft); }
-        .summary-inline-stat .label { color:var(--muted); font-size:.73rem; text-transform:uppercase; letter-spacing:.05em; }
-        .summary-inline-stat .value { margin-top:4px; font-size:1rem; font-weight:700; }
-        .party-results { display:grid; gap:6px; max-height:170px; overflow-y:auto; }
-        .party-result { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:9px 11px; border:1px solid var(--line); border-radius:12px; background:#fff; }
-        .party-result strong { display:block; margin:0; font-size:.94rem; }
-        .picker-empty { padding:12px; border:1px dashed var(--line); border-radius:12px; color:var(--muted); background:var(--panel-soft); font-size:.9rem; }
-        .store-pill { display:inline-flex; align-items:center; min-height:46px; padding:0 12px; border-radius:13px; border:1px solid var(--line); background:var(--panel-soft); color:var(--ink); font-weight:600; }
-        .summary-block { display:grid; gap:10px; }
-        .summary-row { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:.92rem; }
-        .summary-row.total { padding-top:12px; border-top:1px solid var(--line); font-size:1.12rem; font-weight:700; }
-        .status-pill { display:inline-flex; align-items:center; justify-content:center; width:100%; padding:10px 12px; border-radius:13px; background:var(--brand-soft); color:var(--brand); font-weight:700; }
-        .status-pill.credit { background:var(--accent-soft); color:var(--accent-ink); }
-        .qty-box { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:stretch; }
-        .qty-box button { min-width:40px; height:40px; padding:0; border-radius:12px; }
-        .qty-box input { text-align:left; font-weight:700; }
-        .qty-step-stack { display:grid; gap:6px; }
-        .qty-step-stack button { min-width:46px; }
-        .line-total-field { background:var(--panel-soft); font-weight:700; }
-        .empty-state { padding:22px 16px; border:1px dashed var(--line-strong); border-radius:16px; text-align:center; color:var(--muted); background:#fbfcfb; }
-        .footer-actions { display:flex; gap:10px; flex-wrap:wrap; }
-        .footer-actions .button-link, .footer-actions button { flex:1 1 180px; justify-content:center; }
-        @media (max-width:980px) { .workflow-shell { grid-template-columns:1fr; } .summary-card { position:static; } }
-        @media (max-width:760px) { .cart-grid, .cart-grid.three, .compact-grid, .summary-inline-stats { grid-template-columns:1fr; } .result-card { grid-template-columns:1fr; } .picker-input, .cart-item input, .cart-item select, .summary-block input, .summary-block select { min-height:46px; font-size:16px; } .footer-actions .button-link, .footer-actions button { flex-basis:100%; } }
+        :root {
+            --purchase-main: #92400E;
+            --purchase-soft: #FFF7ED;
+            --purchase-border: #FDBA74;
+            --purchase-button: #B45309;
+            --purchase-blue: #1D4ED8;
+            --purchase-ink: #1F2937;
+        }
+        .receive-shell { display:grid; grid-template-columns:300px minmax(420px,1fr) 300px; grid-template-areas:"details finder summary" "items items summary"; gap:12px; align-items:start; }
+        .receive-panel { border:1px solid #fed7aa; border-radius:10px; background:#fffdfa; padding:12px; box-shadow:0 10px 24px rgba(146,64,14,.06); }
+        .receive-panel h3 { margin:0; color:var(--purchase-main); font-size:1rem; }
+        .receive-panel .list-note { margin:4px 0 0; font-size:.82rem; }
+        .details-panel { grid-area:details; }
+        .finder-panel { grid-area:finder; }
+        .items-panel { grid-area:items; }
+        .summary-panel { grid-area:summary; position:sticky; top:14px; }
+        .receive-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:10px; }
+        .receive-grid .span-full { grid-column:1 / -1; }
+        .picker-input { width:100%; min-height:40px; padding:9px 11px; border-radius:9px; border:1px solid #d6d3d1; background:#fff; color:var(--ink); font-size:.92rem; }
+        .receive-panel input, .receive-panel select, .receive-panel textarea { border-color:#d6d3d1; border-radius:9px; }
+        .receive-panel button:not(.button-link), .receive-primary-button { border:0; border-radius:9px; padding:9px 12px; background:var(--purchase-button); color:#fff; font-weight:800; cursor:pointer; }
+        .receive-panel .button-link { border-color:#fed7aa; color:var(--purchase-main); background:#fffaf5; }
+        .find-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:8px; align-items:center; margin-top:10px; }
+        .mini-stat { border:1px solid #fed7aa; border-radius:9px; padding:6px 8px; background:var(--purchase-soft); min-width:74px; }
+        .mini-stat .label { color:#78716c; font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; }
+        .mini-stat .value { margin-top:2px; font-size:.9rem; font-weight:800; color:var(--purchase-main); }
+        .result-list { display:grid; gap:7px; margin-top:10px; max-height:190px; overflow-y:auto; }
+        .result-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; padding:8px 10px; border-radius:9px; border:1px solid #e7e5e4; background:#fff; }
+        .result-card strong { display:block; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .result-meta { color:#6b7280; font-size:.78rem; line-height:1.35; }
+        .receive-add-button { border:0; border-radius:8px; padding:7px 10px; background:#1D4ED8; color:#fff; font-weight:800; cursor:pointer; font-size:.78rem; }
+        .party-results { display:grid; gap:6px; max-height:120px; overflow-y:auto; }
+        .party-result { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:7px 8px; border:1px solid #e7e5e4; border-radius:9px; background:#fff; }
+        .party-result strong { display:block; margin:0; font-size:.88rem; }
+        .picker-empty { padding:10px; border:1px dashed #fed7aa; border-radius:9px; color:#78716c; background:var(--purchase-soft); font-size:.84rem; }
+        .store-pill { display:inline-flex; align-items:center; min-height:38px; width:100%; padding:0 10px; border-radius:9px; border:1px solid #fed7aa; background:var(--purchase-soft); color:var(--purchase-main); font-weight:700; }
+        .receive-warning { display:none; margin-top:10px; padding:8px 10px; border:1px solid var(--purchase-border); border-radius:9px; background:var(--purchase-soft); color:var(--purchase-main); font-weight:700; font-size:.82rem; }
+        .receive-warning.is-visible { display:block; }
+        .summary-block { display:grid; gap:9px; margin-top:10px; }
+        .summary-row { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:.9rem; }
+        .summary-row.total { padding-top:10px; border-top:1px solid #fed7aa; font-size:1.08rem; font-weight:800; color:var(--purchase-main); }
+        .status-pill { display:inline-flex; align-items:center; justify-content:center; width:100%; padding:9px 10px; border-radius:9px; background:#DBEAFE; color:#1D4ED8; font-weight:800; }
+        .status-pill.credit { background:var(--purchase-soft); color:var(--purchase-main); }
+        .incoming-table-wrap { margin-top:10px; max-height:285px; overflow:auto; border:1px solid #e7e5e4; border-radius:10px; background:#fff; }
+        .incoming-table { width:100%; border-collapse:collapse; min-width:760px; }
+        .incoming-table th, .incoming-table td { padding:7px 8px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
+        .incoming-table th { position:sticky; top:0; z-index:1; background:var(--purchase-soft); color:var(--purchase-main); font-size:.76rem; text-transform:uppercase; letter-spacing:.04em; }
+        .incoming-table input { min-height:34px; padding:6px 8px; }
+        .incoming-product { font-weight:800; color:var(--purchase-ink); }
+        .incoming-unit { color:#6b7280; font-size:.78rem; margin-top:2px; }
+        .line-total-field { background:#f8fafc; font-weight:800; }
+        .cart-remove { border:1px solid #fed7aa; background:#fff7ed; color:var(--purchase-main); border-radius:8px; padding:6px 9px; cursor:pointer; font-weight:800; font-size:.76rem; }
+        .empty-state { padding:18px 14px; border:1px dashed #fed7aa; border-radius:10px; text-align:center; color:#78716c; background:var(--purchase-soft); }
+        .footer-actions { display:grid; gap:8px; margin-top:12px; }
+        @media (max-width:1180px) { .receive-shell { grid-template-columns:1fr 1fr; grid-template-areas:"details summary" "finder finder" "items items"; } .summary-panel { position:static; } }
+        @media (max-width:760px) { .receive-shell, .receive-grid, .find-row { grid-template-columns:1fr; grid-template-areas:none; } .details-panel, .finder-panel, .items-panel, .summary-panel { grid-area:auto; } .incoming-table { min-width:680px; } .picker-input, .receive-panel input, .receive-panel select { min-height:46px; font-size:16px; } }
     </style>
 
     <div class="page-head">
@@ -83,54 +99,41 @@
         </div>
     </div>
 
-    <form method="post" action="{{ route('purchases.store') }}" id="purchase-form" class="workflow-shell">
+    <form method="post" action="{{ route('purchases.store') }}" id="purchase-form" class="receive-shell">
         @csrf
         <input type="hidden" name="return_to" value="{{ old('return_to', $returnTo) }}">
         <input type="hidden" name="corrected_from_purchase_id" value="{{ old('corrected_from_purchase_id', $sourcePurchase?->id) }}">
 
-        <div class="workflow-stack">
-            <section class="panel">
-                <h3>1. Search And Add Items</h3>
-                <p class="list-note">Type a product name, code, barcode, or part number. Add it once, then adjust quantity and buying cost in the list.</p>
-                <input type="text" id="purchase-search" class="picker-input" placeholder="Search product, barcode, code, or part number">
-                <div class="summary-inline-stats">
-                    <div class="summary-inline-stat">
-                        <div class="label">Lines</div>
-                        <div class="value" id="purchase-lines-summary">0</div>
-                    </div>
-                    <div class="summary-inline-stat">
-                        <div class="label">Units</div>
-                        <div class="value" id="purchase-units-summary">0</div>
-                    </div>
-                    <div class="summary-inline-stat">
-                        <div class="label">Total</div>
-                        <div class="value" id="purchase-inline-total">{{ $currency }} 0</div>
-                    </div>
-                </div>
-                <div id="purchase-search-results" class="result-list"></div>
-            </section>
+        <section class="receive-panel finder-panel">
+            <h3>Find Items</h3>
+            <p class="list-note">Search product, barcode, code, or part number, then receive it into stock.</p>
+            <div class="find-row">
+                <input type="text" id="purchase-search" class="picker-input" placeholder="Find Item">
+                <div class="mini-stat"><div class="label">Lines</div><div class="value" id="purchase-lines-summary">0</div></div>
+                <div class="mini-stat"><div class="label">Units</div><div class="value" id="purchase-units-summary">0</div></div>
+                <div class="mini-stat"><div class="label">Subtotal</div><div class="value" id="purchase-inline-total">{{ $currency }} 0</div></div>
+            </div>
+            <div id="purchase-search-results" class="result-list"></div>
+        </section>
 
-            <section class="panel">
-                <div class="page-head" style="margin-bottom: 12px;">
-                    <div>
-                        <h3 style="margin: 0;">2. Incoming Items</h3>
-                        <p style="margin: 6px 0 0;">Edit quantity and unit cost directly. Totals update as you work.</p>
-                    </div>
-                    <div class="actions">
-                        <button type="button" id="clear-purchase-cart" class="button-link">Clear Purchase</button>
-                    </div>
+        <section class="receive-panel items-panel">
+            <div class="section-heading" style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+                <div>
+                    <h3>Incoming Items</h3>
+                    <p class="list-note">Confirm Qty Received and Buying Cost before recording stock.</p>
                 </div>
-                <div id="purchase-cart-empty" class="empty-state">No items added yet. Start with the search box above.</div>
-                <div id="purchase-cart-list" class="cart-list"></div>
-                <div id="purchase-items-hidden"></div>
-            </section>
-        </div>
+                <button type="button" id="clear-purchase-cart" class="button-link">Clear Items</button>
+            </div>
+            <div id="purchase-cart-empty" class="empty-state" style="margin-top:10px;">No incoming items yet. Use Find Items above.</div>
+            <div id="purchase-cart-list" class="incoming-table-wrap"></div>
+            <div id="purchase-items-hidden"></div>
+        </section>
 
-        <div class="workflow-stack summary-card">
-            <section class="panel">
-                <h3>3. Purchase Details</h3>
+        <section class="receive-panel details-panel">
+                <h3>Supplier & Invoice</h3>
+                <p class="list-note">Choose who delivered the stock and capture the supplier document.</p>
                 <input type="hidden" name="store_id" value="{{ $currentStore?->id }}">
-                <div class="compact-grid" style="margin-top: 14px;">
+                <div class="receive-grid">
                     <label class="form-field">
                         <span>Purchase Date</span>
                         <input type="date" name="purchase_date" id="purchase-date" value="{{ old('purchase_date', now()->toDateString()) }}" required>
@@ -139,63 +142,60 @@
                         <span>Store</span>
                         <div class="store-pill">{{ $currentStore?->name ?? config('business.name', 'Apples Of Gold') }}</div>
                     </div>
-                    <div class="form-field" style="grid-column: 1 / -1;">
+                    <div class="form-field span-full">
                         <span>Supplier</span>
                         <input type="hidden" name="supplier_id" id="purchase-supplier" value="{{ old('supplier_id', $prefillPurchase['supplier_id']) }}">
-                        <input type="text" id="supplier-search" class="picker-input" placeholder="Search supplier by name or country">
-                        <div id="supplier-results" class="party-results" style="margin-top:10px;"></div>
+                        <input type="text" id="supplier-search" class="picker-input" placeholder="Search supplier">
+                        <div id="supplier-results" class="party-results" style="margin-top:8px;"></div>
+                        <div id="supplier-warning" class="receive-warning">Choose supplier before recording purchase.</div>
                     </div>
                     <label class="form-field">
-                        <span>Amount Paid Now</span>
+                        <span>Paid Now</span>
                         <input type="number" step="0.01" min="0" name="amount_paid" id="purchase-amount-paid" value="{{ old('amount_paid', $prefillPurchase['amount_paid']) }}">
                     </label>
                     <label class="form-field" id="purchase-credit-period-wrap">
-                        <span>Credit Period (days)</span>
+                        <span>Credit Period</span>
                         <input type="number" min="1" name="credit_period_days" id="purchase-credit-period" value="{{ old('credit_period_days', $prefillPurchase['credit_period_days']) }}">
                     </label>
                     <label class="form-field">
                         <span>Payment Mode</span>
                         <select name="payment_mode_id">
-                            <option value="">Auto-select from balance</option>
+                            <option value="">Auto-select</option>
                             @foreach ($paymentModes as $mode)
                                 <option value="{{ $mode->id }}" @selected((string) old('payment_mode_id') === (string) $mode->id)>{{ $mode->name }}</option>
                             @endforeach
                         </select>
                     </label>
                     <label class="form-field">
-                        <span>Supplier Invoice No</span>
+                        <span>Supplier Invoice</span>
                         <input type="text" name="supplier_invoice_no" value="{{ old('supplier_invoice_no', $prefillPurchase['supplier_invoice_no']) }}">
                     </label>
                 </div>
                 <label class="form-field" style="margin-top:12px;">
                     <span>Remarks</span>
-                    <textarea name="remarks" rows="3">{{ old('remarks', $prefillPurchase['remarks']) }}</textarea>
+                    <textarea name="remarks" rows="2">{{ old('remarks', $prefillPurchase['remarks']) }}</textarea>
                 </label>
             </section>
 
-            <section class="panel">
-                <h3>4. Payment Summary</h3>
-                <div class="summary-block" style="margin-top:14px;">
+            <section class="receive-panel summary-panel">
+                <h3>Purchase Summary</h3>
+                <div class="summary-block">
                     <div id="purchase-kind-badge" class="status-pill">Cash Purchase</div>
                     <div class="summary-row"><span>Supplier</span><strong id="supplier-summary">Choose supplier</strong></div>
                     <div class="summary-row"><span>Items</span><strong id="purchase-items-summary">0</strong></div>
                     <div class="summary-row"><span>Subtotal</span><strong id="purchase-subtotal-summary">{{ $currency }} 0</strong></div>
                     <div class="summary-row"><span>Paid Now</span><strong id="purchase-paid-summary">{{ $currency }} 0</strong></div>
-                    <div class="summary-row"><span>Balance</span><strong id="purchase-balance-summary">{{ $currency }} 0</strong></div>
+                    <div class="summary-row"><span>Supplier Balance</span><strong id="purchase-balance-summary">{{ $currency }} 0</strong></div>
                     <div class="summary-row"><span>Due Date</span><strong id="purchase-due-summary">Not needed</strong></div>
-                    <div class="summary-row total"><span>Total Purchase</span><span id="purchase-total-summary">{{ $currency }} 0</span></div>
+                    <div class="summary-row total"><span>Total</span><span id="purchase-total-summary">{{ $currency }} 0</span></div>
+                </div>
+                <div id="balance-warning" class="receive-warning">Supplier balance will remain open.</div>
+                <div class="footer-actions">
+                    <button type="button" id="purchase-fill-total" class="button-link">Pay Full Amount</button>
+                    <button type="submit" class="receive-primary-button">Record Purchase</button>
                 </div>
             </section>
 
-            <section class="panel">
-                <h3>5. Save</h3>
-                <p class="list-note">If today’s payment is less than the total, the remaining supplier balance will stay open for later payment.</p>
-                <div class="footer-actions" style="margin-top:14px;">
-                    <button type="button" id="purchase-fill-total" class="button-link">Use Full Payment</button>
-                    <button type="submit">Record Purchase</button>
-                </div>
-            </section>
-        </div>
     </form>
 
     <script>
@@ -214,6 +214,7 @@
             const supplierSearch = document.getElementById('supplier-search');
             const supplierResults = document.getElementById('supplier-results');
             const supplierInput = document.getElementById('purchase-supplier');
+            const supplierWarning = document.getElementById('supplier-warning');
             const amountPaidInput = document.getElementById('purchase-amount-paid');
             const creditPeriodInput = document.getElementById('purchase-credit-period');
             const creditPeriodWrap = document.getElementById('purchase-credit-period-wrap');
@@ -230,6 +231,7 @@
             const balanceSummary = document.getElementById('purchase-balance-summary');
             const dueSummary = document.getElementById('purchase-due-summary');
             const totalSummary = document.getElementById('purchase-total-summary');
+            const balanceWarning = document.getElementById('balance-warning');
 
             const initialItems = [];
             @foreach (old('items', $prefillPurchase['items']) as $oldItem)
@@ -282,9 +284,9 @@
                     <div class="result-card">
                         <div>
                             <strong>${item.label}</strong>
-                            <div class="result-meta">${item.code ? `Code: ${item.code} / ` : ''}${item.barcode ? `Barcode: ${item.barcode} / ` : ''}${item.part_number ? `Part: ${item.part_number} / ` : ''}Cost: ${money(item.price)}</div>
+                            <div class="result-meta">${item.code ? `Code: ${item.code} / ` : ''}${item.barcode ? `Barcode: ${item.barcode} / ` : ''}${item.part_number ? `Part: ${item.part_number} / ` : ''}Buying: ${money(item.price)}</div>
                         </div>
-                        <button type="button" class="sale-add-button" data-add-unit="${item.id}">Add</button>
+                        <button type="button" class="receive-add-button" data-add-unit="${item.id}">Receive</button>
                     </div>
                 `).join('') : `<div class="picker-empty">No products matched that search.</div>`;
             }
@@ -321,6 +323,7 @@
 
                 const selectedSupplier = suppliers.find((item) => String(item.id) === String(supplierInput.value));
                 supplierSummary.textContent = selectedSupplier ? selectedSupplier.name : 'Choose supplier';
+                supplierWarning?.classList.toggle('is-visible', !selectedSupplier);
                 itemsSummary.textContent = String(cart.length);
                 linesInlineSummary.textContent = String(cart.length);
                 unitsInlineSummary.textContent = String(cart.reduce((sum, item) => sum + normalizeQuantity(item.quantity), 0));
@@ -335,9 +338,11 @@
                 if (balance() > 0) {
                     badge.textContent = 'Credit Purchase';
                     badge.classList.add('credit');
+                    balanceWarning?.classList.add('is-visible');
                 } else {
                     badge.textContent = 'Cash Purchase';
                     badge.classList.remove('credit');
+                    balanceWarning?.classList.remove('is-visible');
                 }
             }
 
@@ -350,37 +355,36 @@
 
             function renderCart() {
                 cartEmpty.style.display = cart.length ? 'none' : 'block';
-                cartList.innerHTML = cart.map((item, index) => `
-                    <div class="cart-item">
-                        <div class="cart-item-head">
-                            <div>
-                                <strong>${item.label}</strong>
-                                <div class="result-meta">${item.code ? `Code: ${item.code}` : 'No code'}${item.barcode ? ` / Barcode: ${item.barcode}` : ''}</div>
-                            </div>
-                            <button type="button" class="cart-remove" data-remove="${index}">Remove</button>
-                        </div>
-                        <div class="cart-grid three">
-                            <label class="form-field">
-                                <span>Quantity</span>
-                                <div class="qty-box">
-                                    <input type="number" min="1" step="1" value="${item.quantity}" data-qty="${index}" inputmode="numeric" placeholder="Type quantity">
-                                    <div class="qty-step-stack">
-                                        <button type="button" data-plus="${index}" aria-label="Increase quantity">+</button>
-                                        <button type="button" data-minus="${index}" aria-label="Decrease quantity">-</button>
-                                    </div>
-                                </div>
-                            </label>
-                            <label class="form-field">
-                                <span>Unit Cost</span>
-                                <input type="number" min="0" step="0.01" value="${item.price}" data-price="${index}">
-                            </label>
-                            <div class="form-field">
-                                <span>Line Total</span>
-                                <input type="text" value="${money(Number(item.quantity) * Number(item.price))}" data-line-total="${index}" class="line-total-field" readonly>
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
+                cartList.style.display = cart.length ? 'block' : 'none';
+                cartList.innerHTML = cart.length ? `
+                    <table class="incoming-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Unit</th>
+                                <th>Qty Received</th>
+                                <th>Buying Cost</th>
+                                <th>Total</th>
+                                <th>Remove</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${cart.map((item, index) => `
+                                <tr>
+                                    <td>
+                                        <div class="incoming-product">${item.product_name}</div>
+                                        <div class="incoming-unit">${item.code ? `Code: ${item.code}` : 'No code'}${item.barcode ? ` / Barcode: ${item.barcode}` : ''}</div>
+                                    </td>
+                                    <td>${item.unit_name}</td>
+                                    <td><input type="number" min="1" step="1" value="${item.quantity}" data-qty="${index}" inputmode="numeric"></td>
+                                    <td><input type="number" min="0" step="0.01" value="${item.price}" data-price="${index}"></td>
+                                    <td><input type="text" value="${money(Number(item.quantity) * Number(item.price))}" data-line-total="${index}" class="line-total-field" readonly></td>
+                                    <td><button type="button" class="cart-remove" data-remove="${index}">Remove</button></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                ` : '';
 
                 syncPurchaseSummary();
             }
@@ -491,13 +495,13 @@
             form.addEventListener('submit', (event) => {
                 if (!cart.length) {
                     event.preventDefault();
-                    alert('Add at least one item before saving the purchase.');
+                    alert('Add at least one incoming item before recording the purchase.');
                     searchInput.focus();
                     return;
                 }
                 if (!supplierInput.value) {
                     event.preventDefault();
-                    alert('Choose a supplier before saving the purchase.');
+                    alert('Choose supplier before recording purchase.');
                     supplierSearch.focus();
                 }
             });
@@ -506,7 +510,7 @@
             renderSuppliers();
             renderCart();
             if (supplierInput.value) selectSupplier(supplierInput.value);
-            if (window.innerWidth > 760) searchInput.focus();
+            if (window.innerWidth > 760) supplierSearch.focus();
         })();
     </script>
 @endsection

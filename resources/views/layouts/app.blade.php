@@ -902,11 +902,11 @@
         [
             'label' => 'Setup',
             'items' => [
-                ['label' => 'Stores', 'route' => 'master-data.index', 'route_params' => ['resource' => 'stores'], 'match' => 'master-data.*', 'active_resource' => 'stores', 'ability' => 'business.manage', 'mark' => 'ST'],
-                ['label' => 'Product Categories', 'route' => 'master-data.index', 'route_params' => ['resource' => 'categories'], 'match' => 'master-data.*', 'active_resource' => 'categories', 'ability' => 'business.manage', 'mark' => 'PC'],
-                ['label' => 'Payment Modes', 'route' => 'master-data.index', 'route_params' => ['resource' => 'payment-modes'], 'match' => 'master-data.*', 'active_resource' => 'payment-modes', 'ability' => 'business.manage', 'mark' => 'PM'],
-                ['label' => 'Capital Sources', 'route' => 'master-data.index', 'route_params' => ['resource' => 'capital-sources'], 'match' => 'master-data.*', 'active_resource' => 'capital-sources', 'ability' => 'business.manage', 'mark' => 'CS'],
-                ['label' => 'Expense Categories', 'route' => 'master-data.index', 'route_params' => ['resource' => 'expense-categories'], 'match' => 'master-data.*', 'active_resource' => 'expense-categories', 'ability' => 'business.manage', 'mark' => 'EC'],
+                ['label' => 'Stores', 'route' => 'master-data.index', 'route_params' => ['resource' => 'stores'], 'match' => 'master-data.*', 'active_resource' => 'stores', 'abilities' => ['business.manage', 'master_data.manage'], 'mark' => 'ST'],
+                ['label' => 'Product Categories', 'route' => 'master-data.index', 'route_params' => ['resource' => 'categories'], 'match' => 'master-data.*', 'active_resource' => 'categories', 'abilities' => ['business.manage', 'master_data.manage'], 'mark' => 'PC'],
+                ['label' => 'Payment Modes', 'route' => 'master-data.index', 'route_params' => ['resource' => 'payment-modes'], 'match' => 'master-data.*', 'active_resource' => 'payment-modes', 'abilities' => ['business.manage', 'master_data.manage'], 'mark' => 'PM'],
+                ['label' => 'Capital Sources', 'route' => 'master-data.index', 'route_params' => ['resource' => 'capital-sources'], 'match' => 'master-data.*', 'active_resource' => 'capital-sources', 'abilities' => ['business.manage', 'master_data.manage'], 'mark' => 'CS'],
+                ['label' => 'Expense Categories', 'route' => 'master-data.index', 'route_params' => ['resource' => 'expense-categories'], 'match' => 'master-data.*', 'active_resource' => 'expense-categories', 'abilities' => ['business.manage', 'master_data.manage'], 'mark' => 'EC'],
             ],
         ],
         [
@@ -953,7 +953,7 @@
             @endif
 
             @foreach ($navGroups as $group)
-                @php($visibleItems = collect($group['items'])->filter(fn ($item) => ! $item['ability'] || $access->can($item['ability'])))
+                @php($visibleItems = collect($group['items'])->filter(fn ($item) => isset($item['abilities']) ? collect($item['abilities'])->contains(fn ($ability) => $access->can($ability)) : (! $item['ability'] || $access->can($item['ability']))))
                 @if ($visibleItems->isNotEmpty())
                     <div class="nav-section">
                         <div class="nav-label">{{ $group['label'] }}</div>

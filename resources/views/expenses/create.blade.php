@@ -29,18 +29,31 @@
                             @endforeach
                         </select>
                     </label>
-                    <label class="form-field">
-                        <span>Category</span>
-                        <select name="expense_category_id" required>
-                            <option value="">Choose category</option>
-                            @foreach ($expenseCategories as $category)
-                                <option value="{{ $category->id }}" @selected((string) old('expense_category_id') === (string) $category->id)>{{ $category->name }}</option>
-                            @endforeach
-                        </select>
+                    @php($canQuickAddCategory = $access->can('business.manage') || $access->can('master_data.manage'))
+                    <div class="form-field quick-category-field">
+                        <span class="quick-category-label">Category</span>
+                        <div class="quick-category-row">
+                            <select name="expense_category_id" id="expense-category-select" required>
+                                <option value="">Choose category</option>
+                                @foreach ($expenseCategories as $category)
+                                    <option value="{{ $category->id }}" @selected((string) old('expense_category_id') === (string) $category->id)>{{ $category->name }}</option>
+                                @endforeach
+                            </select>
+                            @if ($canQuickAddCategory)
+                                <button type="button" class="button-link" data-quick-category-toggle="expense-category-panel">+ Add Category</button>
+                            @endif
+                        </div>
                         @if ($expenseCategories->isEmpty())
                             <div class="field-tip">Add categories from Setup > Expense Categories first.</div>
                         @endif
-                    </label>
+                        @if ($canQuickAddCategory)
+                            @include('partials.quick-category-panel', [
+                                'panelId' => 'expense-category-panel',
+                                'selectId' => 'expense-category-select',
+                                'endpoint' => route('expenses.categories.quick-store'),
+                            ])
+                        @endif
+                    </div>
                     <label class="form-field">
                         <span>Amount</span>
                         <input type="number" step="0.01" min="0.01" name="amount" value="{{ old('amount') }}" required>

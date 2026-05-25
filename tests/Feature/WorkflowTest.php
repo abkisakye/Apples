@@ -883,6 +883,123 @@ class WorkflowTest extends TestCase
         }
     }
 
+    public function test_admin_can_quick_add_product_category_and_use_it_on_product(): void
+    {
+        $response = $this->postJson('/products/categories/quick-store', [
+            'name' => 'Household',
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('category.name', 'Household');
+
+        $categoryId = $response->json('category.id');
+
+        $this->assertDatabaseHas('categories', [
+            'id' => $categoryId,
+            'name' => 'Household',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/products/categories/quick-store', [
+            'name' => 'Household',
+        ])->assertUnprocessable()->assertJsonValidationErrors('name');
+
+        $this->post('/products', [
+            'name' => 'Laundry Soap',
+            'code' => 'SOAP-1',
+            'category_id' => $categoryId,
+            'supplier_id' => null,
+            'item_group' => 'Cleaning',
+            'base_cost_price' => 1200,
+            'reorder_level' => 5,
+            'is_vat_applicable' => 0,
+            'is_active' => 1,
+            'units' => [
+                [
+                    'unit_name' => 'Bar',
+                    'conversion_factor' => 1,
+                    'selling_price' => 1800,
+                    'cost_price' => 1200,
+                    'is_active' => 1,
+                ],
+            ],
+            'default_unit_index' => 0,
+        ])->assertRedirect();
+
+        $product = Product::query()->where('name', 'Laundry Soap')->firstOrFail();
+
+        $this->assertSame($categoryId, $product->category_id);
+    }
+
+    public function test_admin_can_quick_add_expense_category_and_use_it_on_expense(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        $response = $this->postJson('/expenses/categories/quick-store', [
+            'name' => 'Utilities',
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('category.name', 'Utilities');
+
+        $categoryId = $response->json('category.id');
+
+        $this->assertDatabaseHas('expense_categories', [
+            'id' => $categoryId,
+            'name' => 'Utilities',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/expenses/categories/quick-store', [
+            'name' => 'Utilities',
+        ])->assertUnprocessable()->assertJsonValidationErrors('name');
+
+        $this->post('/expenses', [
+            'expense_date' => '2026-04-18',
+            'store_id' => $store->id,
+            'payment_mode_id' => $paymentMode->id,
+            'expense_category_id' => $categoryId,
+            'amount' => 25000,
+            'reference_no' => 'UMEME-1',
+            'notes' => 'Power bill',
+        ])->assertRedirect();
+
+        $expense = Expense::query()->where('reference_no', 'UMEME-1')->firstOrFail();
+
+        $this->assertSame($categoryId, $expense->expense_category_id);
+        $this->assertSame('Utilities', $expense->category);
+    }
+
+    public function test_cashier_cannot_quick_add_categories(): void
+    {
+        $this->signInAsRole('cashier');
+
+        $this->postJson('/products/categories/quick-store', [
+            'name' => 'Blocked Product Category',
+        ])->assertForbidden();
+
+        $this->postJson('/expenses/categories/quick-store', [
+            'name' => 'Blocked Expense Category',
+        ])->assertForbidden();
+
+        $this->assertDatabaseMissing('categories', ['name' => 'Blocked Product Category']);
+        $this->assertDatabaseMissing('expense_categories', ['name' => 'Blocked Expense Category']);
+    }
+
+    public function test_quick_add_category_buttons_are_hidden_without_setup_permission(): void
+    {
+        $this->get('/products/create')->assertOk()->assertSee('+ New');
+        $this->get('/expenses/create')->assertOk()->assertSee('+ Add Category');
+
+        $this->signInAsRole('manager');
+
+        $this->get('/products/create')->assertOk()->assertDontSee('+ New');
+        $this->get('/expenses/create')->assertOk()->assertDontSee('+ Add Category');
+    }
+
     public function test_sales_purchases_and_accounts_can_be_archived_or_voided_safely(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);

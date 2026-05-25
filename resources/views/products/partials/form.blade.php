@@ -1,11 +1,11 @@
 <style>
     .profile-form {
         display: grid;
-        gap: 16px;
+        gap: 20px;
     }
     .form-section-title {
-        margin: 0 0 10px;
-        font-size: .95rem;
+        margin: 0;
+        font-size: 1.08rem;
     }
     .field-tip {
         color: var(--muted);
@@ -13,19 +13,83 @@
         line-height: 1.45;
         margin-top: 2px;
     }
-    .side-note {
+    .product-form-shell {
         display: grid;
-        gap: 10px;
+        gap: 16px;
+        max-width: 1180px;
     }
-    .side-note-card {
-        padding: 12px 14px;
+    .product-panel {
+        max-width: none;
+    }
+    .product-section {
+        display: grid;
+        gap: 14px;
+        padding-bottom: 4px;
+    }
+    .section-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 14px;
+    }
+    .section-heading p {
+        margin: 4px 0 0;
+    }
+    .product-basics-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
+    .product-basics-grid .span-two {
+        grid-column: span 2;
+    }
+    .product-basics-grid .span-full {
+        grid-column: 1 / -1;
+    }
+    .help-panel {
         border: 1px solid var(--line);
-        border-radius: 14px;
+        border-radius: 12px;
         background: var(--panel-soft);
+        padding: 0;
     }
-    .side-note-card strong {
+    .help-panel summary {
+        cursor: pointer;
+        padding: 12px 14px;
+        font-weight: 800;
+    }
+    .help-panel-body {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        padding: 0 14px 14px;
+    }
+    .help-note strong {
         display: block;
-        margin-bottom: 4px;
+        margin-bottom: 3px;
+    }
+    .save-row {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: 4px;
+    }
+    @media (max-width: 1100px) {
+        .product-basics-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 760px) {
+        .section-heading,
+        .save-row {
+            align-items: stretch;
+            flex-direction: column;
+        }
+        .product-basics-grid,
+        .help-panel-body {
+            grid-template-columns: 1fr;
+        }
+        .product-basics-grid .span-two {
+            grid-column: 1 / -1;
+        }
     }
 </style>
 
@@ -42,92 +106,98 @@
     </div>
 </div>
 
-<section class="grid-two">
-    <div class="panel">
+<section class="product-form-shell">
+    <div class="panel product-panel">
         <form method="post" action="{{ $action }}" class="entry-form profile-form" id="product-form">
             @csrf
             @if ($method === 'put')
                 @method('put')
             @endif
 
-            <div>
-                <h3 class="form-section-title">1. Product Basics</h3>
-                <p class="list-note">Set the product name, code, grouping, default supplier, and stock control values here first.</p>
-            </div>
-            <div class="form-grid">
-                <label class="form-field">
-                    <span>Product Name</span>
-                    <input type="text" name="name" value="{{ old('name', $product->name) }}" required>
-                </label>
-                <label class="form-field">
-                    <span>Code</span>
-                    <input type="text" name="code" value="{{ old('code', $product->code) }}">
-                    <div class="field-tip">Use the shop code staff already know, if one exists.</div>
-                </label>
-                <label class="form-field">
-                    <span>Category</span>
-                    <select name="category_id">
-                        <option value="">No category</option>
-                        @foreach ($categories as $category)
-                            <option value="{{ $category->id }}" @selected((string) old('category_id', $product->category_id) === (string) $category->id)>{{ $category->name }}</option>
-                        @endforeach
-                    </select>
-                </label>
-                <label class="form-field">
-                    <span>Supplier</span>
-                    <select name="supplier_id">
-                        <option value="">No supplier</option>
-                        @foreach ($suppliers as $supplier)
-                            <option value="{{ $supplier->id }}" @selected((string) old('supplier_id', $product->supplier_id) === (string) $supplier->id)>{{ $supplier->name }}</option>
-                        @endforeach
-                    </select>
-                </label>
-                <label class="form-field">
-                    <span>Item Group</span>
-                    <input type="text" name="item_group" value="{{ old('item_group', $product->item_group) }}">
-                </label>
-                <label class="form-field">
-                    <span>Base Cost Price</span>
-                    <input type="number" step="0.01" min="0" name="base_cost_price" value="{{ old('base_cost_price', $product->base_cost_price ?? 0) }}">
-                    <div class="field-tip">This is the fallback buying cost before unit-level costs are entered below.</div>
-                </label>
-                <label class="form-field">
-                    <span>Reorder Level</span>
-                    <input type="number" step="0.001" min="0" name="reorder_level" value="{{ old('reorder_level', $product->reorder_level ?? 0) }}">
-                    <div class="field-tip">Use zero if this product should not appear in reorder alerts.</div>
-                </label>
-                <label class="form-field">
-                    <span>VAT</span>
-                    <select name="is_vat_applicable">
-                        <option value="1" @selected(old('is_vat_applicable', $product->is_vat_applicable ?? false))>VAT applicable</option>
-                        <option value="0" @selected((string) old('is_vat_applicable', $product->is_vat_applicable ?? false) === '0')>No VAT</option>
-                    </select>
-                </label>
-                <label class="form-field">
-                    <span>Status</span>
-                    <select name="is_active">
-                        <option value="1" @selected(old('is_active', $product->is_active ?? true))>Active</option>
-                        <option value="0" @selected((string) old('is_active', $product->is_active ?? true) === '0')>Inactive</option>
-                    </select>
-                </label>
-            </div>
+            <input type="hidden" name="item_group" value="{{ old('item_group', $product->item_group) }}">
+            <input type="hidden" name="base_cost_price" value="{{ old('base_cost_price', $product->base_cost_price ?? 0) }}">
 
-            <label class="form-field">
-                <span>Notes</span>
-                <textarea name="notes" rows="3">{{ old('notes', $product->notes) }}</textarea>
-            </label>
-
-            <div>
-                <h3 class="form-section-title">2. Units And Selling Packs</h3>
-                <p class="list-note">Add every pack size staff can buy or sell, then choose the one cashiers should see first.</p>
-            </div>
-            <div class="units-head">
-                <div>
-                    <h3>Units And Pack Sizes</h3>
-                    <p class="list-note">Add each selling pack here, like piece, box, carton, tray, or bale. Pick one default POS unit for the cashier flow.</p>
+            <section class="product-section">
+                <div class="section-heading">
+                    <div>
+                        <h3 class="form-section-title">Product Basics</h3>
+                        <p class="list-note">Name the item and choose the core settings staff need every day.</p>
+                    </div>
                 </div>
-                <button type="button" class="button-link" id="add-unit-row">Add Another Unit</button>
-            </div>
+
+                <div class="product-basics-grid">
+                    <label class="form-field span-two">
+                        <span>Product Name</span>
+                        <input type="text" name="name" value="{{ old('name', $product->name) }}" required>
+                    </label>
+                    <label class="form-field">
+                        <span>Code / Barcode</span>
+                        <input type="text" name="code" value="{{ old('code', $product->code) }}">
+                    </label>
+                    @php($canQuickAddCategory = $access->can('business.manage') || $access->can('master_data.manage'))
+                    <div class="form-field quick-category-field">
+                        <span class="quick-category-label">Category</span>
+                        <div class="quick-category-row">
+                            <select name="category_id" id="product-category-select">
+                                <option value="">No category</option>
+                                @foreach ($categories as $category)
+                                    <option value="{{ $category->id }}" @selected((string) old('category_id', $product->category_id) === (string) $category->id)>{{ $category->name }}</option>
+                                @endforeach
+                            </select>
+                            @if ($canQuickAddCategory)
+                                <button type="button" class="button-link" data-quick-category-toggle="product-category-panel">+ New</button>
+                            @endif
+                        </div>
+                        @if ($canQuickAddCategory)
+                            @include('partials.quick-category-panel', [
+                                'panelId' => 'product-category-panel',
+                                'selectId' => 'product-category-select',
+                                'endpoint' => route('products.categories.quick-store'),
+                            ])
+                        @endif
+                    </div>
+                    <label class="form-field span-two">
+                        <span>Supplier</span>
+                        <select name="supplier_id">
+                            <option value="">No supplier</option>
+                            @foreach ($suppliers as $supplier)
+                                <option value="{{ $supplier->id }}" @selected((string) old('supplier_id', $product->supplier_id) === (string) $supplier->id)>{{ $supplier->name }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <label class="form-field">
+                        <span>Reorder Level</span>
+                        <input type="number" step="0.001" min="0" name="reorder_level" value="{{ old('reorder_level', $product->reorder_level ?? 0) }}">
+                    </label>
+                    <label class="form-field">
+                        <span>VAT</span>
+                        <select name="is_vat_applicable">
+                            <option value="1" @selected(old('is_vat_applicable', $product->is_vat_applicable ?? false))>VAT applicable</option>
+                            <option value="0" @selected((string) old('is_vat_applicable', $product->is_vat_applicable ?? false) === '0')>No VAT</option>
+                        </select>
+                    </label>
+                    <label class="form-field">
+                        <span>Status</span>
+                        <select name="is_active">
+                            <option value="1" @selected(old('is_active', $product->is_active ?? true))>Active</option>
+                            <option value="0" @selected((string) old('is_active', $product->is_active ?? true) === '0')>Inactive</option>
+                        </select>
+                    </label>
+                    <label class="form-field span-full">
+                        <span>Notes</span>
+                        <textarea name="notes" rows="2">{{ old('notes', $product->notes) }}</textarea>
+                    </label>
+                </div>
+            </section>
+
+            <section class="product-section">
+                <div class="section-heading units-head">
+                    <div>
+                        <h3 class="form-section-title">Units & Selling Packs</h3>
+                        <p class="list-note">Add how this product is sold, for example piece, box, carton, bottle.</p>
+                    </div>
+                    <button type="button" class="button-link" id="add-unit-row">Add Another Unit</button>
+                </div>
 
             <input type="hidden" name="default_unit_index" id="default-unit-index" value="{{ old('default_unit_index', $defaultUnitIndex) }}">
 
@@ -149,12 +219,12 @@
                                 <input type="number" step="0.001" min="0.001" name="units[{{ $index }}][conversion_factor]" value="{{ $unit['conversion_factor'] ?? 1 }}">
                             </label>
                             <label class="form-field">
-                                <span>Selling Price</span>
-                                <input type="number" step="0.01" min="0" name="units[{{ $index }}][selling_price]" value="{{ $unit['selling_price'] ?? 0 }}">
-                            </label>
-                            <label class="form-field">
                                 <span>Cost Price</span>
                                 <input type="number" step="0.01" min="0" name="units[{{ $index }}][cost_price]" value="{{ $unit['cost_price'] ?? 0 }}">
+                            </label>
+                            <label class="form-field">
+                                <span>Selling Price</span>
+                                <input type="number" step="0.01" min="0" name="units[{{ $index }}][selling_price]" value="{{ $unit['selling_price'] ?? 0 }}">
                             </label>
                             <label class="form-field">
                                 <span>Barcode</span>
@@ -179,33 +249,30 @@
                     </div>
                 @endforeach
             </div>
+            </section>
 
-            <div class="actions">
+            <details class="help-panel">
+                <summary>Help / Setup Notes</summary>
+                <div class="help-panel-body">
+                    <div class="help-note">
+                        <strong>One product, many packs</strong>
+                        <div class="field-tip">Use one product record for piece, pack, box, or carton sales.</div>
+                    </div>
+                    <div class="help-note">
+                        <strong>Default POS Unit</strong>
+                        <div class="field-tip">Choose the pack size cashiers should see first.</div>
+                    </div>
+                    <div class="help-note">
+                        <strong>Inactive Units</strong>
+                        <div class="field-tip">Mark old units inactive so history stays intact.</div>
+                    </div>
+                </div>
+            </details>
+
+            <div class="actions save-row">
                 <button type="submit">Save Product</button>
             </div>
         </form>
-    </div>
-
-    <div class="panel">
-        <h3>Product Setup Notes</h3>
-        <div class="side-note">
-            <div class="side-note-card">
-                <strong>One product, many packs</strong>
-                <div class="field-tip">Use one product record even if it sells as piece, pack, box, or carton. Add those under units instead of creating duplicate products.</div>
-            </div>
-            <div class="side-note-card">
-                <strong>Default POS unit</strong>
-                <div class="field-tip">Choose the pack size cashiers use most often so sales entry stays fast.</div>
-            </div>
-        </div>
-        <table>
-            <tbody>
-                <tr><th style="text-align:left; width:38%;">Product Master</th><td>Use this for naming, supplier linking, grouping, and reorder settings.</td></tr>
-                <tr><th style="text-align:left;">Multiple Units</th><td>Add all major selling packs here so the same product can be used as piece, pack, carton, or box without confusion.</td></tr>
-                <tr><th style="text-align:left;">Default POS Unit</th><td>Pick the unit that cashiers should see first during normal selling.</td></tr>
-                <tr><th style="text-align:left;">Inactive Units</th><td>If a unit should stay in history but stop being used in new work, mark it inactive instead of deleting it.</td></tr>
-            </tbody>
-        </table>
     </div>
 </section>
 
@@ -226,12 +293,12 @@
                 <input type="number" step="0.001" min="0.001" name="units[__INDEX__][conversion_factor]" value="1">
             </label>
             <label class="form-field">
-                <span>Selling Price</span>
-                <input type="number" step="0.01" min="0" name="units[__INDEX__][selling_price]" value="0">
-            </label>
-            <label class="form-field">
                 <span>Cost Price</span>
                 <input type="number" step="0.01" min="0" name="units[__INDEX__][cost_price]" value="0">
+            </label>
+            <label class="form-field">
+                <span>Selling Price</span>
+                <input type="number" step="0.01" min="0" name="units[__INDEX__][selling_price]" value="0">
             </label>
             <label class="form-field">
                 <span>Barcode</span>
@@ -269,9 +336,9 @@
         gap: 14px;
     }
     .unit-card {
-        padding: 16px;
+        padding: 12px;
         border: 1px solid var(--line);
-        border-radius: 18px;
+        border-radius: 10px;
         background: var(--panel-soft);
     }
     .unit-card-head {
