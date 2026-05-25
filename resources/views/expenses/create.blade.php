@@ -31,7 +31,15 @@
                     </label>
                     <label class="form-field">
                         <span>Category</span>
-                        <input type="text" name="category" value="{{ old('category') }}" placeholder="e.g. Transport, Rent, Repairs, Wages" required>
+                        <select name="expense_category_id" required>
+                            <option value="">Choose category</option>
+                            @foreach ($expenseCategories as $category)
+                                <option value="{{ $category->id }}" @selected((string) old('expense_category_id') === (string) $category->id)>{{ $category->name }}</option>
+                            @endforeach
+                        </select>
+                        @if ($expenseCategories->isEmpty())
+                            <div class="field-tip">Add categories from Setup > Expense Categories first.</div>
+                        @endif
                     </label>
                     <label class="form-field">
                         <span>Amount</span>

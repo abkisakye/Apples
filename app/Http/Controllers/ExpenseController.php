@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use App\Models\PaymentMode;
 use App\Models\Store;
 use App\Services\AuditLogService;
@@ -20,21 +21,24 @@ class ExpenseController extends Controller
     {
         $search = trim((string) $request->string('q'));
         $category = trim((string) $request->string('category'));
+        $expenseCategoryId = $request->integer('expense_category_id');
         $storeId = $request->integer('store_id');
         $period = trim((string) $request->string('period'));
         [$fromDate, $toDate] = $this->periodRange($period);
 
         $expensesQuery = Expense::query()
-            ->with(['store:id,name', 'paymentMode:id,name', 'creator:id,name'])
+            ->with(['store:id,name', 'paymentMode:id,name', 'creator:id,name', 'expenseCategory:id,name'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($inner) use ($search) {
                     $inner->where('expense_no', 'like', "%{$search}%")
                         ->orWhere('reference_no', 'like', "%{$search}%")
                         ->orWhere('notes', 'like', "%{$search}%")
                         ->orWhere('category', 'like', "%{$search}%")
+                        ->orWhereHas('expenseCategory', fn ($categoryQuery) => $categoryQuery->where('name', 'like', "%{$search}%"))
                         ->orWhereHas('store', fn ($storeQuery) => $storeQuery->where('name', 'like', "%{$search}%"));
                 });
             })
+            ->when($expenseCategoryId > 0, fn ($query) => $query->where('expense_category_id', $expenseCategoryId))
             ->when($category !== '', fn ($query) => $query->where('category', $category))
             ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
             ->when($fromDate && $toDate, fn ($query) => $query->whereBetween('expense_date', [$fromDate, $toDate]))
@@ -44,6 +48,7 @@ class ExpenseController extends Controller
         return view('expenses.index', [
             'search' => $search,
             'category' => $category,
+            'expenseCategoryId' => $expenseCategoryId,
             'storeId' => $storeId,
             'period' => $period,
             'expenses' => (clone $expensesQuery)->paginate(20)->withQueryString(),
@@ -52,7 +57,7 @@ class ExpenseController extends Controller
                 'amount' => (float) (clone $expensesQuery)->sum('amount'),
                 'today' => (float) (clone $expensesQuery)->whereDate('expense_date', now()->toDateString())->sum('amount'),
             ],
-            'categories' => Expense::query()->select('category')->distinct()->orderBy('category')->pluck('category'),
+            'categories' => ExpenseCategory::query()->orderBy('name')->get(['id', 'name']),
             'stores' => Store::query()->orderBy('name')->get(['id', 'name']),
         ]);
     }
@@ -62,20 +67,21 @@ class ExpenseController extends Controller
         return view('expenses.create', [
             'stores' => Store::query()->orderBy('name')->get(['id', 'name']),
             'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'expenseCategories' => ExpenseCategory::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'defaultStoreId' => auth()->user()?->default_store_id,
         ]);
     }
 
     public function show(Expense $expense): View
     {
-        $expense->load(['store:id,name', 'paymentMode:id,name', 'creator:id,name']);
+        $expense->load(['store:id,name', 'paymentMode:id,name', 'creator:id,name', 'expenseCategory:id,name']);
 
         return view('expenses.show', compact('expense'));
     }
 
     public function print(Expense $expense): View
     {
-        $expense->load(['store:id,name', 'paymentMode:id,name', 'creator:id,name']);
+        $expense->load(['store:id,name', 'paymentMode:id,name', 'creator:id,name', 'expenseCategory:id,name']);
 
         return view('expenses.print', compact('expense'));
     }
@@ -91,19 +97,22 @@ class ExpenseController extends Controller
             'expense_date' => ['required', 'date'],
             'store_id' => ['nullable', 'exists:stores,id'],
             'payment_mode_id' => ['required', 'exists:payment_modes,id'],
-            'category' => ['required', 'string', 'max:255'],
+            'expense_category_id' => ['nullable', 'exists:expense_categories,id', 'required_without:category'],
+            'category' => ['nullable', 'string', 'max:255', 'required_without:expense_category_id'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'reference_no' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
         ]);
         $storeId = $storeAssignmentService->resolveStoreId((int) ($validated['store_id'] ?? auth()->user()?->default_store_id), $request->user(), app(AccessService::class));
+        $expenseCategory = $this->resolveExpenseCategory($validated);
 
         $expense = Expense::query()->create([
             'expense_no' => $documentNumberService->make('expense', $validated['expense_date']),
             'expense_date' => $validated['expense_date'],
             'store_id' => $storeId,
             'payment_mode_id' => $validated['payment_mode_id'],
-            'category' => trim($validated['category']),
+            'expense_category_id' => $expenseCategory?->id,
+            'category' => $expenseCategory?->name ?? trim((string) ($validated['category'] ?? '')),
             'amount' => round((float) $validated['amount'], 2),
             'reference_no' => $validated['reference_no'] ?? null,
             'notes' => $validated['notes'] ?? null,
@@ -113,12 +122,30 @@ class ExpenseController extends Controller
 
         $auditLogService->record('expense.posted', $expense, "Expense {$expense->expense_no} posted.", [
             'amount' => $expense->amount,
-            'category' => $expense->category,
+            'category' => $expense->categoryName(),
         ]);
 
         return redirect()
             ->route('expenses.show', $expense)
             ->with('status', "Expense {$expense->expense_no} recorded successfully.");
+    }
+
+    private function resolveExpenseCategory(array $validated): ?ExpenseCategory
+    {
+        if (! empty($validated['expense_category_id'])) {
+            return ExpenseCategory::query()->find((int) $validated['expense_category_id']);
+        }
+
+        $categoryName = trim((string) ($validated['category'] ?? ''));
+
+        if ($categoryName === '') {
+            return null;
+        }
+
+        return ExpenseCategory::query()->firstOrCreate(
+            ['name' => $categoryName],
+            ['is_active' => true]
+        );
     }
 
     private function periodRange(string $period): array

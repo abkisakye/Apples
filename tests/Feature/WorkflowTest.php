@@ -8,6 +8,7 @@ use App\Models\CashShift;
 use App\Models\CapitalSource;
 use App\Models\Customer;
 use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use App\Models\FollowUpAction;
 use App\Models\InventoryTransaction;
 use App\Models\PaymentMode;
@@ -855,9 +856,31 @@ class WorkflowTest extends TestCase
             'is_active' => 1,
         ])->assertRedirect('/setup/capital-sources');
 
+        $this->post('/setup/expense-categories', [
+            'name' => 'Transport',
+            'description' => 'Fuel, boda, and delivery movement costs',
+            'is_active' => 1,
+        ])->assertRedirect('/setup/expense-categories');
+
         $this->assertDatabaseHas('stores', ['name' => 'Downtown Branch Updated']);
         $this->assertDatabaseHas('payment_modes', ['name' => 'Mobile Money']);
         $this->assertDatabaseHas('capital_sources', ['name' => 'Business Savings']);
+        $this->assertDatabaseHas('expense_categories', ['name' => 'Transport']);
+    }
+
+    public function test_setup_pages_are_available_to_admin_and_blocked_for_cashier(): void
+    {
+        foreach (['stores', 'categories', 'payment-modes', 'capital-sources', 'expense-categories'] as $resource) {
+            $this->get('/setup/'.$resource)->assertOk();
+        }
+
+        $this->get('/setup/categories')->assertOk()->assertSee('Categories');
+
+        $this->signInAsRole('cashier');
+
+        foreach (['stores', 'categories', 'payment-modes', 'capital-sources', 'expense-categories'] as $resource) {
+            $this->get('/setup/'.$resource)->assertForbidden();
+        }
     }
 
     public function test_sales_purchases_and_accounts_can_be_archived_or_voided_safely(): void
@@ -1337,7 +1360,7 @@ class WorkflowTest extends TestCase
             ->assertSee('Replacement for '.$saleReturn->return_no)
             ->assertSee('Exchange return')
             ->assertSee('Juice - Bottle')
-            ->assertSee('Scan barcode / code');
+            ->assertSee('Scan / barcode / code');
 
         $replacementResponse = $this->post('/sales', [
             'sale_date' => '2026-03-26',
@@ -2389,12 +2412,13 @@ class WorkflowTest extends TestCase
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
         $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $expenseCategory = ExpenseCategory::create(['name' => 'Transport', 'is_active' => true]);
 
         $response = $this->post('/expenses', [
             'expense_date' => '2026-04-17',
             'store_id' => $store->id,
             'payment_mode_id' => $paymentMode->id,
-            'category' => 'Transport',
+            'expense_category_id' => $expenseCategory->id,
             'amount' => 12000,
             'reference_no' => 'EXP-REF-1',
             'notes' => 'Morning delivery transport',
@@ -2406,6 +2430,7 @@ class WorkflowTest extends TestCase
         $this->get('/expenses')->assertOk()->assertSee($expense->expense_no);
         $this->get('/expenses/'.$expense->id)->assertOk()->assertSee('Transport');
         $this->get('/expenses/'.$expense->id.'/print')->assertOk()->assertSee($expense->expense_no);
+        $this->assertSame($expenseCategory->id, $expense->expense_category_id);
         $this->assertEquals(12000.0, (float) $expense->amount);
     }
 
@@ -2809,6 +2834,24 @@ class WorkflowTest extends TestCase
         $this->get('/')->assertOk();
         $this->get('/sales/create')->assertOk();
         $this->get('/stock/adjustments/create')->assertOk();
+    }
+
+    public function test_sale_create_shows_modern_pos_shortcuts(): void
+    {
+        PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
+        PaymentMode::create(['name' => 'Card', 'is_active' => true]);
+        PaymentMode::create(['name' => 'Credit', 'is_active' => true]);
+
+        $this->get('/sales/create')
+            ->assertOk()
+            ->assertSee('TOTAL')
+            ->assertSee('CASH')
+            ->assertSee('MOBILE MONEY')
+            ->assertSee('CARD')
+            ->assertSee('CREDIT')
+            ->assertSee('Scan / barcode / code')
+            ->assertSee('Cart');
     }
 
     public function test_permissions_matrix_can_be_updated_from_one_page(): void

@@ -96,10 +96,10 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware('ability:activity_logs.view')->name('activity-logs.index');
     Route::get('/settings/business', [BusinessSettingsController::class, 'edit'])->middleware('ability:business.manage')->name('settings.business.edit');
     Route::post('/settings/business', [BusinessSettingsController::class, 'update'])->middleware('ability:business.manage')->name('settings.business.update');
-    Route::get('/setup/{resource}', [MasterDataController::class, 'index'])->whereIn('resource', ['stores', 'categories', 'payment-modes', 'capital-sources'])->middleware('ability:business.manage')->name('master-data.index');
-    Route::post('/setup/{resource}', [MasterDataController::class, 'store'])->whereIn('resource', ['stores', 'categories', 'payment-modes', 'capital-sources'])->middleware('ability:business.manage')->name('master-data.store');
-    Route::put('/setup/{resource}/{record}', [MasterDataController::class, 'update'])->whereIn('resource', ['stores', 'categories', 'payment-modes', 'capital-sources'])->middleware('ability:business.manage')->name('master-data.update');
-    Route::post('/setup/{resource}/{record}/status', [MasterDataController::class, 'updateStatus'])->whereIn('resource', ['stores', 'categories', 'payment-modes', 'capital-sources'])->middleware('ability:business.manage')->name('master-data.status');
+    Route::get('/setup/{resource}', [MasterDataController::class, 'index'])->whereIn('resource', MasterDataController::SUPPORTED_RESOURCES)->middleware('ability:business.manage')->name('master-data.index');
+    Route::post('/setup/{resource}', [MasterDataController::class, 'store'])->whereIn('resource', MasterDataController::SUPPORTED_RESOURCES)->middleware('ability:business.manage')->name('master-data.store');
+    Route::put('/setup/{resource}/{record}', [MasterDataController::class, 'update'])->whereIn('resource', MasterDataController::SUPPORTED_RESOURCES)->middleware('ability:business.manage')->name('master-data.update');
+    Route::post('/setup/{resource}/{record}/status', [MasterDataController::class, 'updateStatus'])->whereIn('resource', MasterDataController::SUPPORTED_RESOURCES)->middleware('ability:business.manage')->name('master-data.status');
     Route::get('/reports/customer-aging', [ReportController::class, 'customerAging'])->middleware('ability:reports.view')->name('reports.customer-aging');
     Route::get('/reports/customer-aging/export', [ReportController::class, 'customerAgingExport'])->middleware('ability:reports.view')->name('reports.customer-aging.export');
     Route::get('/reports/supplier-aging', [ReportController::class, 'supplierAging'])->middleware('ability:reports.view')->name('reports.supplier-aging');

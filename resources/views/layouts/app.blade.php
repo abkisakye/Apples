@@ -900,6 +900,16 @@
             ],
         ],
         [
+            'label' => 'Setup',
+            'items' => [
+                ['label' => 'Stores', 'route' => 'master-data.index', 'route_params' => ['resource' => 'stores'], 'match' => 'master-data.*', 'active_resource' => 'stores', 'ability' => 'business.manage', 'mark' => 'ST'],
+                ['label' => 'Product Categories', 'route' => 'master-data.index', 'route_params' => ['resource' => 'categories'], 'match' => 'master-data.*', 'active_resource' => 'categories', 'ability' => 'business.manage', 'mark' => 'PC'],
+                ['label' => 'Payment Modes', 'route' => 'master-data.index', 'route_params' => ['resource' => 'payment-modes'], 'match' => 'master-data.*', 'active_resource' => 'payment-modes', 'ability' => 'business.manage', 'mark' => 'PM'],
+                ['label' => 'Capital Sources', 'route' => 'master-data.index', 'route_params' => ['resource' => 'capital-sources'], 'match' => 'master-data.*', 'active_resource' => 'capital-sources', 'ability' => 'business.manage', 'mark' => 'CS'],
+                ['label' => 'Expense Categories', 'route' => 'master-data.index', 'route_params' => ['resource' => 'expense-categories'], 'match' => 'master-data.*', 'active_resource' => 'expense-categories', 'ability' => 'business.manage', 'mark' => 'EC'],
+            ],
+        ],
+        [
             'label' => 'Admin',
             'items' => [
                 ['label' => 'UAT Center', 'route' => 'admin.uat-center', 'match' => 'admin.uat-center', 'ability' => 'users.manage', 'mark' => 'UA'],
@@ -908,7 +918,6 @@
                 ['label' => 'Permissions', 'route' => 'roles.matrix', 'match' => 'roles.matrix*', 'ability' => 'users.manage', 'mark' => 'PM'],
                 ['label' => 'Roles', 'route' => 'roles.index', 'match' => 'roles.*', 'ability' => 'users.manage', 'mark' => 'RL'],
                 ['label' => 'Business Settings', 'route' => 'settings.business.edit', 'match' => 'settings.business.*', 'ability' => 'business.manage', 'mark' => 'BS'],
-                ['label' => 'Master Data', 'route' => 'master-data.index', 'route_params' => ['resource' => 'stores'], 'match' => 'master-data.*', 'ability' => 'business.manage', 'mark' => 'MD'],
                 ['label' => 'Activity Log', 'route' => 'activity-logs.index', 'match' => 'activity-logs.*', 'ability' => 'activity_logs.view', 'mark' => 'LG'],
                 ['label' => 'Users', 'route' => 'users.index', 'match' => 'users.*', 'ability' => 'users.manage', 'mark' => 'US'],
             ],
@@ -950,7 +959,8 @@
                         <div class="nav-label">{{ $group['label'] }}</div>
                         <nav class="nav">
                             @foreach ($visibleItems as $item)
-                                <a href="{{ route($item['route'], $item['route_params'] ?? []) }}" class="{{ request()->routeIs($item['match']) ? 'active' : '' }}">
+                                @php($isActive = request()->routeIs($item['match']) && (! isset($item['active_resource']) || request()->route('resource') === $item['active_resource']))
+                                <a href="{{ route($item['route'], $item['route_params'] ?? []) }}" class="{{ $isActive ? 'active' : '' }}">
                                     <span class="nav-mark">{{ $item['mark'] }}</span>
                                     <span>{{ $item['label'] }}</span>
                                 </a>

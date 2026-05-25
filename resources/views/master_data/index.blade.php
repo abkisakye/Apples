@@ -13,12 +13,7 @@
     </div>
 
     <div class="actions" style="margin-bottom: 16px;">
-        @foreach ([
-            'stores' => 'Shop',
-            'categories' => 'Categories',
-            'payment-modes' => 'Payment Modes',
-            'capital-sources' => 'Capital Sources',
-        ] as $resourceKey => $resourceLabel)
+        @foreach ($resourceLinks as $resourceKey => $resourceLabel)
             <a href="{{ route('master-data.index', ['resource' => $resourceKey]) }}" class="button-link {{ $resource === $resourceKey ? 'primary' : '' }}">{{ $resourceLabel }}</a>
         @endforeach
     </div>

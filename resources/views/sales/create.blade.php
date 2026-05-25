@@ -1,35 +1,54 @@
 @extends('layouts.app', ['title' => 'New Sale'])
 
 @section('content')
-    @php($currency = config('business.currency', 'UGX'))
-    @php($customersPayload = $customers->map(fn ($customer) => [
-        'id' => $customer->id,
-        'name' => $customer->name,
-        'is_walk_in' => (bool) $customer->is_walk_in,
-        'location' => $customer->location,
-        'credit' => round((float) ($customer->outstanding_credit ?? 0) + max((float) ($customer->opening_balance ?? 0) - (float) ($customer->opening_payments_total ?? 0), 0), 2),
-        'search' => strtolower(trim(implode(' ', array_filter([
-            $customer->name,
-            $customer->location,
-        ])))),
-    ]))
-    @php($unitsPayload = $productUnits->map(fn ($unit) => [
-        'id' => $unit->id,
-        'label' => trim($unit->product->name.' - '.$unit->unit_name),
-        'product_name' => $unit->product->name,
-        'unit_name' => $unit->unit_name,
-        'price' => (float) $unit->selling_price,
-        'barcode' => $unit->barcode,
-        'code' => $unit->product->code,
-        'part_number' => $unit->part_number,
-        'search' => strtolower(trim(implode(' ', array_filter([
-            $unit->product->name,
-            $unit->unit_name,
-            $unit->product->code,
-            $unit->barcode,
-            $unit->part_number,
-        ])))),
-    ]))
+    @php
+        $currency = config('business.currency', 'UGX');
+        $customersPayload = $customers->map(fn ($customer) => [
+            'id' => $customer->id,
+            'name' => $customer->name,
+            'is_walk_in' => (bool) $customer->is_walk_in,
+            'location' => $customer->location,
+            'credit' => round((float) ($customer->outstanding_credit ?? 0) + max((float) ($customer->opening_balance ?? 0) - (float) ($customer->opening_payments_total ?? 0), 0), 2),
+            'search' => strtolower(trim(implode(' ', array_filter([
+                $customer->name,
+                $customer->location,
+            ])))),
+        ]);
+        $unitsPayload = $productUnits->map(fn ($unit) => [
+            'id' => $unit->id,
+            'label' => trim($unit->product->name.' - '.$unit->unit_name),
+            'product_name' => $unit->product->name,
+            'unit_name' => $unit->unit_name,
+            'price' => (float) $unit->selling_price,
+            'barcode' => $unit->barcode,
+            'code' => $unit->product->code,
+            'part_number' => $unit->part_number,
+            'image_url' => null,
+            'search' => strtolower(trim(implode(' ', array_filter([
+                $unit->product->name,
+                $unit->unit_name,
+                $unit->product->code,
+                $unit->barcode,
+                $unit->part_number,
+            ])))),
+        ]);
+        $paymentShortcutLabels = [
+            'cash' => 'CASH',
+            'mobile' => 'MOBILE MONEY',
+            'card' => 'CARD',
+            'credit' => 'CREDIT',
+        ];
+        $paymentShortcutModes = collect($paymentShortcutLabels)->mapWithKeys(function ($label, $key) use ($paymentModes) {
+            $needle = $key === 'mobile' ? 'mobile' : $key;
+            $mode = $paymentModes->first(fn ($paymentMode) => str_contains(strtolower($paymentMode->name), $needle));
+
+            return [$key => [
+                'label' => $label,
+                'mode_id' => $mode?->id,
+                'mode_name' => $mode?->name,
+            ]];
+        });
+    @endphp
 
     <style>
         .sale-workspace {
@@ -191,38 +210,76 @@
             font-size: .76rem;
         }
         .sale-product-card {
-            display: grid;
-            gap: 6px;
-            padding: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 74px;
+            padding: 8px 10px;
             border-radius: 13px;
             border: 1px solid color-mix(in srgb, var(--line) 82%, var(--brand) 18%);
             background:
                 radial-gradient(circle at top right, rgba(212, 175, 55, 0.14), transparent 42%),
                 linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(246, 249, 246, .98) 100%);
-            min-height: 102px;
+            overflow: hidden;
         }
-        .sale-product-card strong {
+        .product-token {
+            display: inline-grid;
+            place-items: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, rgba(6, 104, 56, 0.12), rgba(212, 175, 55, 0.18));
+            color: var(--brand);
+            font-size: .78rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+        img.product-token {
+            object-fit: cover;
+            padding: 0;
+        }
+        .product-token.cart-token {
+            width: 28px;
+            height: 28px;
+            border-radius: 9px;
+            font-size: .68rem;
+        }
+        .product-main {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: grid;
+            gap: 3px;
+        }
+        .product-name {
             display: block;
             font-size: .79rem;
             line-height: 1.2;
+            font-weight: 800;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .sale-product-meta {
             color: var(--muted);
-            font-size: .66rem;
-            line-height: 1.28;
+            font-size: .69rem;
+            line-height: 1.25;
+            overflow: hidden;
         }
-        .sale-product-footer {
+        .product-action {
+            flex: 0 0 92px;
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
+            align-items: flex-end;
+            justify-content: center;
             gap: 6px;
-            align-items: end;
-            margin-top: auto;
         }
         .sale-product-price {
             display: inline-flex;
             align-items: center;
+            justify-content: flex-end;
             min-height: 30px;
-            padding: 0 8px;
+            max-width: 100%;
+            padding: 0 6px;
             border-radius: 999px;
             background: rgba(6, 104, 56, 0.1);
             color: var(--brand);
@@ -232,6 +289,7 @@
         }
         .sale-add-button {
             min-height: 31px;
+            width: 72px;
             padding: 0 10px;
             border: 0;
             border-radius: 12px;
@@ -496,6 +554,51 @@
             display: grid;
             gap: 6px;
         }
+        .checkout-total-display {
+            padding: 13px 14px;
+            border-radius: 16px;
+            border: 1px solid color-mix(in srgb, var(--brand) 38%, var(--line) 62%);
+            background:
+                linear-gradient(135deg, rgba(6, 104, 56, 0.96), rgba(4, 81, 44, 0.96)),
+                var(--brand);
+            color: #fff;
+        }
+        .checkout-total-label {
+            font-size: .76rem;
+            font-weight: 900;
+            letter-spacing: .12em;
+        }
+        .checkout-total-amount {
+            margin-top: 4px;
+            font-size: 2rem;
+            line-height: 1.02;
+            font-weight: 900;
+        }
+        .payment-shortcuts {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+        .payment-shortcut {
+            min-height: 48px;
+            border-radius: 13px;
+            border: 1px solid color-mix(in srgb, var(--line) 76%, var(--brand) 24%);
+            background: #fff;
+            color: var(--ink);
+            font-size: .78rem;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .payment-shortcut.is-active {
+            background: linear-gradient(135deg, var(--accent), #e4c762);
+            border-color: #b89125;
+            color: #3e2e03;
+            box-shadow: 0 10px 20px rgba(212, 175, 55, .2);
+        }
+        .payment-shortcut.is-missing {
+            opacity: .48;
+            cursor: not-allowed;
+        }
         .sale-total-box {
             display: flex;
             justify-content: space-between;
@@ -708,6 +811,25 @@
         .sale-search-panel {
             gap: 7px;
         }
+        .sale-search-panel {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            border-color: color-mix(in srgb, var(--brand) 30%, var(--line) 70%);
+        }
+        .sale-search-panel .sale-section-head h3 {
+            font-size: 1rem;
+        }
+        .scan-box {
+            display: grid;
+            gap: 3px;
+        }
+        .scan-box .sale-input {
+            min-height: 48px;
+            border-width: 2px;
+            font-size: .95rem;
+            font-weight: 800;
+        }
         .sale-section-head {
             display: flex;
             align-items: center;
@@ -778,14 +900,18 @@
             height: 100%;
         }
         .sale-product-card {
-            grid-template-columns: minmax(0, 1fr) auto;
-            align-items: center;
-            gap: 7px;
-            min-height: 0;
-            padding: 6px 7px;
+            gap: 8px;
+            min-height: 74px;
+            padding: 8px 10px;
             border-radius: 10px;
         }
-        .sale-product-card strong {
+        .product-token {
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+            font-size: .7rem;
+        }
+        .product-name {
             font-size: .75rem;
             white-space: nowrap;
             overflow: hidden;
@@ -794,13 +920,11 @@
         .sale-product-meta {
             margin-top: 2px;
             font-size: .61rem;
-            white-space: nowrap;
             overflow: hidden;
-            text-overflow: ellipsis;
         }
-        .sale-product-footer {
-            margin-top: 0;
-            align-items: center;
+        .product-action {
+            flex-basis: 88px;
+            gap: 5px;
         }
         .sale-product-price {
             min-height: 26px;
@@ -809,6 +933,7 @@
         }
         .sale-add-button {
             min-height: 28px;
+            width: 68px;
             padding: 0 9px;
             border-radius: 9px;
             font-size: .7rem;
@@ -829,7 +954,7 @@
             grid-column: 3;
             grid-row: 1 / span 2;
             display: grid;
-            grid-template-rows: auto auto auto auto auto;
+            grid-template-rows: auto auto auto auto auto auto;
             align-content: start;
             overflow-y: auto !important;
         }
@@ -917,11 +1042,17 @@
             font-size: .76rem;
         }
         .bill-row {
-            grid-template-columns: minmax(0, 1fr) 142px 88px 98px 30px;
+            grid-template-columns: minmax(0, 1fr) 150px 88px 104px 30px;
             align-items: center;
             gap: 5px;
             padding: 5px 6px;
             border-radius: 10px;
+        }
+        .bill-row-title {
+            display: grid;
+            grid-template-columns: 28px minmax(0, 1fr);
+            gap: 6px;
+            align-items: center;
         }
         .bill-row-top,
         .bill-row-grid {
@@ -984,6 +1115,24 @@
         .sale-total-stack {
             gap: 4px;
         }
+        .checkout-total-display {
+            padding: 10px 11px;
+            border-radius: 13px;
+        }
+        .checkout-total-label {
+            font-size: .64rem;
+        }
+        .checkout-total-amount {
+            font-size: 2.06rem;
+        }
+        .payment-shortcuts {
+            gap: 5px;
+        }
+        .payment-shortcut {
+            min-height: 42px;
+            border-radius: 11px;
+            font-size: .68rem;
+        }
         .sale-total-box {
             padding: 6px 7px;
             border-radius: 10px;
@@ -997,9 +1146,19 @@
         .sale-total-box.grand strong {
             font-size: 1.34rem;
         }
+        .sale-total-box.grand {
+            display: none;
+        }
+        .sale-total-box.secondary-total {
+            display: none;
+        }
         .sale-payment-grid {
             grid-template-columns: 1fr;
             gap: 5px;
+        }
+        .sale-payment-grid .payment-mode-field,
+        .sale-payment-grid .discount-field {
+            display: none;
         }
         .sale-textarea {
             min-height: 48px;
@@ -1174,8 +1333,7 @@
             <section class="panel sale-search-panel">
                 <div class="sale-section-head">
                     <div>
-                        <h3>Find Products</h3>
-                        <p>Scan or type product name.</p>
+                        <h3>Search</h3>
                     </div>
                 </div>
 
@@ -1186,11 +1344,11 @@
                 @endif
 
                 <div class="sale-search-row">
-                    <div>
-                        <input type="text" id="scan-search" class="sale-input" placeholder="Scan barcode / code">
-                        <div id="scan-status" class="scan-status">Scan and press Enter.</div>
+                    <div class="scan-box">
+                        <input type="text" id="scan-search" class="sale-input" placeholder="Scan / barcode / code">
+                        <div id="scan-status" class="scan-status">Ready</div>
                     </div>
-                    <input type="text" id="product-search" class="sale-input" placeholder="Find product">
+                    <input type="text" id="product-search" class="sale-input" placeholder="Search products">
                 </div>
 
                 <div class="sale-kpis">
@@ -1217,7 +1375,6 @@
                 <div class="sale-section-head">
                     <div>
                         <h3>Products</h3>
-                        <p>Click Add.</p>
                     </div>
                 </div>
                 <div class="sale-results-meta">
@@ -1271,7 +1428,7 @@
 
                 <div class="sale-mini-grid">
                     <label class="sale-field">
-                        <span>Sale Date</span>
+                        <span>Date</span>
                         <input type="date" name="sale_date" id="sale-date" class="sale-input sale-date-compact" value="{{ old('sale_date', now()->toDateString()) }}" required data-keypad-input="date">
                     </label>
                     <div class="sale-field">
@@ -1297,14 +1454,13 @@
             <section class="panel sale-cart-wrap">
                 <div class="sale-section-head">
                     <div>
-                        <h3>Selected Products</h3>
-                        <p>Qty, price, total.</p>
+                        <h3>Cart</h3>
                     </div>
-                    <button type="button" id="clear-cart" class="button-link">Clear Sale</button>
+                    <button type="button" id="clear-cart" class="button-link">Clear</button>
                 </div>
 
                 <div id="cart-empty" class="bill-empty">
-                    No products selected.
+                    No products.
                 </div>
                 <div id="cart-list" class="bill-list"></div>
                 <div id="sale-items-hidden"></div>
@@ -1314,8 +1470,26 @@
                 <div class="sale-section-head">
                     <div>
                         <h3>Checkout</h3>
-                        <p>Pay and save.</p>
                     </div>
+                </div>
+
+                <div class="checkout-total-display">
+                    <div class="checkout-total-label">TOTAL</div>
+                    <div class="checkout-total-amount" id="checkout-total-display">{{ $currency }} 0</div>
+                </div>
+
+                <div class="payment-shortcuts" aria-label="Payment shortcuts">
+                    @foreach ($paymentShortcutModes as $shortcutKey => $shortcut)
+                        <button
+                            type="button"
+                            class="payment-shortcut @unless ($shortcut['mode_id']) is-missing @endunless"
+                            data-payment-shortcut="{{ $shortcutKey }}"
+                            data-payment-mode-id="{{ $shortcut['mode_id'] }}"
+                            @unless ($shortcut['mode_id']) title="{{ $shortcut['label'] }} mode is not configured" @endunless
+                        >
+                            {{ $shortcut['label'] }}
+                        </button>
+                    @endforeach
                 </div>
 
                 <div class="sale-total-stack">
@@ -1323,20 +1497,20 @@
                         <span>Customer</span>
                         <strong id="customer-summary">Choose customer</strong>
                     </div>
-                    <div class="sale-total-box">
+                    <div class="sale-total-box secondary-total">
                         <span>Items</span>
                         <strong id="items-summary">0</strong>
                     </div>
-                    <div class="sale-total-box">
-                        <span>Subtotal</span>
+                    <div class="sale-total-box secondary-total">
+                        <span>Sub</span>
                         <strong id="subtotal-summary">{{ $currency }} 0</strong>
                     </div>
-                    <div class="sale-total-box">
+                    <div class="sale-total-box secondary-total">
                         <span>Discount</span>
                         <strong id="discount-summary">{{ $currency }} 0</strong>
                     </div>
                     <div class="sale-total-box">
-                        <span>Received</span>
+                        <span>Paid</span>
                         <strong id="received-summary">{{ $currency }} 0</strong>
                     </div>
                     <div class="sale-total-box">
@@ -1347,8 +1521,8 @@
                         <span>Change</span>
                         <strong id="change-summary">{{ $currency }} 0</strong>
                     </div>
-                    <div class="sale-total-box">
-                        <span>Due Date</span>
+                    <div class="sale-total-box secondary-total">
+                        <span>Due</span>
                         <strong id="due-summary">Not needed</strong>
                     </div>
                     <div class="sale-total-box grand">
@@ -1360,9 +1534,9 @@
                 <div style="height: 10px;"></div>
 
                 <div class="sale-payment-grid">
-                    <label class="sale-field">
+                    <label class="sale-field payment-mode-field">
                         <span>Payment</span>
-                        <select name="payment_mode_id" class="sale-select">
+                        <select name="payment_mode_id" id="payment-mode" class="sale-select">
                             <option value="">Choose mode</option>
                             @foreach ($paymentModes as $mode)
                                 <option value="{{ $mode->id }}" @selected((string) old('payment_mode_id') === (string) $mode->id)>{{ $mode->name }}</option>
@@ -1373,12 +1547,12 @@
                         <span>Paid</span>
                         <input type="number" step="0.01" min="0" name="amount_paid" id="amount-paid" value="{{ old('amount_paid', $prefillSale['amount_paid']) }}" data-keypad-input="decimal">
                     </label>
-                    <label class="sale-field">
+                    <label class="sale-field discount-field">
                         <span>Discount</span>
                         <input type="number" step="0.01" min="0" name="discount_amount" id="discount-amount" value="{{ old('discount_amount', $prefillSale['discount_amount']) }}" data-keypad-input="decimal">
                     </label>
                     <label class="sale-field" id="credit-period-wrap">
-                        <span>Credit Period (days)</span>
+                        <span>Credit Days</span>
                         <input
                             type="number"
                             min="1"
@@ -1401,14 +1575,14 @@
                 <div style="height: 8px;"></div>
 
                 <label class="sale-field">
-                    <span>Remarks</span>
+                    <span>Note</span>
                     <textarea name="remarks" class="sale-textarea" placeholder="Optional note">{{ old('remarks', $prefillSale['remarks']) }}</textarea>
                 </label>
 
                 <div style="height: 12px;"></div>
 
                 <div class="sale-actions-row">
-                    <button type="button" id="fill-total" class="button-link">Paid Full</button>
+                    <button type="button" id="fill-total" class="button-link">Full</button>
                     <button type="submit" class="sale-primary-button">Checkout</button>
                 </div>
             </section>
@@ -1480,6 +1654,8 @@
             const searchResults = document.getElementById('product-search-results');
             const productResultsNote = document.getElementById('product-results-note');
             const productResultsCount = document.getElementById('product-results-count');
+            const paymentModeSelect = document.getElementById('payment-mode');
+            const paymentShortcutButtons = Array.from(document.querySelectorAll('[data-payment-shortcut]'));
             const amountPaidInput = document.getElementById('amount-paid');
             const discountAmountInput = document.getElementById('discount-amount');
             const creditPeriodInput = document.getElementById('credit-period');
@@ -1518,6 +1694,7 @@
             const changeSummary = document.getElementById('change-summary');
             const dueSummary = document.getElementById('due-summary');
             const totalSummary = document.getElementById('total-summary');
+            const checkoutTotalDisplay = document.getElementById('checkout-total-display');
             const itemsInlineSummary = document.getElementById('items-inline-summary');
             const unitsInlineSummary = document.getElementById('units-inline-summary');
             const totalInlineSummary = document.getElementById('total-inline-summary');
@@ -1541,6 +1718,7 @@
                         quantity: {{ (int) round((float) ($oldItem['quantity'] ?? 1)) }},
                         barcode: @json($oldUnit->barcode),
                         code: @json($oldUnit->product->code),
+                        image_url: null,
                     });
                 @endif
             @endforeach
@@ -1552,6 +1730,24 @@
 
             function money(value) {
                 return `${currency} ${Number(value || 0).toLocaleString()}`;
+            }
+
+            function initials(value) {
+                return String(value || '')
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((part) => part[0])
+                    .join('')
+                    .toUpperCase() || 'P';
+            }
+
+            function productToken(item, extraClass = '') {
+                if (item.image_url) {
+                    return `<img src="${item.image_url}" alt="" class="product-token ${extraClass}">`;
+                }
+
+                return `<span class="product-token ${extraClass}">${initials(item.product_name || item.label)}</span>`;
             }
 
             function subtotal() {
@@ -1591,6 +1787,41 @@
                 const base = new Date(`${saleDateInput.value}T00:00:00`);
                 base.setDate(base.getDate() + days);
                 return base.toLocaleDateString();
+            }
+
+            function activePaymentShortcut() {
+                if (!paymentModeSelect) {
+                    return null;
+                }
+
+                const selectedMode = String(paymentModeSelect.value || '');
+
+                return paymentShortcutButtons.find((button) => String(button.dataset.paymentModeId || '') === selectedMode) || null;
+            }
+
+            function syncPaymentShortcuts() {
+                const activeButton = activePaymentShortcut();
+                paymentShortcutButtons.forEach((button) => {
+                    button.classList.toggle('is-active', button === activeButton);
+                });
+            }
+
+            function applyPaymentShortcut(button) {
+                if (!button || button.classList.contains('is-missing') || !paymentModeSelect) {
+                    return;
+                }
+
+                paymentModeSelect.value = button.dataset.paymentModeId || '';
+
+                if (button.dataset.paymentShortcut === 'credit') {
+                    amountPaidInput.value = '0';
+                } else if (amountReceived() <= 0 && totalSale() > 0) {
+                    amountPaidInput.value = totalSale().toFixed(2);
+                }
+
+                paymentModeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                amountPaidInput.dispatchEvent(new Event('input', { bubbles: true }));
+                renderCart();
             }
 
             function walkInCustomer() {
@@ -1665,8 +1896,8 @@
 
                 if (productResultsNote) {
                     productResultsNote.textContent = needle.length < 1
-                        ? 'Quick pick. Type to search all products.'
-                        : `Searching all products for "${searchInput.value.trim()}".`;
+                        ? 'Quick pick'
+                        : `Search: ${searchInput.value.trim()}`;
                 }
 
                 if (productResultsCount) {
@@ -1678,19 +1909,20 @@
                 searchResults.innerHTML = results.length
                     ? results.map((item) => `
                         <div class="sale-product-card">
-                            <div>
-                                <strong>${item.label}</strong>
+                            ${productToken(item)}
+                            <div class="product-main">
+                                <strong class="product-name">${item.label}</strong>
                                 <div class="sale-product-meta">
-                                    ${item.code ? `Code: ${item.code}<br>` : ''}${item.barcode ? `Barcode: ${item.barcode}<br>` : ''}${item.part_number ? `Part: ${item.part_number}` : 'Ready to sell'}
+                                    ${item.code ? `${item.code}<br>` : ''}${item.barcode ? `${item.barcode}<br>` : ''}${item.part_number ? item.part_number : 'Ready'}
                                 </div>
                             </div>
-                            <div class="sale-product-footer">
+                            <div class="product-action">
                                 <div class="sale-product-price">${money(item.price)}</div>
                                 <button type="button" class="sale-add-button" data-add-unit="${item.id}">Add</button>
                             </div>
                         </div>
                     `).join('')
-                    : `<div class="bill-empty" style="grid-column: 1 / -1;">No products matched that search.</div>`;
+                    : `<div class="bill-empty" style="grid-column: 1 / -1;">No products.</div>`;
             }
 
             function findScanMatch(value) {
@@ -1727,8 +1959,11 @@
                     <div class="bill-row">
                         <div class="bill-row-top">
                             <div class="bill-row-title">
-                                <strong>${item.label}</strong>
-                                <div class="bill-row-sub">${item.code ? `Code: ${item.code}` : 'No code'}${item.barcode ? ` | Barcode: ${item.barcode}` : ''}</div>
+                                ${productToken(item, 'cart-token')}
+                                <div>
+                                    <strong>${item.label}</strong>
+                                    <div class="bill-row-sub">${item.code || item.barcode || 'No code'}</div>
+                                </div>
                             </div>
                             <button type="button" class="bill-remove" data-remove-index="${index}" aria-label="Remove item">×</button>
                         </div>
@@ -1766,6 +2001,7 @@
                 discountSummary.textContent = money(discountAmount());
                 totalInlineSummary.textContent = money(totalSale());
                 totalSummary.textContent = money(totalSale());
+                checkoutTotalDisplay.textContent = money(totalSale());
                 receivedSummary.textContent = money(Math.min(amountReceived(), totalSale()));
                 balanceSummary.textContent = money(saleBalance());
                 mobileTotalSummary.textContent = money(totalSale());
@@ -1806,6 +2042,7 @@
                     saleKindBadge.textContent = 'Cash Sale';
                     saleKindBadge.classList.remove('credit');
                 }
+                syncPaymentShortcuts();
             }
 
             function renderCustomerResults() {
@@ -1944,7 +2181,7 @@
                 const match = findScanMatch(scanInput.value);
 
                 if (!match) {
-                    setScanStatus('No exact match. Use Find product.', 'error');
+                    setScanStatus('No match', 'error');
                     searchInput.value = scanInput.value;
                     renderSearchResults();
                     searchInput.focus();
@@ -1959,7 +2196,7 @@
 
             scanInput?.addEventListener('input', () => {
                 if (String(scanInput.value || '').trim() === '') {
-                    setScanStatus('Scan and press Enter.');
+                    setScanStatus('Ready');
                 }
             });
 
@@ -2031,6 +2268,13 @@
 
             amountPaidInput.addEventListener('input', renderCart);
             discountAmountInput.addEventListener('input', renderCart);
+            paymentModeSelect?.addEventListener('change', () => {
+                syncPaymentShortcuts();
+                renderCart();
+            });
+            paymentShortcutButtons.forEach((button) => {
+                button.addEventListener('click', () => applyPaymentShortcut(button));
+            });
             creditPeriodInput.addEventListener('input', () => {
                 if (String(creditPeriodInput.value || '').trim()) {
                     creditPeriodInput.dataset.lastValue = creditPeriodInput.value;

@@ -26,10 +26,10 @@
     <section class="panel">
         <form method="get" class="filters">
             <input type="search" name="q" value="{{ $search }}" placeholder="Search expense no, reference, category, notes, or store">
-            <select name="category">
+            <select name="expense_category_id">
                 <option value="">All categories</option>
                 @foreach ($categories as $categoryOption)
-                    <option value="{{ $categoryOption }}" @selected($category === $categoryOption)>{{ $categoryOption }}</option>
+                    <option value="{{ $categoryOption->id }}" @selected((string) $expenseCategoryId === (string) $categoryOption->id)>{{ $categoryOption->name }}</option>
                 @endforeach
             </select>
             <select name="store_id">
@@ -45,7 +45,7 @@
                 <option value="month" @selected($period === 'month')>This month</option>
             </select>
             <button type="submit">Filter</button>
-            @if ($search !== '' || $category !== '' || $storeId > 0 || $period !== '')
+            @if ($search !== '' || $category !== '' || $expenseCategoryId > 0 || $storeId > 0 || $period !== '')
                 <a href="{{ route('expenses.index') }}" class="button-link">Clear</a>
             @endif
         </form>
@@ -71,7 +71,7 @@
                                 <div class="table-title"><a href="{{ route('expenses.show', $expense) }}">{{ $expense->expense_no }}</a></div>
                                 <div class="table-meta">{{ $expense->creator?->name ?? 'System user' }}</div>
                             </td>
-                            <td>{{ $expense->category }}</td>
+                            <td>{{ $expense->categoryName() }}</td>
                             <td>{{ $expense->store?->name ?? '-' }}</td>
                             <td>{{ $expense->paymentMode?->name ?? '-' }}</td>
                             <td class="money">{{ $currency }} {{ number_format((float) $expense->amount, 0) }}</td>

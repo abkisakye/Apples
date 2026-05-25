@@ -28,9 +28,19 @@ class Expense extends Model
         return $this->belongsTo(PaymentMode::class);
     }
 
+    public function expenseCategory(): BelongsTo
+    {
+        return $this->belongsTo(ExpenseCategory::class);
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function categoryName(): string
+    {
+        return $this->expenseCategory?->name ?: (string) $this->category;
     }
 
     public function scopePosted(Builder $query): Builder

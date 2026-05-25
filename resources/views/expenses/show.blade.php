@@ -14,7 +14,7 @@
     </div>
 
     <section class="cards">
-        <div class="card"><div class="label">Category</div><div class="value">{{ $expense->category }}</div></div>
+        <div class="card"><div class="label">Category</div><div class="value">{{ $expense->categoryName() }}</div></div>
         <div class="card"><div class="label">Amount</div><div class="value money">{{ $currency }} {{ number_format((float) $expense->amount, 0) }}</div></div>
         <div class="card"><div class="label">Mode</div><div class="value">{{ $expense->paymentMode?->name ?? '-' }}</div></div>
         <div class="card"><div class="label">Store</div><div class="value">{{ $expense->store?->name ?? '-' }}</div></div>

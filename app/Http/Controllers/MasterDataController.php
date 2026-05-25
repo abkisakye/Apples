@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CapitalSource;
 use App\Models\Category;
+use App\Models\ExpenseCategory;
 use App\Models\PaymentMode;
 use App\Models\Store;
 use App\Services\AuditLogService;
@@ -16,6 +17,8 @@ use Illuminate\Validation\Rule;
 
 class MasterDataController extends Controller
 {
+    public const SUPPORTED_RESOURCES = ['stores', 'categories', 'payment-modes', 'capital-sources', 'expense-categories'];
+
     public function index(Request $request, string $resource): View
     {
         $config = $this->resourceConfig($resource);
@@ -58,6 +61,7 @@ class MasterDataController extends Controller
             'editing' => $editing,
             'search' => $search,
             'statusFilter' => $statusFilter,
+            'resourceLinks' => collect($this->resources())->map(fn (array $resourceConfig) => $resourceConfig['title']),
         ]);
     }
 
@@ -143,6 +147,11 @@ class MasterDataController extends Controller
                 'description' => ['nullable', 'string', 'max:255'],
                 'is_active' => ['nullable', 'boolean'],
             ]),
+            'expense-categories' => $request->validate([
+                'name' => ['required', 'string', 'max:255', Rule::unique('expense_categories', 'name')->ignore($record?->getKey())],
+                'description' => ['nullable', 'string', 'max:255'],
+                'is_active' => ['nullable', 'boolean'],
+            ]),
             default => [],
         };
 
@@ -156,7 +165,15 @@ class MasterDataController extends Controller
      */
     private function resourceConfig(string $resource): array
     {
-        $resources = [
+        return Arr::get($this->resources(), $resource) ?? abort(404);
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function resources(): array
+    {
+        return [
             'stores' => [
                 'model' => Store::class,
                 'title' => 'Stores',
@@ -233,8 +250,24 @@ class MasterDataController extends Controller
                     ['label' => 'Status', 'value' => 'is_active', 'type' => 'status'],
                 ],
             ],
+            'expense-categories' => [
+                'model' => ExpenseCategory::class,
+                'title' => 'Expense Categories',
+                'single' => 'Expense Category',
+                'description' => 'Control the expense categories staff can use when posting operating costs.',
+                'order_by' => 'name',
+                'search_columns' => ['name', 'description'],
+                'fields' => [
+                    ['name' => 'name', 'label' => 'Category Name', 'type' => 'text', 'required' => true],
+                    ['name' => 'description', 'label' => 'Description', 'type' => 'text'],
+                    ['name' => 'is_active', 'label' => 'Status', 'type' => 'status'],
+                ],
+                'columns' => [
+                    ['label' => 'Category', 'value' => 'name'],
+                    ['label' => 'Description', 'value' => 'description'],
+                    ['label' => 'Status', 'value' => 'is_active', 'type' => 'status'],
+                ],
+            ],
         ];
-
-        return Arr::get($resources, $resource) ?? abort(404);
     }
 }

@@ -17,7 +17,7 @@
             'documentName' => $expense->expense_no,
             'documentMetaLines' => [
                 'Date: '.optional($expense->expense_date)->format('d M Y'),
-                'Category: '.$expense->category,
+                'Category: '.$expense->categoryName(),
                 'Store: '.($expense->store?->name ?? '-'),
                 'Printed: '.$printedAt->format('d M Y H:i'),
             ],
@@ -48,7 +48,7 @@
                         <table class="summary-table">
                             <tr><td>Expense Number</td><td>{{ $expense->expense_no }}</td></tr>
                             <tr><td>Date</td><td>{{ optional($expense->expense_date)->format('d M Y') }}</td></tr>
-                            <tr><td>Category</td><td>{{ $expense->category }}</td></tr>
+                            <tr><td>Category</td><td>{{ $expense->categoryName() }}</td></tr>
                             <tr><td>Store</td><td>{{ $expense->store?->name ?? '-' }}</td></tr>
                             <tr><td>Payment Mode</td><td>{{ $expense->paymentMode?->name ?? '-' }}</td></tr>
                         </table>
