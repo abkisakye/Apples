@@ -102,7 +102,7 @@
                                         <span class="meta">Print</span>
                                     </a>
                                 @if ($access->can('supplier_payments.manage') && $purchase->balance_due > 0 && $purchase->status === 'posted')
-                                        <a href="{{ route('supplier-payments.create', ['supplier_id' => $purchase->supplier_id]) }}" class="row-action-link primary">
+                                        <a href="{{ route('supplier-payments.create', ['supplier_id' => $purchase->supplier_id, 'purchase_id' => $purchase->id]) }}" class="row-action-link primary">
                                             <span>Record Payment</span>
                                             <span class="meta">Pay</span>
                                         </a>

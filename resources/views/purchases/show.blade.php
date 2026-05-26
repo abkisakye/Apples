@@ -9,7 +9,7 @@
         </div>
         <div class="actions">
             @if ($access->can('supplier_payments.manage') && $purchase->balance_due > 0)
-                <a href="{{ route('supplier-payments.create', ['supplier_id' => $purchase->supplier_id]) }}" class="button-link">Post Payment</a>
+                <a href="{{ route('supplier-payments.create', ['supplier_id' => $purchase->supplier_id, 'purchase_id' => $purchase->id]) }}" class="button-link">Post Payment</a>
             @endif
             @if ($access->can('purchases.manage') && $purchase->status === 'posted')
                 <a href="{{ route('purchases.returns.create', $purchase) }}" class="button-link">Supplier Return</a>

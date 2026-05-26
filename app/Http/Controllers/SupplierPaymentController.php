@@ -58,10 +58,31 @@ class SupplierPaymentController extends Controller
     public function create(Request $request): View
     {
         $supplierId = $request->integer('supplier_id');
+        $purchaseId = $request->integer('purchase_id');
         $access = app(AccessService::class);
         $defaultStoreId = auth()->user()?->default_store_id;
+        $selectedPurchase = null;
+
+        if ($purchaseId > 0) {
+            $selectedPurchase = Purchase::query()
+                ->with(['supplier:id,name,country', 'store:id,name'])
+                ->posted()
+                ->where('balance_due', '>', 0)
+                ->findOrFail($purchaseId);
+
+            if ($supplierId > 0 && (int) $selectedPurchase->supplier_id !== $supplierId) {
+                throw ValidationException::withMessages([
+                    'purchase_id' => 'The selected purchase does not belong to the selected supplier.',
+                ]);
+            }
+
+            $supplierId = (int) $selectedPurchase->supplier_id;
+        }
 
         return view('supplier_payments.create', [
+            'selectedSupplierId' => $supplierId > 0 ? $supplierId : null,
+            'selectedPurchaseId' => $selectedPurchase?->id,
+            'selectedPurchase' => $selectedPurchase,
             'suppliers' => Supplier::query()
                 ->where('is_system', false)
                 ->withSum(['purchases as outstanding_credit' => fn ($query) => $query->posted()], 'balance_due')

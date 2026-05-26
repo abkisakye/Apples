@@ -484,6 +484,114 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseCount('supplier_payments', 1);
     }
 
+    public function test_supplier_payment_create_can_preselect_purchase_from_purchase_row(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Acme Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        $purchase = Purchase::create([
+            'purchase_no' => 'CP-PRESELECT-1',
+            'purchase_date' => '2026-03-25',
+            'supplier_id' => $supplier->id,
+            'store_id' => $store->id,
+            'purchase_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 1200,
+            'total_amount' => 1200,
+            'amount_paid' => 200,
+            'balance_due' => 1000,
+            'status' => 'posted',
+        ]);
+
+        $this->get('/purchases')
+            ->assertOk()
+            ->assertSee('purchase_id='.$purchase->id, false);
+
+        $this->get('/supplier-payments/create?supplier_id='.$supplier->id.'&purchase_id='.$purchase->id)
+            ->assertOk()
+            ->assertSee('Record Supplier Payment')
+            ->assertSee('Acme Supplier')
+            ->assertSee('CP-PRESELECT-1')
+            ->assertSee('Outstanding')
+            ->assertSee('1,000');
+    }
+
+    public function test_full_supplier_payment_clears_purchase_balance(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Full Pay Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        $purchase = Purchase::create([
+            'purchase_no' => 'CP-FULL-1',
+            'purchase_date' => '2026-03-25',
+            'supplier_id' => $supplier->id,
+            'store_id' => $store->id,
+            'purchase_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 900,
+            'total_amount' => 900,
+            'amount_paid' => 0,
+            'balance_due' => 900,
+            'status' => 'posted',
+        ]);
+
+        $this->post('/supplier-payments', [
+            'payment_date' => '2026-03-25',
+            'supplier_id' => $supplier->id,
+            'purchase_id' => $purchase->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount' => 900,
+        ])->assertRedirect();
+
+        $purchase->refresh();
+
+        $this->assertEquals(900.0, (float) $purchase->amount_paid);
+        $this->assertEquals(0.0, (float) $purchase->balance_due);
+    }
+
+    public function test_supplier_payment_rejects_overpayment_and_requires_payment_mode(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Validation Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        $purchase = Purchase::create([
+            'purchase_no' => 'CP-VALIDATE-1',
+            'purchase_date' => '2026-03-25',
+            'supplier_id' => $supplier->id,
+            'store_id' => $store->id,
+            'purchase_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 700,
+            'total_amount' => 700,
+            'amount_paid' => 0,
+            'balance_due' => 700,
+            'status' => 'posted',
+        ]);
+
+        $this->post('/supplier-payments', [
+            'payment_date' => '2026-03-25',
+            'supplier_id' => $supplier->id,
+            'purchase_id' => $purchase->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount' => 701,
+        ])->assertSessionHasErrors('amount');
+
+        $this->post('/supplier-payments', [
+            'payment_date' => '2026-03-25',
+            'supplier_id' => $supplier->id,
+            'purchase_id' => $purchase->id,
+            'amount' => 100,
+        ])->assertSessionHasErrors('payment_mode_id');
+
+        $purchase->refresh();
+
+        $this->assertEquals(700.0, (float) $purchase->balance_due);
+        $this->assertDatabaseCount('supplier_payments', 0);
+    }
+
     public function test_purchase_detail_and_statement_pages_load(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);

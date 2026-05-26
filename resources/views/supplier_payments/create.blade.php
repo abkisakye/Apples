@@ -22,6 +22,7 @@
     ]))
     <style>
         .payment-shell { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(320px,.9fr); gap:16px; align-items:start; }
+        .payment-shell.focused-payment { grid-template-columns:minmax(0,1fr) minmax(320px,.75fr); }
         .payment-stack { display:grid; gap:14px; }
         .summary-card { position:sticky; top:18px; }
         .picker-input { width:100%; min-height:48px; padding:12px 14px; border-radius:14px; border:1px solid var(--line); background:#fff; color:var(--ink); }
@@ -33,6 +34,9 @@
         .summary-grid { display:grid; gap:10px; }
         .summary-row { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:.94rem; }
         .summary-row.total { padding-top:12px; border-top:1px solid var(--line); font-weight:700; }
+        .focused-purchase-card { display:grid; gap:10px; margin-top:14px; }
+        .focused-purchase-line { display:flex; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--panel-soft); }
+        .focused-purchase-line span { color:var(--muted); }
         .footer-actions { display:flex; gap:10px; flex-wrap:wrap; }
         .footer-actions .button-link, .footer-actions button { flex:1 1 180px; justify-content:center; }
         @media (max-width:980px) { .payment-shell { grid-template-columns:1fr; } .summary-card { position:static; } }
@@ -42,7 +46,7 @@
     <div class="page-head">
         <div>
             <h2>Supplier Payment</h2>
-            <p>Choose the supplier, pick the open purchase, enter the amount you are paying now, and record the payment. The remaining balance updates immediately.</p>
+            <p>{{ $selectedPurchase ? 'Record payment for the selected supplier purchase. Partial payments are allowed and the remaining balance updates immediately.' : 'Choose the supplier, pick the open purchase, enter the amount you are paying now, and record the payment. The remaining balance updates immediately.' }}</p>
         </div>
         <div class="actions">
             <a href="{{ route('supplier-payments.index') }}" class="button-link">Payment History</a>
@@ -50,27 +54,40 @@
         </div>
     </div>
 
-    <form method="post" action="{{ route('supplier-payments.store') }}" id="supplier-payment-form" class="payment-shell">
+    <form method="post" action="{{ route('supplier-payments.store') }}" id="supplier-payment-form" class="payment-shell {{ $selectedPurchase ? 'focused-payment' : '' }}">
         @csrf
-        <div class="payment-stack summary-card">
+        @if ($selectedPurchase)
+            <input type="hidden" name="supplier_id" id="payment-supplier-id" value="{{ old('supplier_id', $selectedSupplierId) }}">
+            <input type="hidden" name="purchase_id" id="payment-purchase-id" value="{{ old('purchase_id', $selectedPurchaseId) }}">
             <section class="panel">
-                <h3>1. Choose Supplier</h3>
-                <input type="hidden" name="supplier_id" id="payment-supplier-id" value="{{ old('supplier_id', request('supplier_id')) }}">
-                <input type="text" id="payment-supplier-search" class="picker-input" placeholder="Search supplier by name or country">
-                <div id="payment-supplier-results" class="party-results"></div>
+                <h3>Record Supplier Payment</h3>
+                <div class="focused-purchase-card">
+                    <div class="focused-purchase-line"><span>Supplier</span><strong>{{ $selectedPurchase->supplier?->name }}</strong></div>
+                    <div class="focused-purchase-line"><span>Purchase</span><strong>{{ $selectedPurchase->purchase_no }}</strong></div>
+                    <div class="focused-purchase-line"><span>Outstanding</span><strong class="money">{{ $currency }} {{ number_format((float) $selectedPurchase->balance_due, 0) }}</strong></div>
+                </div>
             </section>
+        @else
+            <div class="payment-stack summary-card">
+                <section class="panel">
+                    <h3>1. Choose Supplier</h3>
+                    <input type="hidden" name="supplier_id" id="payment-supplier-id" value="{{ old('supplier_id', $selectedSupplierId) }}">
+                    <input type="text" id="payment-supplier-search" class="picker-input" placeholder="Search supplier by name or country">
+                    <div id="payment-supplier-results" class="party-results"></div>
+                </section>
 
-            <section class="panel">
-                <h3>2. Choose Open Purchase</h3>
-                <input type="hidden" name="purchase_id" id="payment-purchase-id" value="{{ old('purchase_id') }}">
-                <input type="text" id="payment-purchase-search" class="picker-input" placeholder="Search purchase number or store">
-                <div id="payment-purchase-results" class="doc-results"></div>
-            </section>
-        </div>
+                <section class="panel">
+                    <h3>2. Choose Open Purchase</h3>
+                    <input type="hidden" name="purchase_id" id="payment-purchase-id" value="{{ old('purchase_id', $selectedPurchaseId) }}">
+                    <input type="text" id="payment-purchase-search" class="picker-input" placeholder="Search purchase number or store">
+                    <div id="payment-purchase-results" class="doc-results"></div>
+                </section>
+            </div>
+        @endif
 
         <div class="payment-stack">
             <section class="panel">
-                <h3>3. Payment Details</h3>
+                <h3>{{ $selectedPurchase ? 'Payment Details' : '3. Payment Details' }}</h3>
                 <div class="form-grid" style="margin-top:14px;">
                     <label class="form-field">
                         <span>Payment Date</span>
@@ -78,12 +95,12 @@
                     </label>
                     <label class="form-field">
                         <span>Amount Paid</span>
-                        <input type="number" step="0.01" min="0.01" name="amount" id="supplier-payment-amount" value="{{ old('amount') }}" required>
+                        <input type="number" step="0.01" min="0.01" name="amount" id="supplier-payment-amount" value="{{ old('amount') }}" @if($selectedPurchase) max="{{ (float) $selectedPurchase->balance_due }}" @endif required>
                     </label>
                     <label class="form-field">
                         <span>Payment Mode</span>
                         <select name="payment_mode_id">
-                            <option value="">Optional</option>
+                            <option value="">Choose mode</option>
                             @foreach ($paymentModes as $mode)
                                 <option value="{{ $mode->id }}" @selected((string) old('payment_mode_id') === (string) $mode->id)>{{ $mode->name }}</option>
                             @endforeach
@@ -109,7 +126,7 @@
             </section>
 
             <section class="panel">
-                <h3>4. Payment Summary</h3>
+                <h3>{{ $selectedPurchase ? 'Payment Summary' : '4. Payment Summary' }}</h3>
                 <div class="summary-grid" style="margin-top:14px;">
                     <div class="summary-row"><span>Supplier</span><strong id="supplier-summary">Choose supplier</strong></div>
                     <div class="summary-row"><span>Open Purchase</span><strong id="purchase-summary">Choose purchase</strong></div>
@@ -147,6 +164,7 @@
             function currentPurchase() { return availablePurchases().find((item) => String(item.id) === String(purchaseIdInput.value)); }
 
             function renderSuppliers() {
+                if (!supplierSearch || !supplierResults) return;
                 const selectedId = String(supplierIdInput.value || '');
                 const needle = String(supplierSearch.value || '').trim().toLowerCase();
                 const rows = needle.length < 1 ? suppliers.slice(0, 10) : suppliers.filter((item) => item.search.includes(needle)).slice(0, 12);
@@ -162,6 +180,7 @@
             }
 
             function renderPurchases() {
+                if (!purchaseSearch || !purchaseResults) return;
                 const selectedId = String(purchaseIdInput.value || '');
                 const needle = String(purchaseSearch.value || '').trim().toLowerCase();
                 const rows = availablePurchases().filter((item) => !needle || item.search.includes(needle));
@@ -188,8 +207,8 @@
                 document.getElementById('supplier-remaining-summary').textContent = money(Math.max(balance - amount, 0));
             }
 
-            supplierSearch.addEventListener('input', renderSuppliers);
-            supplierResults.addEventListener('click', (event) => {
+            supplierSearch?.addEventListener('input', renderSuppliers);
+            supplierResults?.addEventListener('click', (event) => {
                 const button = event.target.closest('[data-pick-supplier]');
                 if (!button) return;
                 supplierIdInput.value = button.dataset.pickSupplier;
@@ -202,8 +221,8 @@
                 renderSummary();
             });
 
-            purchaseSearch.addEventListener('input', renderPurchases);
-            purchaseResults.addEventListener('click', (event) => {
+            purchaseSearch?.addEventListener('input', renderPurchases);
+            purchaseResults?.addEventListener('click', (event) => {
                 const button = event.target.closest('[data-pick-purchase]');
                 if (!button) return;
                 purchaseIdInput.value = button.dataset.pickPurchase;
@@ -225,13 +244,13 @@
                 if (!supplierIdInput.value) {
                     event.preventDefault();
                     alert('Choose a supplier before recording the payment.');
-                    supplierSearch.focus();
+                    supplierSearch?.focus();
                     return;
                 }
                 if (!purchaseIdInput.value) {
                     event.preventDefault();
                     alert('Choose the open purchase before recording the payment.');
-                    purchaseSearch.focus();
+                    purchaseSearch?.focus();
                 }
             });
 
@@ -240,9 +259,15 @@
             renderSummary();
             if (supplierIdInput.value) {
                 const supplier = currentSupplier();
-                if (supplier) supplierSearch.value = supplier.name;
+                if (supplier && supplierSearch) supplierSearch.value = supplier.name;
                 renderSuppliers();
                 renderPurchases();
+            }
+            if (purchaseIdInput.value) {
+                const purchase = currentPurchase();
+                if (purchase && purchaseSearch) purchaseSearch.value = purchase.purchase_no;
+                renderPurchases();
+                renderSummary();
             }
         })();
     </script>
