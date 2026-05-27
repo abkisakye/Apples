@@ -350,6 +350,7 @@
             border: 1px solid var(--line);
             border-radius: 16px;
             box-shadow: var(--shadow);
+            overflow: visible;
         }
         .card { padding: 12px; }
         .card .label {
@@ -428,6 +429,7 @@
         }
         .table-wrap {
             overflow-x: auto;
+            overflow-y: visible;
         }
         table {
             width: 100%;
@@ -567,6 +569,10 @@
         .row-actions-menu {
             position: relative;
             display: inline-block;
+            z-index: 50;
+        }
+        .row-actions-menu[open] {
+            z-index: 9998;
         }
         .row-actions-toggle {
             list-style: none;
@@ -593,7 +599,7 @@
             position: absolute;
             top: calc(100% + 8px);
             right: 0;
-            z-index: 30;
+            z-index: 9999;
             min-width: 190px;
             padding: 8px;
             border: 1px solid var(--line);
@@ -602,6 +608,12 @@
             box-shadow: 0 18px 36px rgba(47, 38, 22, 0.14);
             display: grid;
             gap: 6px;
+        }
+        .row-actions-menu[open] .row-actions-dropdown {
+            position: fixed;
+            top: var(--row-actions-top, auto);
+            left: var(--row-actions-left, auto);
+            right: auto;
         }
         .row-actions-dropdown form {
             margin: 0;
@@ -1082,9 +1094,40 @@
 
             const menus = Array.from(document.querySelectorAll('.row-actions-menu'));
             if (menus.length) {
+                function positionRowActionsMenu(menu) {
+                    if (!menu.open) {
+                        return;
+                    }
+
+                    const toggle = menu.querySelector('.row-actions-toggle');
+                    const dropdown = menu.querySelector('.row-actions-dropdown');
+                    if (!toggle || !dropdown) {
+                        return;
+                    }
+
+                    const toggleRect = toggle.getBoundingClientRect();
+                    const dropdownRect = dropdown.getBoundingClientRect();
+                    const viewportPadding = 12;
+                    const dropdownWidth = dropdownRect.width || 190;
+                    const dropdownHeight = dropdownRect.height || 0;
+                    let left = toggleRect.right - dropdownWidth;
+                    let top = toggleRect.bottom + 8;
+
+                    left = Math.max(viewportPadding, Math.min(left, window.innerWidth - dropdownWidth - viewportPadding));
+
+                    if (dropdownHeight && top + dropdownHeight > window.innerHeight - viewportPadding) {
+                        top = Math.max(viewportPadding, toggleRect.top - dropdownHeight - 8);
+                    }
+
+                    menu.style.setProperty('--row-actions-left', `${left}px`);
+                    menu.style.setProperty('--row-actions-top', `${top}px`);
+                }
+
                 menus.forEach((menu) => {
                     menu.addEventListener('toggle', () => {
                         if (!menu.open) {
+                            menu.style.removeProperty('--row-actions-left');
+                            menu.style.removeProperty('--row-actions-top');
                             return;
                         }
 
@@ -1093,6 +1136,8 @@
                                 otherMenu.removeAttribute('open');
                             }
                         });
+
+                        requestAnimationFrame(() => positionRowActionsMenu(menu));
                     });
                 });
 
@@ -1102,6 +1147,14 @@
                     }
 
                     menus.forEach((menu) => menu.removeAttribute('open'));
+                });
+
+                window.addEventListener('scroll', () => {
+                    menus.forEach(positionRowActionsMenu);
+                }, true);
+
+                window.addEventListener('resize', () => {
+                    menus.forEach(positionRowActionsMenu);
                 });
             }
 

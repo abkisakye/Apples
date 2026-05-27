@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\CashShift;
 use App\Models\Customer;
+use App\Models\CustomerPayment;
 use App\Models\Expense;
 use App\Models\FollowUpAction;
 use App\Models\Product;
 use App\Models\SaleItem;
 use App\Models\Purchase;
 use App\Models\Sale;
+use App\Models\SaleReturn;
 use App\Models\Store;
 use App\Models\Supplier;
 use Carbon\Carbon;
@@ -98,23 +100,35 @@ class DashboardController extends Controller
             'current' => $customerAgingTotals['current'],
             'overdue' => $customerAgingTotals['days_1_30'] + $customerAgingTotals['days_31_60'] + $customerAgingTotals['days_61_90'] + $customerAgingTotals['days_90_plus'],
         ];
-        $rangeSalesQuery = Sale::query()->posted()->whereBetween('sale_date', [$fromDate, $toDate]);
-        $rangePurchasesQuery = Purchase::query()->posted()->whereBetween('purchase_date', [$fromDate, $toDate]);
-        $rangeExpensesQuery = Expense::query()->posted()->whereBetween('expense_date', [$fromDate, $toDate]);
-        $rangeReturnsQuery = \App\Models\SaleReturn::query()->where('status', 'posted')->whereBetween('return_date', [$fromDate, $toDate]);
+        $rangeSalesQuery = Sale::query()->posted()->whereDate('sale_date', '>=', $fromDate)->whereDate('sale_date', '<=', $toDate);
+        $rangePurchasesQuery = Purchase::query()->posted()->whereDate('purchase_date', '>=', $fromDate)->whereDate('purchase_date', '<=', $toDate);
+        $rangeExpensesQuery = Expense::query()->posted()->whereDate('expense_date', '>=', $fromDate)->whereDate('expense_date', '<=', $toDate);
+        $rangeReturnsQuery = SaleReturn::query()->where('status', 'posted')->whereDate('return_date', '>=', $fromDate)->whereDate('return_date', '<=', $toDate);
         $rangeSalesTotal = (float) (clone $rangeSalesQuery)->sum('total_amount');
         $rangePurchaseTotal = (float) (clone $rangePurchasesQuery)->sum('total_amount');
         $rangeExpenseTotal = (float) (clone $rangeExpensesQuery)->sum('amount');
         $rangeReturnTotal = (float) (clone $rangeReturnsQuery)->sum('returned_total');
-        $rangeCollectionTotal = (float) (clone $rangeSalesQuery)->sum('amount_paid');
+        $rangeCollectionTotal = $this->collectionTotal($fromDate, $toDate);
+        $rangeSalesRevenue = (float) SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->where('sales.status', 'posted')
+            ->whereDate('sales.sale_date', '>=', $fromDate)
+            ->whereDate('sales.sale_date', '<=', $toDate)
+            ->selectRaw('COALESCE(SUM(sale_items.line_total), 0) as revenue')
+            ->value('revenue');
         $rangeCogs = (float) SaleItem::query()
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->where('sales.status', 'posted')
-            ->whereBetween('sales.sale_date', [$fromDate, $toDate])
+            ->whereDate('sales.sale_date', '>=', $fromDate)
+            ->whereDate('sales.sale_date', '<=', $toDate)
             ->selectRaw('COALESCE(SUM(sale_items.quantity * sale_items.cost_price_snapshot), 0) as cogs')
             ->value('cogs');
-        $rangeGrossProfit = round($rangeSalesTotal - $rangeCogs, 2);
+        $rangeGrossProfit = round($rangeSalesRevenue - $rangeCogs, 2);
         $rangeNetProfit = round($rangeGrossProfit - $rangeExpenseTotal, 2);
+        $dashboardDateParams = [
+            'date_from' => $fromDate,
+            'date_to' => $toDate,
+        ];
         $rangeTrend = collect(Carbon::parse($fromDate)->daysUntil(Carbon::parse($toDate)->addDay()))
             ->map(function (Carbon $date) use ($rangeSalesQuery, $rangePurchasesQuery, $rangeExpensesQuery) {
                 $dateString = $date->toDateString();
@@ -131,7 +145,8 @@ class DashboardController extends Controller
             ->join('products', 'products.id', '=', 'sale_items.product_id')
             ->join('product_units', 'product_units.id', '=', 'sale_items.product_unit_id')
             ->where('sales.status', 'posted')
-            ->whereBetween('sales.sale_date', [$fromDate, $toDate])
+            ->whereDate('sales.sale_date', '>=', $fromDate)
+            ->whereDate('sales.sale_date', '<=', $toDate)
             ->selectRaw('products.name as product_name, product_units.unit_name, SUM(sale_items.quantity) as quantity_sold, SUM(sale_items.line_total) as sales_value')
             ->groupBy('products.name', 'product_units.unit_name')
             ->orderByDesc('quantity_sold')
@@ -141,7 +156,8 @@ class DashboardController extends Controller
         $paymentBreakdown = Sale::query()
             ->posted()
             ->join('payment_modes', 'payment_modes.id', '=', 'sales.payment_mode_id')
-            ->whereBetween('sale_date', [$fromDate, $toDate])
+            ->whereDate('sale_date', '>=', $fromDate)
+            ->whereDate('sale_date', '<=', $toDate)
             ->selectRaw('payment_modes.name as mode_name, COALESCE(SUM(sales.amount_paid), 0) as amount')
             ->groupBy('payment_modes.name')
             ->orderByDesc('amount')
@@ -209,12 +225,49 @@ class DashboardController extends Controller
                 'gross_profit' => $rangeGrossProfit,
                 'net_profit' => $rangeNetProfit,
             ],
+            'dashboardDateParams' => $dashboardDateParams,
+            'dashboardCardLinks' => [
+                'sales' => route('sales.index', $dashboardDateParams),
+                'purchases' => route('purchases.index', $dashboardDateParams),
+                'expenses' => route('expenses.index', $dashboardDateParams),
+                'collections' => route('reports.payment-methods', $dashboardDateParams),
+                'gross_profit' => route('reports.financial-summary', $dashboardDateParams),
+                'net_profit' => route('reports.financial-summary', $dashboardDateParams),
+                'returns' => route('reports.financial-summary', $dashboardDateParams),
+            ],
             'rangeTrend' => $rangeTrend,
             'rangeTrendMax' => max(1, (float) $rangeTrend->max(fn (array $row) => max($row['sales'], $row['purchases'], $row['expenses']))),
             'topSellingItems' => $topSellingItems,
             'paymentBreakdown' => $paymentBreakdown,
             'paymentBreakdownTotal' => max(1, (float) $paymentBreakdown->sum('amount')),
         ]);
+    }
+
+    private function collectionTotal(string $fromDate, string $toDate): float
+    {
+        $saleTimeCollections = DB::query()
+            ->fromSub(
+                Sale::query()
+                    ->where('sales.status', 'posted')
+                    ->leftJoin('customer_payments', function ($join) {
+                        $join->on('customer_payments.sale_id', '=', 'sales.id')
+                            ->where('customer_payments.status', '=', 'posted');
+                    })
+                    ->whereDate('sales.sale_date', '>=', $fromDate)
+                    ->whereDate('sales.sale_date', '<=', $toDate)
+                    ->groupBy('sales.id', 'sales.amount_paid')
+                    ->selectRaw('CASE WHEN sales.amount_paid - COALESCE(SUM(customer_payments.amount), 0) > 0 THEN sales.amount_paid - COALESCE(SUM(customer_payments.amount), 0) ELSE 0 END as amount'),
+                'sale_time_collections'
+            )
+            ->sum('amount');
+
+        $customerPayments = CustomerPayment::query()
+            ->posted()
+            ->whereDate('payment_date', '>=', $fromDate)
+            ->whereDate('payment_date', '<=', $toDate)
+            ->sum('amount');
+
+        return round((float) $saleTimeCollections + (float) $customerPayments, 2);
     }
 
     private function agingTotals(iterable $documents, string $dueDateField, string $amountField): array
@@ -260,8 +313,8 @@ class DashboardController extends Controller
             default => [$today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
         };
 
-        $fromDate = Carbon::parse((string) $request->input('from', $defaultFrom))->toDateString();
-        $toDate = Carbon::parse((string) $request->input('to', $defaultTo))->toDateString();
+        $fromDate = Carbon::parse((string) $request->input('date_from', $request->input('from', $defaultFrom)))->toDateString();
+        $toDate = Carbon::parse((string) $request->input('date_to', $request->input('to', $defaultTo)))->toDateString();
 
         if ($fromDate > $toDate) {
             [$fromDate, $toDate] = [$toDate, $fromDate];

@@ -31,6 +31,8 @@ class SaleController extends Controller
         $search = trim((string) $request->string('q'));
         $type = trim((string) $request->string('type'));
         $type = in_array($type, ['cash', 'credit'], true) ? $type : '';
+        $dateFrom = $request->date('date_from')?->toDateString();
+        $dateTo = $request->date('date_to')?->toDateString();
         $pageTitle = match ($type) {
             'cash' => 'Cash Sales',
             'credit' => 'Credit Sales',
@@ -47,12 +49,13 @@ class SaleController extends Controller
                 });
             })
             ->when($type !== '', fn ($query) => $query->where('sale_type', $type))
+            ->when($dateFrom && $dateTo, fn ($query) => $query->whereDate('sale_date', '>=', $dateFrom)->whereDate('sale_date', '<=', $dateTo))
             ->latest('sale_date')
             ->latest('id')
             ->paginate(20)
             ->withQueryString();
 
-        return view('sales.index', compact('sales', 'search', 'type', 'pageTitle'));
+        return view('sales.index', compact('sales', 'search', 'type', 'pageTitle', 'dateFrom', 'dateTo'));
     }
 
     public function create(Request $request): View

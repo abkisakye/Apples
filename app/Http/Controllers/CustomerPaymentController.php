@@ -25,7 +25,7 @@ class CustomerPaymentController extends Controller
         $search = trim((string) $request->string('q'));
         $customerId = $request->integer('customer_id');
         $period = trim((string) $request->string('period'));
-        [$fromDate, $toDate] = $this->periodRange($period);
+        [$fromDate, $toDate] = $this->periodRange($period, $request);
 
         return view('customer_payments.index', [
             'search' => $search,
@@ -47,7 +47,7 @@ class CustomerPaymentController extends Controller
                             ->orWhereHas('sale', fn ($saleQuery) => $saleQuery->where('sale_no', 'like', "%{$search}%"));
                     });
                 })
-                ->when($fromDate && $toDate, fn ($query) => $query->whereBetween('payment_date', [$fromDate, $toDate]))
+                ->when($fromDate && $toDate, fn ($query) => $query->whereDate('payment_date', '>=', $fromDate)->whereDate('payment_date', '<=', $toDate))
                 ->latest('payment_date')
                 ->latest('id')
                 ->paginate(20)
@@ -267,8 +267,15 @@ class CustomerPaymentController extends Controller
         ];
     }
 
-    private function periodRange(string $period): array
+    private function periodRange(string $period, ?Request $request = null): array
     {
+        $dateFrom = $request?->date('date_from')?->toDateString();
+        $dateTo = $request?->date('date_to')?->toDateString();
+
+        if ($dateFrom && $dateTo) {
+            return $dateFrom <= $dateTo ? [$dateFrom, $dateTo] : [$dateTo, $dateFrom];
+        }
+
         $today = Carbon::today();
 
         return match ($period) {

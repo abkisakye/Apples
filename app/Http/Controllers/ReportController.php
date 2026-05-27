@@ -28,10 +28,10 @@ class ReportController extends Controller
     {
         [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'month');
 
-        $salesQuery = Sale::query()->posted()->whereBetween('sale_date', [$fromDate, $toDate]);
-        $purchasesQuery = Purchase::query()->posted()->whereBetween('purchase_date', [$fromDate, $toDate]);
-        $expensesQuery = Expense::query()->posted()->whereBetween('expense_date', [$fromDate, $toDate]);
-        $returnsQuery = SaleReturn::query()->where('status', 'posted')->whereBetween('return_date', [$fromDate, $toDate]);
+        $salesQuery = Sale::query()->posted()->whereDate('sale_date', '>=', $fromDate)->whereDate('sale_date', '<=', $toDate);
+        $purchasesQuery = Purchase::query()->posted()->whereDate('purchase_date', '>=', $fromDate)->whereDate('purchase_date', '<=', $toDate);
+        $expensesQuery = Expense::query()->posted()->whereDate('expense_date', '>=', $fromDate)->whereDate('expense_date', '<=', $toDate);
+        $returnsQuery = SaleReturn::query()->where('status', 'posted')->whereDate('return_date', '>=', $fromDate)->whereDate('return_date', '<=', $toDate);
 
         $salesTotal = (float) (clone $salesQuery)->sum('total_amount');
         $discountTotal = (float) (clone $salesQuery)->sum('discount_amount');
@@ -42,13 +42,13 @@ class ReportController extends Controller
         $cogs = (float) SaleItem::query()
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->where('sales.status', 'posted')
-            ->whereBetween('sales.sale_date', [$fromDate, $toDate])
+            ->whereDate('sales.sale_date', '>=', $fromDate)
+            ->whereDate('sales.sale_date', '<=', $toDate)
             ->selectRaw('COALESCE(SUM(sale_items.quantity * sale_items.cost_price_snapshot), 0) as cogs')
             ->value('cogs');
         $grossProfit = round($salesTotal - $cogs, 2);
         $netProfit = round($grossProfit - $expenseTotal - $refundTotal, 2);
-        $collectionTotal = (float) (clone $salesQuery)->sum('amount_paid')
-            + (float) CustomerPayment::query()->whereBetween('payment_date', [$fromDate, $toDate])->sum('amount');
+        $collectionTotal = $this->collectionTotal($fromDate, $toDate);
 
         $daily = collect(Carbon::parse($fromDate)->daysUntil(Carbon::parse($toDate)->addDay()))
             ->map(function (Carbon $date) use ($salesQuery, $expensesQuery) {
@@ -88,19 +88,23 @@ class ReportController extends Controller
 
         $salesRows = Sale::query()
             ->posted()
-            ->whereBetween('sale_date', [$fromDate, $toDate])
+            ->whereDate('sale_date', '>=', $fromDate)
+            ->whereDate('sale_date', '<=', $toDate)
             ->selectRaw('payment_mode_id, COALESCE(SUM(amount_paid), 0) as amount')
             ->groupBy('payment_mode_id')
             ->pluck('amount', 'payment_mode_id');
 
         $customerPaymentRows = CustomerPayment::query()
-            ->whereBetween('payment_date', [$fromDate, $toDate])
+            ->posted()
+            ->whereDate('payment_date', '>=', $fromDate)
+            ->whereDate('payment_date', '<=', $toDate)
             ->selectRaw('payment_mode_id, COALESCE(SUM(amount), 0) as amount')
             ->groupBy('payment_mode_id')
             ->pluck('amount', 'payment_mode_id');
 
         $supplierPaymentRows = SupplierPayment::query()
-            ->whereBetween('payment_date', [$fromDate, $toDate])
+            ->whereDate('payment_date', '>=', $fromDate)
+            ->whereDate('payment_date', '<=', $toDate)
             ->selectRaw('payment_mode_id, COALESCE(SUM(amount), 0) as amount')
             ->groupBy('payment_mode_id')
             ->pluck('amount', 'payment_mode_id');
@@ -108,14 +112,16 @@ class ReportController extends Controller
         $refundRows = SaleReturn::query()
             ->where('status', 'posted')
             ->where('refund_amount', '>', 0)
-            ->whereBetween('return_date', [$fromDate, $toDate])
+            ->whereDate('return_date', '>=', $fromDate)
+            ->whereDate('return_date', '<=', $toDate)
             ->selectRaw('payment_mode_id, COALESCE(SUM(refund_amount), 0) as amount')
             ->groupBy('payment_mode_id')
             ->pluck('amount', 'payment_mode_id');
 
         $expenseRows = Expense::query()
             ->posted()
-            ->whereBetween('expense_date', [$fromDate, $toDate])
+            ->whereDate('expense_date', '>=', $fromDate)
+            ->whereDate('expense_date', '<=', $toDate)
             ->selectRaw('payment_mode_id, COALESCE(SUM(amount), 0) as amount')
             ->groupBy('payment_mode_id')
             ->pluck('amount', 'payment_mode_id');
@@ -167,11 +173,11 @@ class ReportController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function (User $user) use ($fromDate, $toDate) {
-                $salesCount = Sale::query()->posted()->where('created_by', $user->id)->whereBetween('sale_date', [$fromDate, $toDate])->count();
-                $salesTotal = (float) Sale::query()->posted()->where('created_by', $user->id)->whereBetween('sale_date', [$fromDate, $toDate])->sum('total_amount');
-                $discountTotal = (float) Sale::query()->posted()->where('created_by', $user->id)->whereBetween('sale_date', [$fromDate, $toDate])->sum('discount_amount');
-                $creditIssued = (float) Sale::query()->posted()->where('created_by', $user->id)->whereBetween('sale_date', [$fromDate, $toDate])->where('balance_due', '>', 0)->sum('balance_due');
-                $customerPayments = (float) CustomerPayment::query()->where('created_by', $user->id)->whereBetween('payment_date', [$fromDate, $toDate])->sum('amount');
+                $salesCount = Sale::query()->posted()->where('created_by', $user->id)->whereDate('sale_date', '>=', $fromDate)->whereDate('sale_date', '<=', $toDate)->count();
+                $salesTotal = (float) Sale::query()->posted()->where('created_by', $user->id)->whereDate('sale_date', '>=', $fromDate)->whereDate('sale_date', '<=', $toDate)->sum('total_amount');
+                $discountTotal = (float) Sale::query()->posted()->where('created_by', $user->id)->whereDate('sale_date', '>=', $fromDate)->whereDate('sale_date', '<=', $toDate)->sum('discount_amount');
+                $creditIssued = (float) Sale::query()->posted()->where('created_by', $user->id)->whereDate('sale_date', '>=', $fromDate)->whereDate('sale_date', '<=', $toDate)->where('balance_due', '>', 0)->sum('balance_due');
+                $customerPayments = (float) CustomerPayment::query()->posted()->where('created_by', $user->id)->whereDate('payment_date', '>=', $fromDate)->whereDate('payment_date', '<=', $toDate)->sum('amount');
                 $shiftCount = CashShift::query()->where('user_id', $user->id)->whereBetween(DB::raw('date(opened_at)'), [$fromDate, $toDate])->count();
                 $shiftDifference = (float) CashShift::query()->where('user_id', $user->id)->whereBetween(DB::raw('date(opened_at)'), [$fromDate, $toDate])->sum('shortage_overage');
 
@@ -207,7 +213,7 @@ class ReportController extends Controller
         $creditIssued = (float) Sale::query()->posted()->whereDate('sale_date', $date)->where('sale_type', 'credit')->sum('balance_due');
         $returnTotal = (float) SaleReturn::query()->where('status', 'posted')->whereDate('return_date', $date)->sum('returned_total');
         $refundTotal = (float) SaleReturn::query()->where('status', 'posted')->whereDate('return_date', $date)->sum('refund_amount');
-        $customerPaymentTotal = (float) CustomerPayment::query()->whereDate('payment_date', $date)->sum('amount');
+        $customerPaymentTotal = (float) CustomerPayment::query()->posted()->whereDate('payment_date', $date)->sum('amount');
         $expenseTotal = (float) Expense::query()->posted()->whereDate('expense_date', $date)->sum('amount');
 
         $shiftRows = CashShift::query()
@@ -228,6 +234,7 @@ class ReportController extends Controller
             ->groupBy('payment_modes.name');
 
         $customerPaymentRows = CustomerPayment::query()
+            ->posted()
             ->whereDate('payment_date', $date)
             ->join('payment_modes', 'payment_modes.id', '=', 'customer_payments.payment_mode_id')
             ->selectRaw('payment_modes.name as mode_name, 0 as sales_amount, COALESCE(SUM(customer_payments.amount), 0) as customer_payment_amount, 0 as refund_amount')
@@ -413,13 +420,40 @@ class ReportController extends Controller
             default => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
         };
 
-        $fromDate = Carbon::parse((string) $request->input('from', $defaultFrom))->toDateString();
-        $toDate = Carbon::parse((string) $request->input('to', $defaultTo))->toDateString();
+        $fromDate = Carbon::parse((string) $request->input('date_from', $request->input('from', $defaultFrom)))->toDateString();
+        $toDate = Carbon::parse((string) $request->input('date_to', $request->input('to', $defaultTo)))->toDateString();
 
         if ($fromDate > $toDate) {
             [$fromDate, $toDate] = [$toDate, $fromDate];
         }
 
         return [$fromDate, $toDate, $period];
+    }
+
+    private function collectionTotal(string $fromDate, string $toDate): float
+    {
+        $saleTimeCollections = DB::query()
+            ->fromSub(
+                Sale::query()
+                    ->where('sales.status', 'posted')
+                    ->leftJoin('customer_payments', function ($join) {
+                        $join->on('customer_payments.sale_id', '=', 'sales.id')
+                            ->where('customer_payments.status', '=', 'posted');
+                    })
+                    ->whereDate('sales.sale_date', '>=', $fromDate)
+                    ->whereDate('sales.sale_date', '<=', $toDate)
+                    ->groupBy('sales.id', 'sales.amount_paid')
+                    ->selectRaw('CASE WHEN sales.amount_paid - COALESCE(SUM(customer_payments.amount), 0) > 0 THEN sales.amount_paid - COALESCE(SUM(customer_payments.amount), 0) ELSE 0 END as amount'),
+                'sale_time_collections'
+            )
+            ->sum('amount');
+
+        $customerPayments = CustomerPayment::query()
+            ->posted()
+            ->whereDate('payment_date', '>=', $fromDate)
+            ->whereDate('payment_date', '<=', $toDate)
+            ->sum('amount');
+
+        return round((float) $saleTimeCollections + (float) $customerPayments, 2);
     }
 }

@@ -350,7 +350,7 @@
 <body>
     @php($currency = config('business.currency', 'UGX'))
     @php($printedAt = now())
-    @php($documentLabel = $purchase->purchase_type === 'credit' ? 'PURCHASE INVOICE' : 'PURCHASE VOUCHER')
+    @php($documentLabel = $purchase->purchase_type === 'credit' ? 'Purchase Invoice' : 'Purchase Voucher')
     @php($itemCount = $purchase->items->sum('quantity'))
 
     <div class="toolbar">

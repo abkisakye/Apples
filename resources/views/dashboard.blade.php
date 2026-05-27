@@ -4,6 +4,29 @@
     @php($currency = config('business.currency', 'UGX'))
     @php($customerOverdueTotal = $customerAgingTotals['days_1_30'] + $customerAgingTotals['days_31_60'] + $customerAgingTotals['days_61_90'] + $customerAgingTotals['days_90_plus'])
     @php($supplierOverdueTotal = $supplierAgingTotals['days_1_30'] + $supplierAgingTotals['days_31_60'] + $supplierAgingTotals['days_61_90'] + $supplierAgingTotals['days_90_plus'])
+    <style>
+        .dashboard-summary-card {
+            display: block;
+            min-height: 116px;
+            transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+        }
+
+        .dashboard-summary-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
+            box-shadow: 0 22px 42px rgba(47, 38, 22, 0.12);
+        }
+
+        .dashboard-card-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+            color: var(--brand);
+            font-size: .78rem;
+            font-weight: 800;
+        }
+    </style>
     <div class="page-head">
         <div>
             <h2>Business Dashboard</h2>
@@ -36,8 +59,8 @@
 
     <section class="panel" style="margin-bottom: 16px;">
         <form method="get" class="filters">
-            <input type="date" name="from" value="{{ $fromDate }}">
-            <input type="date" name="to" value="{{ $toDate }}">
+            <input type="date" name="date_from" value="{{ $fromDate }}">
+            <input type="date" name="date_to" value="{{ $toDate }}">
             <select name="period">
                 <option value="">Custom</option>
                 <option value="today" @selected($period === 'today')>Today</option>
@@ -51,13 +74,13 @@
     </section>
 
     <section class="cards" style="margin-bottom: 16px;">
-        <div class="card"><div class="label">Sales</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['sales_total'], 0) }}</div></div>
-        <div class="card"><div class="label">Purchases</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['purchase_total'], 0) }}</div></div>
-        <div class="card"><div class="label">Expenses</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['expense_total'], 0) }}</div></div>
-        <div class="card"><div class="label">Collections</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['collection_total'], 0) }}</div></div>
-        <div class="card"><div class="label">Gross Profit</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['gross_profit'], 0) }}</div></div>
-        <div class="card"><div class="label">Net Profit</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['net_profit'], 0) }}</div></div>
-        <div class="card"><div class="label">Sales Returns</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['return_total'], 0) }}</div></div>
+        <a class="card dashboard-summary-card" href="{{ $dashboardCardLinks['sales'] }}"><div class="label">Sales</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['sales_total'], 0) }}</div><div class="dashboard-card-action">View details &rarr;</div></a>
+        <a class="card dashboard-summary-card" href="{{ $dashboardCardLinks['purchases'] }}"><div class="label">Purchases</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['purchase_total'], 0) }}</div><div class="dashboard-card-action">View details &rarr;</div></a>
+        <a class="card dashboard-summary-card" href="{{ $dashboardCardLinks['expenses'] }}"><div class="label">Expenses</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['expense_total'], 0) }}</div><div class="dashboard-card-action">View details &rarr;</div></a>
+        <a class="card dashboard-summary-card" href="{{ $dashboardCardLinks['collections'] }}"><div class="label">Collections</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['collection_total'], 0) }}</div><div class="dashboard-card-action">View details &rarr;</div></a>
+        <a class="card dashboard-summary-card" href="{{ $dashboardCardLinks['gross_profit'] }}"><div class="label">Gross Profit</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['gross_profit'], 0) }}</div><div class="dashboard-card-action">View details &rarr;</div></a>
+        <a class="card dashboard-summary-card" href="{{ $dashboardCardLinks['net_profit'] }}"><div class="label">Net Profit</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['net_profit'], 0) }}</div><div class="dashboard-card-action">View details &rarr;</div></a>
+        <a class="card dashboard-summary-card" href="{{ $dashboardCardLinks['returns'] }}"><div class="label">Sales Returns</div><div class="value money">{{ $currency }} {{ number_format($rangeSummary['return_total'], 0) }}</div><div class="dashboard-card-action">View details &rarr;</div></a>
     </section>
 
     <section class="grid-two" style="margin-bottom: 16px;">

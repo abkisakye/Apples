@@ -24,7 +24,7 @@ class ExpenseController extends Controller
         $expenseCategoryId = $request->integer('expense_category_id');
         $storeId = $request->integer('store_id');
         $period = trim((string) $request->string('period'));
-        [$fromDate, $toDate] = $this->periodRange($period);
+        [$fromDate, $toDate] = $this->periodRange($period, $request);
 
         $expensesQuery = Expense::query()
             ->with(['store:id,name', 'paymentMode:id,name', 'creator:id,name', 'expenseCategory:id,name'])
@@ -41,7 +41,7 @@ class ExpenseController extends Controller
             ->when($expenseCategoryId > 0, fn ($query) => $query->where('expense_category_id', $expenseCategoryId))
             ->when($category !== '', fn ($query) => $query->where('category', $category))
             ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
-            ->when($fromDate && $toDate, fn ($query) => $query->whereBetween('expense_date', [$fromDate, $toDate]))
+            ->when($fromDate && $toDate, fn ($query) => $query->whereDate('expense_date', '>=', $fromDate)->whereDate('expense_date', '<=', $toDate))
             ->latest('expense_date')
             ->latest('id');
 
@@ -148,8 +148,15 @@ class ExpenseController extends Controller
         );
     }
 
-    private function periodRange(string $period): array
+    private function periodRange(string $period, ?Request $request = null): array
     {
+        $dateFrom = $request?->date('date_from')?->toDateString();
+        $dateTo = $request?->date('date_to')?->toDateString();
+
+        if ($dateFrom && $dateTo) {
+            return $dateFrom <= $dateTo ? [$dateFrom, $dateTo] : [$dateTo, $dateFrom];
+        }
+
         $today = Carbon::today();
 
         return match ($period) {
