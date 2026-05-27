@@ -5,10 +5,11 @@
     <div class="page-head">
         <div>
             <h2>Supplier Payments</h2>
-            <p>Use this page to review supplier payments in one simple list, especially when checking what was paid, to who, and against which purchase.</p>
+            <p>This page shows supplier payments recorded after credit purchases. Cash purchases paid during purchase entry are shown under Purchases.</p>
         </div>
         <div class="actions">
             <a href="{{ route('supplier-payments.create') }}" class="button-link primary">Record Payment</a>
+            <a href="{{ route('purchases.index', ['balance' => 'outstanding']) }}" class="button-link">Outstanding Purchases</a>
             <a href="{{ route('supplier-payments.index', ['period' => 'today']) }}" class="button-link {{ $period === 'today' ? 'primary' : '' }}">Today</a>
             <a href="{{ route('supplier-payments.index', ['period' => 'week']) }}" class="button-link {{ $period === 'week' ? 'primary' : '' }}">This Week</a>
             <a href="{{ route('suppliers.index') }}" class="button-link">Suppliers</a>

@@ -33,7 +33,14 @@
                 <option value="cash" @selected($type === 'cash')>Cash purchases</option>
                 <option value="credit" @selected($type === 'credit')>Credit purchases</option>
             </select>
+            <select name="balance">
+                <option value="">All balances</option>
+                <option value="outstanding" @selected($balance === 'outstanding')>Outstanding only</option>
+            </select>
             <button type="submit">Filter</button>
+            @if ($search !== '' || $type !== '' || $balance !== '' || $dateFrom || $dateTo)
+                <a href="{{ route('purchases.index') }}" class="button-link">Clear</a>
+            @endif
         </form>
 
         <div class="table-wrap table-mobile-friendly">

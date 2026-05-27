@@ -24,6 +24,7 @@ class PurchaseController extends Controller
     {
         $search = trim((string) $request->string('q'));
         $type = trim((string) $request->string('type'));
+        $balance = trim((string) $request->string('balance'));
         $dateFrom = $request->date('date_from')?->toDateString();
         $dateTo = $request->date('date_to')?->toDateString();
 
@@ -34,13 +35,14 @@ class PurchaseController extends Controller
                     ->orWhereHas('supplier', fn ($supplier) => $supplier->where('name', 'like', "%{$search}%"));
             })
             ->when(in_array($type, ['cash', 'credit'], true), fn ($query) => $query->where('purchase_type', $type))
+            ->when($balance === 'outstanding', fn ($query) => $query->posted()->where('balance_due', '>', 0))
             ->when($dateFrom && $dateTo, fn ($query) => $query->whereDate('purchase_date', '>=', $dateFrom)->whereDate('purchase_date', '<=', $dateTo))
             ->latest('purchase_date')
             ->latest('id')
             ->paginate(20)
             ->withQueryString();
 
-        return view('purchases.index', compact('purchases', 'search', 'type', 'dateFrom', 'dateTo'));
+        return view('purchases.index', compact('purchases', 'search', 'type', 'balance', 'dateFrom', 'dateTo'));
     }
 
     public function create(Request $request): View

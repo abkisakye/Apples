@@ -484,6 +484,73 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseCount('supplier_payments', 1);
     }
 
+    public function test_supplier_payments_explain_cash_purchases_and_link_to_outstanding_purchases(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Statement Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        Purchase::create([
+            'purchase_no' => 'PUR-CASH-CLEARED',
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 5000,
+            'total_amount' => 5000,
+            'amount_paid' => 5000,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+
+        Purchase::create([
+            'purchase_no' => 'PUR-CREDIT-OPEN',
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 8000,
+            'total_amount' => 8000,
+            'amount_paid' => 2000,
+            'balance_due' => 6000,
+            'status' => 'posted',
+        ]);
+
+        Purchase::create([
+            'purchase_no' => 'PUR-CREDIT-CLEARED',
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 4000,
+            'total_amount' => 4000,
+            'amount_paid' => 4000,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+
+        $this->get('/supplier-payments')
+            ->assertOk()
+            ->assertSee('This page shows supplier payments recorded after credit purchases. Cash purchases paid during purchase entry are shown under Purchases.')
+            ->assertSee('Outstanding Purchases')
+            ->assertSee('/purchases?balance=outstanding', false);
+
+        $this->get('/purchases')
+            ->assertOk()
+            ->assertSee('PUR-CASH-CLEARED')
+            ->assertSee('PUR-CREDIT-OPEN')
+            ->assertSee('PUR-CREDIT-CLEARED');
+
+        $this->get('/purchases?balance=outstanding')
+            ->assertOk()
+            ->assertSee('PUR-CREDIT-OPEN')
+            ->assertDontSee('PUR-CASH-CLEARED')
+            ->assertDontSee('PUR-CREDIT-CLEARED');
+    }
+
     public function test_supplier_payment_create_can_preselect_purchase_from_purchase_row(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
