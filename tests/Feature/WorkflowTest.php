@@ -2477,6 +2477,127 @@ class WorkflowTest extends TestCase
             ->assertSee('5,600');
     }
 
+    public function test_dashboard_summary_cards_use_posted_business_dates_and_link_to_drilldowns(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Dashboard Customer', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Dashboard Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Dashboard Soap', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Bar',
+            'cost_price' => 300,
+            'selling_price' => 500,
+            'is_active' => true,
+        ]);
+
+        $sale = Sale::create([
+            'sale_no' => 'INV-DASH-1',
+            'sale_date' => '2026-05-01',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'sale_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 1500,
+            'total_amount' => 1500,
+            'amount_paid' => 900,
+            'balance_due' => 600,
+            'status' => 'posted',
+            'created_by' => $this->app['auth']->id(),
+        ]);
+        $sale->items()->create([
+            'product_id' => $product->id,
+            'product_unit_id' => $unit->id,
+            'quantity' => 3,
+            'unit_price' => 500,
+            'selling_price_snapshot' => 500,
+            'cost_price_snapshot' => 300,
+            'line_total' => 1500,
+        ]);
+
+        Sale::create([
+            'sale_no' => 'INV-DASH-VOID',
+            'sale_date' => '2026-05-01',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 99999,
+            'total_amount' => 99999,
+            'amount_paid' => 99999,
+            'balance_due' => 0,
+            'status' => 'voided',
+        ]);
+
+        \App\Models\CustomerPayment::create([
+            'payment_no' => 'PAY-DASH-1',
+            'payment_date' => '2026-05-01',
+            'customer_id' => $customer->id,
+            'sale_id' => $sale->id,
+            'account_reference_type' => 'sale',
+            'store_id' => $store->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount' => 400,
+            'status' => 'posted',
+            'created_by' => $this->app['auth']->id(),
+        ]);
+
+        Purchase::create([
+            'purchase_no' => 'PUR-DASH-1',
+            'purchase_date' => '2026-05-01',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 700,
+            'total_amount' => 700,
+            'amount_paid' => 700,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+
+        Expense::create([
+            'expense_no' => 'EXP-DASH-1',
+            'expense_date' => '2026-05-01',
+            'store_id' => $store->id,
+            'category' => 'Transport',
+            'payment_mode_id' => $paymentMode->id,
+            'amount' => 100,
+            'status' => 'posted',
+            'created_by' => $this->app['auth']->id(),
+        ]);
+
+        \App\Models\SaleReturn::create([
+            'return_no' => 'SRET-DASH-1',
+            'return_date' => '2026-05-01',
+            'sale_id' => $sale->id,
+            'customer_id' => $customer->id,
+            'store_id' => $store->id,
+            'payment_mode_id' => $paymentMode->id,
+            'return_type' => 'refund',
+            'returned_total' => 200,
+            'refund_amount' => 200,
+            'status' => 'posted',
+        ]);
+
+        $this->get('/?date_from=2026-05-01&date_to=2026-05-01')
+            ->assertOk()
+            ->assertSee('UGX 1,500')
+            ->assertSee('UGX 700')
+            ->assertSee('UGX 100')
+            ->assertSee('UGX 900')
+            ->assertSee('UGX 600')
+            ->assertSee('UGX 500')
+            ->assertSee('UGX 200')
+            ->assertDontSee('99,999')
+            ->assertSee('/sales?date_from=2026-05-01&amp;date_to=2026-05-01', false)
+            ->assertSee('/purchases?date_from=2026-05-01&amp;date_to=2026-05-01', false)
+            ->assertSee('/expenses?date_from=2026-05-01&amp;date_to=2026-05-01', false)
+            ->assertSee('/reports/payment-methods?date_from=2026-05-01&amp;date_to=2026-05-01', false)
+            ->assertSee('/reports/financial-summary?date_from=2026-05-01&amp;date_to=2026-05-01', false);
+    }
+
     public function test_aging_reports_and_role_preview_access_rules_work(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);

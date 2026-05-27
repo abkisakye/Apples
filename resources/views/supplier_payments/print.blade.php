@@ -301,7 +301,7 @@
         }
     </style>
 </head>
-<body>
+<body class="{{ request()->string('theme')->toString() === 'thermal' ? 'thermal-mode' : '' }}">
     @php($currency = config('business.currency', 'UGX'))
     @php($thermal = request()->string('theme')->toString() === 'thermal')
     @php($printedAt = now())
@@ -393,6 +393,77 @@
             .signature-row {
                 display: none !important;
             }
+
+            .thermal-receipt {
+                color: #000;
+                padding: 8px 10px 10px !important;
+            }
+
+            .thermal-business {
+                text-align: center;
+                border-bottom: 1px dashed #777;
+                padding-bottom: 6px;
+                margin-bottom: 7px;
+            }
+
+            .thermal-business-name {
+                font-size: 14px;
+                font-weight: 700;
+                line-height: 1.2;
+            }
+
+            .thermal-business-line {
+                font-size: 10px;
+                line-height: 1.25;
+                margin-top: 2px;
+            }
+
+            .thermal-title {
+                text-align: center;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+                border-bottom: 1px dashed #777;
+                padding-bottom: 6px;
+                margin-bottom: 7px;
+            }
+
+            .thermal-row {
+                display: flex;
+                justify-content: space-between;
+                gap: 8px;
+                font-size: 10.5px;
+                line-height: 1.35;
+                padding: 2px 0;
+            }
+
+            .thermal-row span:first-child {
+                flex: 0 0 28mm;
+            }
+
+            .thermal-row span:last-child {
+                flex: 1;
+                text-align: right;
+                overflow-wrap: anywhere;
+            }
+
+            .thermal-money {
+                border-top: 1px dashed #777;
+                border-bottom: 1px dashed #777;
+                margin: 7px 0;
+                padding: 6px 0;
+            }
+
+            .thermal-money .thermal-row {
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            .thermal-signatures {
+                margin-top: 10px;
+                font-size: 10px;
+                line-height: 1.7;
+            }
         </style>
     @endif
 
@@ -401,6 +472,62 @@
     </div>
 
     <div class="page">
+        @if ($thermal)
+            <div class="thermal-receipt">
+                <div class="thermal-business">
+                    <div class="thermal-business-name">{{ config('business.name', 'Apples Of Gold') }}</div>
+                    @if (config('business.phone'))
+                        <div class="thermal-business-line">Tel: {{ config('business.phone') }}</div>
+                    @endif
+                    @if (config('business.address'))
+                        <div class="thermal-business-line">{{ config('business.address') }}</div>
+                    @endif
+                </div>
+
+                <div class="thermal-title">Supplier Payment Voucher</div>
+
+                <div class="thermal-row">
+                    <span>No:</span>
+                    <span>{{ $payment->payment_no }}</span>
+                </div>
+                <div class="thermal-row">
+                    <span>Date:</span>
+                    <span>{{ optional($payment->payment_date)->format('d M Y H:i') ?: $printedAt->format('d M Y H:i') }}</span>
+                </div>
+                <div class="thermal-row">
+                    <span>Supplier:</span>
+                    <span>{{ $payment->supplier?->name ?? '-' }}</span>
+                </div>
+                <div class="thermal-row">
+                    <span>Purchase:</span>
+                    <span>{{ $payment->purchase?->purchase_no ?? '-' }}</span>
+                </div>
+                <div class="thermal-row">
+                    <span>Payment Mode:</span>
+                    <span>{{ $payment->paymentMode?->name ?? 'Not set' }}</span>
+                </div>
+                <div class="thermal-row">
+                    <span>Reference:</span>
+                    <span>{{ $payment->reference_no ?: $payment->supplier_invoice_no ?: $payment->cheque_number ?: '-' }}</span>
+                </div>
+
+                <div class="thermal-money">
+                    <div class="thermal-row">
+                        <span>Paid:</span>
+                        <span>{{ $currency }} {{ number_format($amountPaidNow, 0) }}</span>
+                    </div>
+                    <div class="thermal-row">
+                        <span>Balance After:</span>
+                        <span>{{ $currency }} {{ number_format($balanceAfterPayment, 0) }}</span>
+                    </div>
+                </div>
+
+                <div class="thermal-signatures">
+                    <div>Prepared By: __________________</div>
+                    <div>Received By: __________________</div>
+                </div>
+            </div>
+        @else
         <!-- Header Section -->
         <div class="doc-header">
             <div class="brand-info">
@@ -481,12 +608,11 @@
         </div>
 
         <!-- Signature Row -->
-        @unless ($thermal)
-            <div class="signature-row">
-                <div class="signature-item">Prepared By</div>
-                <div class="signature-item">Received By</div>
-            </div>
-        @endunless
+        <div class="signature-row">
+            <div class="signature-item">Prepared By</div>
+            <div class="signature-item">Received By</div>
+        </div>
+        @endif
     </div>
 
     <script>
