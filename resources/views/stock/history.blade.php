@@ -15,6 +15,9 @@
             <p><strong>Unit: {{ $productUnit->unit_name }}</strong> &mdash; Track how this stock item moved across sales, purchases, transfers, and adjustments, then compare that movement to the current system count.</p>
         </div>
         <div class="actions">
+            @if ($productUnit->product)
+                <a href="{{ route('stock.product-history', [$productUnit->product, 'store_id' => $storeId]) }}" class="button-link primary">Product History</a>
+            @endif
             <a href="{{ route('stock.history.export', [$productUnit, 'store_id' => $storeId]) }}" class="button-link">Export CSV</a>
             <a href="{{ route('stock.balances') }}" class="button-link">Back to Stock</a>
         </div>
@@ -38,7 +41,7 @@
             <button type="submit">Filter</button>
         </form>
 
-            <p class="list-note">This page is helpful when checking shortages, tracing stock movements, or explaining how a balance changed in a specific store.</p>
+            <p class="list-note">This is unit-specific history. For full product history across cartons, pieces, sacks, kg, and other units, open <a href="{{ route('stock.product-history', [$productUnit->product, 'store_id' => $storeId]) }}">Product History</a>.</p>
         <div class="table-wrap table-mobile-friendly">
         <table>
             <thead>

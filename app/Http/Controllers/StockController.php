@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\InventoryTransaction;
+use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\StockCount;
 use App\Models\Store;
@@ -703,6 +704,20 @@ class StockController extends Controller
         return view('stock.history', [
             'productUnit' => $productUnit,
             'transactions' => $transactions,
+            'stores' => Store::query()->orderBy('name')->get(['id', 'name']),
+            'storeId' => $storeId,
+        ]);
+    }
+
+    public function productHistory(Product $product, Request $request, StockDisplayService $stockDisplayService): View
+    {
+        $storeId = $request->integer('store_id');
+        $product->load(['units', 'baseProductUnit']);
+
+        return view('stock.product_history', [
+            'product' => $product,
+            'summary' => $stockDisplayService->productSummary($product, $storeId),
+            'historyRows' => $stockDisplayService->historyRows($product, $storeId),
             'stores' => Store::query()->orderBy('name')->get(['id', 'name']),
             'storeId' => $storeId,
         ]);

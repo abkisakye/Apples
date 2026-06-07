@@ -156,6 +156,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/stock/transfers', [StockController::class, 'transfersIndex'])->middleware('ability:stock.view')->name('stock.transfers.index');
     Route::get('/stock/adjustments', [StockController::class, 'adjustmentsIndex'])->middleware('ability:stock.view')->name('stock.adjustments.index');
     Route::get('/stock/counts', [StockController::class, 'countsIndex'])->middleware('ability:stock.view')->name('stock.counts.index');
+    Route::get('/stock/products/{product}/history', [StockController::class, 'productHistory'])->middleware('ability:stock.view')->name('stock.product-history');
     Route::get('/stock/items/{productUnit}/history', [StockController::class, 'history'])->middleware('ability:stock.view')->name('stock.history');
     Route::get('/stock/items/{productUnit}/history/export', [StockController::class, 'historyExport'])->middleware('ability:stock.view')->name('stock.history.export');
     Route::get('/stock/transfers/create', [StockController::class, 'transferCreate'])->middleware('ability:stock.manage')->name('stock.transfers.create');

@@ -117,6 +117,76 @@ class StockDisplayTest extends TestCase
             ->assertSee('Breakdown: 15 packs');
     }
 
+    public function test_product_history_shows_carton_purchase_and_piece_sale_together_with_base_impacts(): void
+    {
+        [$product, $piece, $carton] = $this->pieceCartonProduct('History Crisps');
+
+        $this->postPurchase($carton, 1, 24000)->assertRedirect()->assertSessionHasNoErrors();
+        $this->postSale($piece, 3, 1500)->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->get('/stock/products/'.$product->id.'/history?store_id='.$this->store->id)
+            ->assertOk()
+            ->assertSee('History Crisps')
+            ->assertSee('Product Stock History')
+            ->assertSee('Current Base Stock 21 pieces')
+            ->assertSee('Breakdown: 21 pieces')
+            ->assertSee('Purchase')
+            ->assertSee('1 carton')
+            ->assertSee('Base +24 pieces')
+            ->assertSee('Balance 24 pieces')
+            ->assertSee('Sale')
+            ->assertSee('3 pieces')
+            ->assertSee('Base -3 pieces')
+            ->assertSee('Balance 21 pieces');
+    }
+
+    public function test_stock_balances_page_links_to_product_history(): void
+    {
+        [$product, $piece] = $this->pieceCartonProduct('Linked History Crisps');
+        $this->postBaseStock($product, $piece, 12);
+
+        $this->get('/stock/balances?store_id='.$this->store->id)
+            ->assertOk()
+            ->assertSee(route('stock.product-history', $product, false), false)
+            ->assertSee('View History');
+    }
+
+    public function test_old_unit_level_history_route_still_works_and_links_to_product_history(): void
+    {
+        [$product, $piece] = $this->pieceCartonProduct('Unit History Crisps');
+        $this->postBaseStock($product, $piece, 12);
+
+        $this->get('/stock/items/'.$piece->id.'/history?store_id='.$this->store->id)
+            ->assertOk()
+            ->assertSee('This is unit-specific history.')
+            ->assertSee(route('stock.product-history', $product, false), false);
+    }
+
+    public function test_single_unit_product_history_displays_normally(): void
+    {
+        $product = Product::create(['name' => 'Single History Product', 'is_active' => true]);
+        $pack = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Pack',
+            'conversion_factor' => 1,
+            'cost_price' => 3000,
+            'selling_price' => 5000,
+            'is_base_unit' => true,
+            'is_active' => true,
+        ]);
+        $product->update(['base_product_unit_id' => $pack->id, 'base_unit_label' => 'Pack']);
+
+        $this->postBaseStock($product, $pack, 15);
+
+        $this->get('/stock/products/'.$product->id.'/history?store_id='.$this->store->id)
+            ->assertOk()
+            ->assertSee('Single History Product')
+            ->assertSee('Current Base Stock 15 packs')
+            ->assertSee('15 packs')
+            ->assertSee('Base +15 packs')
+            ->assertSee('Balance 15 packs');
+    }
+
     /**
      * @return array{0: Product, 1: ProductUnit, 2: ProductUnit, 3: ProductUnit}
      */

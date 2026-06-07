@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use Illuminate\Http\Request;
@@ -96,6 +97,94 @@ class StockDisplayService
         }
 
         return implode(' + ', $parts);
+    }
+
+    public function productSummary(Product $product, int $storeId = 0): object
+    {
+        $product->loadMissing(['units' => fn ($query) => $query
+            ->where('is_active', true)
+            ->orderByDesc('conversion_factor')
+            ->orderBy('unit_name'), 'baseProductUnit']);
+
+        $baseUnit = $this->conversionService->baseUnitForProduct($product);
+        $baseUnitLabel = $product->base_unit_label ?: $baseUnit?->unit_name ?: 'base unit(s)';
+        $baseBalance = $this->baseBalanceForProduct((int) $product->id, $storeId);
+
+        return (object) [
+            'base_balance' => $baseBalance,
+            'base_stock_label' => $this->formatQuantityWithUnit($baseBalance, $baseUnitLabel, $baseUnit),
+            'base_unit_label' => $baseUnitLabel,
+            'friendly_breakdown' => $this->friendlyBreakdown($baseBalance, $product, $baseUnit),
+            'configured_units' => $this->configuredUnitsLabel($product),
+            'base_unit' => $baseUnit,
+        ];
+    }
+
+    public function baseBalanceForProduct(int $productId, int $storeId = 0): float
+    {
+        return round((float) ($this->baseBalances([$productId], $storeId)[$productId] ?? 0), 3);
+    }
+
+    public function historyRows(Product $product, int $storeId = 0): Collection
+    {
+        $product->loadMissing(['units', 'baseProductUnit']);
+        $baseUnit = $this->conversionService->baseUnitForProduct($product);
+        $baseUnitLabel = $product->base_unit_label ?: $baseUnit?->unit_name ?: 'base unit(s)';
+        $runningBalance = 0.0;
+
+        return InventoryTransaction::query()
+            ->with(['store:id,name', 'productUnit:id,product_id,unit_name,conversion_factor', 'createdBy:id,name'])
+            ->where('product_id', $product->id)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->orderBy('transaction_date')
+            ->orderBy('id')
+            ->get()
+            ->map(function (InventoryTransaction $transaction) use (&$runningBalance, $baseUnitLabel, $baseUnit) {
+                $baseIn = $this->baseMovementQuantity($transaction, 'in');
+                $baseOut = $this->baseMovementQuantity($transaction, 'out');
+                $baseImpact = round($baseIn - $baseOut, 3);
+                $runningBalance = round($runningBalance + $baseImpact, 3);
+
+                return (object) [
+                    'transaction' => $transaction,
+                    'selected_quantity_label' => $this->selectedQuantityLabel($transaction),
+                    'base_impact' => $baseImpact,
+                    'base_impact_label' => $this->formatSignedBaseImpact($baseImpact, $baseUnitLabel, $baseUnit),
+                    'running_balance' => $runningBalance,
+                    'running_balance_label' => $this->formatQuantityWithUnit($runningBalance, $baseUnitLabel, $baseUnit),
+                ];
+            });
+    }
+
+    public function baseMovementQuantity(InventoryTransaction $transaction, string $direction): float
+    {
+        $baseColumn = $direction === 'in' ? 'base_quantity_in' : 'base_quantity_out';
+        $quantityColumn = $direction === 'in' ? 'quantity_in' : 'quantity_out';
+        $baseQuantity = (float) ($transaction->{$baseColumn} ?? 0);
+
+        if ($baseQuantity != 0.0) {
+            return round($baseQuantity, 3);
+        }
+
+        $factor = (float) ($transaction->conversion_factor_snapshot ?: $transaction->productUnit?->conversion_factor ?: 1);
+
+        return round((float) ($transaction->{$quantityColumn} ?? 0) * ($factor > 0 ? $factor : 1), 3);
+    }
+
+    public function selectedQuantityLabel(InventoryTransaction $transaction): string
+    {
+        $quantity = max((float) $transaction->quantity_in, (float) $transaction->quantity_out);
+        $unit = $transaction->productUnit;
+        $unitLabel = $unit?->unit_name ?? 'unit';
+
+        return $this->formatQuantityWithUnit($quantity, $unitLabel, $unit);
+    }
+
+    private function formatSignedBaseImpact(float $quantity, string $unitLabel, ?ProductUnit $unit = null): string
+    {
+        $prefix = $quantity >= 0 ? '+' : '-';
+
+        return $prefix.$this->formatQuantityWithUnit(abs($quantity), $unitLabel, $unit);
     }
 
     private function productsForDisplay(Request $request)

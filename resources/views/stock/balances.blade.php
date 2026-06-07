@@ -91,11 +91,7 @@
                     <tr>
                         <td>
                             <div class="stock-unit-title">
-                                @if ($row->primary_unit_id)
-                                    <a href="{{ route('stock.history', $row->primary_unit_id) }}" class="stock-product-link">{{ $row->product_name }}</a>
-                                @else
-                                    <span class="stock-product-link">{{ $row->product_name }}</span>
-                                @endif
+                                <a href="{{ route('stock.product-history', $row->product_id) }}" class="stock-product-link">{{ $row->product_name }}</a>
                                 <div class="stock-unit-chip">Base unit: {{ $row->base_unit_label }}</div>
                             </div>
                             <div class="table-meta">{{ $row->product_code ?: 'No code' }}</div>
@@ -128,12 +124,10 @@
                                     </span>
                                 </summary>
                                 <div class="row-actions-dropdown">
-                                    @if ($row->primary_unit_id)
-                                        <a href="{{ route('stock.history', $row->primary_unit_id) }}" class="row-action-link">
-                                            <span>Movement History</span>
-                                            <span class="meta">Hist</span>
-                                        </a>
-                                    @endif
+                                    <a href="{{ route('stock.product-history', ['product' => $row->product_id, 'store_id' => $filters['store_id']]) }}" class="row-action-link">
+                                        <span>View History</span>
+                                        <span class="meta">Hist</span>
+                                    </a>
                                 @if ((float) $row->reorder_level > 0 && (float) $row->base_balance <= (float) $row->reorder_level)
                                         <a href="{{ route('stock.reorder', request()->only('store_id', 'category_id', 'q')) }}" class="row-action-link accent">
                                             <span>View Reorder Alert</span>
