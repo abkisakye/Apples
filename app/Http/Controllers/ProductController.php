@@ -91,6 +91,7 @@ class ProductController extends Controller
         $product = DB::transaction(function () use ($productData, $unitRows) {
             $product = Product::query()->create($productData);
             $this->syncUnits($product, $unitRows);
+            $this->syncBaseUnit($product, $unitRows);
 
             return $product;
         });
@@ -191,6 +192,9 @@ class ProductController extends Controller
                     'cost_price' => (float) $unit->cost_price,
                     'barcode' => $unit->barcode,
                     'part_number' => $unit->part_number,
+                    'allow_fractional_quantity' => $unit->allow_fractional_quantity,
+                    'quantity_precision' => (int) $unit->quantity_precision,
+                    'is_base_unit' => $unit->is_base_unit,
                     'is_active' => $unit->is_active,
                     'is_pos_unit' => $unit->is_pos_unit,
                 ];
@@ -211,6 +215,7 @@ class ProductController extends Controller
         DB::transaction(function () use ($product, $productData, $unitRows) {
             $product->update($productData);
             $this->syncUnits($product, $unitRows);
+            $this->syncBaseUnit($product, $unitRows);
         });
 
         $auditLogService->record('product.updated', $product, "Product {$product->name} updated.", [
@@ -274,6 +279,9 @@ class ProductController extends Controller
             'units.*.cost_price' => ['nullable', 'numeric', 'min:0'],
             'units.*.barcode' => ['nullable', 'string', 'max:255'],
             'units.*.part_number' => ['nullable', 'string', 'max:255'],
+            'units.*.allow_fractional_quantity' => ['nullable', 'boolean'],
+            'units.*.quantity_precision' => ['nullable', 'integer', 'min:0', 'max:3'],
+            'units.*.is_base_unit' => ['nullable', 'boolean'],
             'units.*.is_active' => ['nullable', 'boolean'],
             'default_unit_index' => ['nullable', 'integer', 'min:0'],
         ]);
@@ -288,6 +296,9 @@ class ProductController extends Controller
                     'cost_price' => round((float) ($unit['cost_price'] ?? 0), 2),
                     'barcode' => blank($unit['barcode'] ?? null) ? null : trim((string) $unit['barcode']),
                     'part_number' => blank($unit['part_number'] ?? null) ? null : trim((string) $unit['part_number']),
+                    'allow_fractional_quantity' => filter_var($unit['allow_fractional_quantity'] ?? false, FILTER_VALIDATE_BOOL),
+                    'quantity_precision' => (int) ($unit['quantity_precision'] ?? 0),
+                    'is_base_unit' => filter_var($unit['is_base_unit'] ?? false, FILTER_VALIDATE_BOOL),
                     'is_active' => filter_var($unit['is_active'] ?? true, FILTER_VALIDATE_BOOL),
                 ];
             })
@@ -305,6 +316,12 @@ class ProductController extends Controller
         if ($duplicateNames->isNotEmpty()) {
             throw ValidationException::withMessages([
                 'units' => 'Each product unit name must be unique within the same product.',
+            ]);
+        }
+
+        if ($unitRows->where('is_base_unit', true)->count() > 1) {
+            throw ValidationException::withMessages([
+                'units' => 'Choose only one base unit for this product.',
             ]);
         }
 
@@ -347,6 +364,40 @@ class ProductController extends Controller
         }
     }
 
+    private function syncBaseUnit(Product $product, array $unitRows): void
+    {
+        $product->load('units');
+        $selectedRow = collect($unitRows)->first(fn (array $unit) => (bool) ($unit['is_base_unit'] ?? false));
+        $baseUnit = null;
+
+        if ($selectedRow) {
+            $baseUnit = $product->units
+                ->first(fn (ProductUnit $unit) => ! empty($selectedRow['id'])
+                    ? (int) $unit->id === (int) $selectedRow['id']
+                    : mb_strtolower($unit->unit_name) === mb_strtolower($selectedRow['unit_name']));
+        }
+
+        $baseUnit ??= $product->units
+            ->where('is_active', true)
+            ->first(fn (ProductUnit $unit) => round((float) $unit->conversion_factor, 3) === 1.0);
+
+        if ($baseUnit) {
+            $product->units()->update(['is_base_unit' => false]);
+            $product->units()->whereKey($baseUnit->id)->update(['is_base_unit' => true]);
+            $product->update([
+                'base_product_unit_id' => $baseUnit->id,
+                'base_unit_label' => $baseUnit->unit_name,
+            ]);
+
+            return;
+        }
+
+        $product->update([
+            'base_product_unit_id' => null,
+            'base_unit_label' => null,
+        ]);
+    }
+
     private function defaultUnitRow(): array
     {
         return [
@@ -356,6 +407,9 @@ class ProductController extends Controller
             'cost_price' => 0,
             'barcode' => null,
             'part_number' => null,
+            'allow_fractional_quantity' => false,
+            'quantity_precision' => 0,
+            'is_base_unit' => true,
             'is_active' => true,
             'is_pos_unit' => true,
         ];

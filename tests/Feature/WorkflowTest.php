@@ -2781,6 +2781,68 @@ class WorkflowTest extends TestCase
             ->assertSee($duplicateWarning);
     }
 
+    public function test_product_unit_base_conversion_metadata_can_be_saved_without_changing_stock_behavior(): void
+    {
+        $this->get('/products/create')
+            ->assertOk()
+            ->assertSee('Allow Fractional Qty')
+            ->assertSee('Quantity Precision')
+            ->assertSee('Base Unit');
+
+        $this->post('/products', [
+            'name' => 'Wholesale Setup Product',
+            'code' => 'WSP-001',
+            'reorder_level' => 10,
+            'is_vat_applicable' => 0,
+            'is_active' => 1,
+            'default_unit_index' => 0,
+            'units' => [
+                [
+                    'unit_name' => 'Kg',
+                    'conversion_factor' => 1,
+                    'selling_price' => 3000,
+                    'cost_price' => 2200,
+                    'allow_fractional_quantity' => 1,
+                    'quantity_precision' => 3,
+                    'is_base_unit' => 1,
+                    'is_active' => 1,
+                ],
+                [
+                    'unit_name' => 'Sack',
+                    'conversion_factor' => 50,
+                    'selling_price' => 145000,
+                    'cost_price' => 110000,
+                    'allow_fractional_quantity' => 0,
+                    'quantity_precision' => 0,
+                    'is_base_unit' => 0,
+                    'is_active' => 1,
+                ],
+            ],
+        ])->assertRedirect();
+
+        $product = Product::query()->where('name', 'Wholesale Setup Product')->firstOrFail();
+        $kg = ProductUnit::query()->where('product_id', $product->id)->where('unit_name', 'Kg')->firstOrFail();
+
+        $this->assertDatabaseHas('product_units', [
+            'id' => $kg->id,
+            'allow_fractional_quantity' => true,
+            'quantity_precision' => 3,
+            'is_base_unit' => true,
+        ]);
+        $this->assertDatabaseHas('products', [
+            'id' => $product->id,
+            'base_product_unit_id' => $kg->id,
+            'base_unit_label' => 'Kg',
+        ]);
+
+        $this->assertDatabaseHas('product_units', [
+            'product_id' => $product->id,
+            'unit_name' => 'Sack',
+            'conversion_factor' => 50,
+            'is_base_unit' => false,
+        ]);
+    }
+
     public function test_follow_up_and_csv_export_routes_work(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);

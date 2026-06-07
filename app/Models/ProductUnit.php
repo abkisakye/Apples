@@ -17,6 +17,9 @@ class ProductUnit extends Model
             'cost_price' => 'decimal:2',
             'opening_stock_qty' => 'decimal:3',
             'is_pos_unit' => 'boolean',
+            'allow_fractional_quantity' => 'boolean',
+            'quantity_precision' => 'integer',
+            'is_base_unit' => 'boolean',
             'is_active' => 'boolean',
         ];
     }

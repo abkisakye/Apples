@@ -15,6 +15,9 @@ class StockCountItem extends Model
             'system_qty' => 'integer',
             'physical_qty' => 'integer',
             'variance_qty' => 'integer',
+            'system_base_qty' => 'decimal:3',
+            'physical_base_qty' => 'decimal:3',
+            'variance_base_qty' => 'decimal:3',
             'quantity_adjusted' => 'integer',
         ];
     }

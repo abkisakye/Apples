@@ -13,6 +13,8 @@ class PurchaseReturnItem extends Model
     {
         return [
             'quantity' => 'decimal:3',
+            'base_quantity' => 'decimal:3',
+            'conversion_factor_snapshot' => 'decimal:6',
             'unit_cost' => 'decimal:2',
             'line_total' => 'decimal:2',
         ];

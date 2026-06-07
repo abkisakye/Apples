@@ -219,6 +219,29 @@
                                 <input type="number" step="0.001" min="0.001" name="units[{{ $index }}][conversion_factor]" value="{{ $unit['conversion_factor'] ?? 1 }}">
                             </label>
                             <label class="form-field">
+                                <span>Base Unit</span>
+                                <select name="units[{{ $index }}][is_base_unit]">
+                                    <option value="0" @selected(empty($unit['is_base_unit']))>No</option>
+                                    <option value="1" @selected(! empty($unit['is_base_unit']))>Yes, base unit</option>
+                                </select>
+                                <span class="field-tip">Usually the smallest stock unit, such as piece or kg.</span>
+                            </label>
+                            <label class="form-field">
+                                <span>Allow Fractional Qty</span>
+                                <select name="units[{{ $index }}][allow_fractional_quantity]">
+                                    <option value="0" @selected(empty($unit['allow_fractional_quantity']))>Whole numbers only</option>
+                                    <option value="1" @selected(! empty($unit['allow_fractional_quantity']))>Allow decimals</option>
+                                </select>
+                            </label>
+                            <label class="form-field">
+                                <span>Quantity Precision</span>
+                                <select name="units[{{ $index }}][quantity_precision]">
+                                    @for ($precision = 0; $precision <= 3; $precision++)
+                                        <option value="{{ $precision }}" @selected((int) ($unit['quantity_precision'] ?? 0) === $precision)>{{ $precision }} decimal place{{ $precision === 1 ? '' : 's' }}</option>
+                                    @endfor
+                                </select>
+                            </label>
+                            <label class="form-field">
                                 <span>Cost Price</span>
                                 <input type="number" step="0.01" min="0" name="units[{{ $index }}][cost_price]" value="{{ $unit['cost_price'] ?? 0 }}">
                             </label>
@@ -291,6 +314,30 @@
             <label class="form-field">
                 <span>Conversion Factor</span>
                 <input type="number" step="0.001" min="0.001" name="units[__INDEX__][conversion_factor]" value="1">
+            </label>
+            <label class="form-field">
+                <span>Base Unit</span>
+                <select name="units[__INDEX__][is_base_unit]">
+                    <option value="0" selected>No</option>
+                    <option value="1">Yes, base unit</option>
+                </select>
+                <span class="field-tip">Usually the smallest stock unit, such as piece or kg.</span>
+            </label>
+            <label class="form-field">
+                <span>Allow Fractional Qty</span>
+                <select name="units[__INDEX__][allow_fractional_quantity]">
+                    <option value="0" selected>Whole numbers only</option>
+                    <option value="1">Allow decimals</option>
+                </select>
+            </label>
+            <label class="form-field">
+                <span>Quantity Precision</span>
+                <select name="units[__INDEX__][quantity_precision]">
+                    <option value="0" selected>0 decimal places</option>
+                    <option value="1">1 decimal place</option>
+                    <option value="2">2 decimal places</option>
+                    <option value="3">3 decimal places</option>
+                </select>
             </label>
             <label class="form-field">
                 <span>Cost Price</span>

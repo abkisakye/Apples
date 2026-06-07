@@ -13,6 +13,8 @@ class SaleItem extends Model
     {
         return [
             'quantity' => 'decimal:3',
+            'base_quantity' => 'decimal:3',
+            'conversion_factor_snapshot' => 'decimal:6',
             'unit_price' => 'decimal:2',
             'selling_price_snapshot' => 'decimal:2',
             'cost_price_snapshot' => 'decimal:2',

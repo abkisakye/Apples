@@ -30,6 +30,11 @@ class Product extends Model
         return $this->belongsTo(Supplier::class);
     }
 
+    public function baseProductUnit(): BelongsTo
+    {
+        return $this->belongsTo(ProductUnit::class, 'base_product_unit_id');
+    }
+
     public function units(): HasMany
     {
         return $this->hasMany(ProductUnit::class);

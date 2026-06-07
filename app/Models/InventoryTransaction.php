@@ -15,6 +15,9 @@ class InventoryTransaction extends Model
             'transaction_date' => 'date',
             'quantity_in' => 'decimal:3',
             'quantity_out' => 'decimal:3',
+            'base_quantity_in' => 'decimal:3',
+            'base_quantity_out' => 'decimal:3',
+            'conversion_factor_snapshot' => 'decimal:6',
             'unit_cost' => 'decimal:2',
             'unit_price' => 'decimal:2',
         ];
