@@ -10,6 +10,7 @@ use App\Models\Store;
 use App\Models\Supplier;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
+use App\Support\ProductUnitConversionService;
 use App\Support\StoreAssignmentService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -149,7 +150,8 @@ class PurchaseController extends Controller
         Request $request,
         DocumentNumberService $documentNumberService,
         AuditLogService $auditLogService,
-        StoreAssignmentService $storeAssignmentService
+        StoreAssignmentService $storeAssignmentService,
+        ProductUnitConversionService $conversionService
     ): RedirectResponse
     {
         $validated = $request->validate([
@@ -187,17 +189,21 @@ class PurchaseController extends Controller
             ->keyBy('id');
         $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), app(\App\Support\AccessService::class));
 
-        $purchase = DB::transaction(function () use ($validated, $items, $productUnits, $documentNumberService, $storeId) {
-            $preparedItems = $items->map(function (array $item) use ($productUnits) {
+        $purchase = DB::transaction(function () use ($validated, $items, $productUnits, $documentNumberService, $storeId, $conversionService) {
+            $preparedItems = $items->map(function (array $item) use ($productUnits, $conversionService) {
                 /** @var ProductUnit|null $unit */
                 $unit = $productUnits->get((int) $item['product_unit_id']);
                 $quantity = max((int) $item['quantity'], 1);
+                $conversionFactor = $conversionService->conversionFactorSnapshot($unit);
+                $baseQuantity = $conversionService->toBaseQuantity($quantity, $unit);
                 $unitCost = round((float) ($item['unit_cost'] ?? $unit?->cost_price ?? 0), 2);
                 $lineTotal = round($quantity * $unitCost, 2);
 
                 return [
                     'unit' => $unit,
                     'quantity' => $quantity,
+                    'base_quantity' => $baseQuantity,
+                    'conversion_factor_snapshot' => $conversionFactor,
                     'unit_cost' => $unitCost,
                     'line_total' => $lineTotal,
                 ];
@@ -253,6 +259,8 @@ class PurchaseController extends Controller
                     'product_id' => $unit->product_id,
                     'product_unit_id' => $unit->id,
                     'quantity' => $item['quantity'],
+                    'base_quantity' => $item['base_quantity'],
+                    'conversion_factor_snapshot' => $item['conversion_factor_snapshot'],
                     'unit_cost' => $item['unit_cost'],
                     'vat_amount' => 0,
                     'discount_amount' => 0,
@@ -270,6 +278,9 @@ class PurchaseController extends Controller
                     'movement_type' => 'purchase',
                     'quantity_in' => $item['quantity'],
                     'quantity_out' => 0,
+                    'base_quantity_in' => $item['base_quantity'],
+                    'base_quantity_out' => 0,
+                    'conversion_factor_snapshot' => $item['conversion_factor_snapshot'],
                     'unit_cost' => $item['unit_cost'],
                     'unit_price' => null,
                 ]);

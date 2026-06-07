@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\InventoryTransaction;
 use App\Models\PaymentMode;
+use App\Models\ProductUnit;
 use App\Models\Purchase;
 use App\Models\PurchaseReturn;
 use App\Models\PurchaseReturnItem;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Support\AccessService;
+use App\Support\ProductUnitConversionService;
 use App\Support\StockAvailabilityService;
 use App\Support\StoreAssignmentService;
 use Illuminate\Contracts\View\View;
@@ -56,7 +58,8 @@ class PurchaseReturnController extends Controller
         DocumentNumberService $documentNumberService,
         AuditLogService $auditLogService,
         StoreAssignmentService $storeAssignmentService,
-        StockAvailabilityService $stockAvailabilityService
+        StockAvailabilityService $stockAvailabilityService,
+        ProductUnitConversionService $conversionService
     ): RedirectResponse
     {
         $validated = $request->validate([
@@ -66,10 +69,11 @@ class PurchaseReturnController extends Controller
             'remarks' => ['nullable', 'string'],
             'items' => ['required', 'array'],
             'items.*.purchase_item_id' => ['nullable', 'exists:purchase_items,id'],
+            'items.*.product_unit_id' => ['nullable', 'exists:product_units,id'],
             'items.*.quantity' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $purchase->load(['items', 'supplier', 'store']);
+        $purchase->load(['items.productUnit', 'supplier', 'store']);
         $this->guardReturnEligibility($purchase);
         $storeAssignmentService->resolveStoreId((int) $purchase->store_id, $request->user(), app(AccessService::class), 'purchase');
 
@@ -83,17 +87,34 @@ class PurchaseReturnController extends Controller
             ]);
         }
 
-        $returnedByItem = PurchaseReturnItem::query()
-            ->selectRaw('purchase_item_id, COALESCE(SUM(quantity), 0) as returned_qty')
+        $returnedBaseByItem = PurchaseReturnItem::query()
+            ->with('productUnit:id,conversion_factor')
             ->whereIn('purchase_item_id', $selectedRows->pluck('purchase_item_id'))
             ->whereHas('purchaseReturn', fn ($query) => $query->where('status', 'posted'))
+            ->get()
             ->groupBy('purchase_item_id')
-            ->pluck('returned_qty', 'purchase_item_id');
+            ->map(fn ($items) => round((float) $items->sum(function (PurchaseReturnItem $item) {
+                $factor = (float) ($item->conversion_factor_snapshot ?: $item->productUnit?->conversion_factor ?: 1);
 
-        $return = DB::transaction(function () use ($validated, $purchase, $selectedRows, $returnedByItem, $documentNumberService, $stockAvailabilityService) {
+                return (float) ($item->base_quantity ?: ((float) $item->quantity * ($factor > 0 ? $factor : 1)));
+            }), 3));
+
+        $returnUnitIds = $selectedRows
+            ->pluck('product_unit_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        $returnUnits = ProductUnit::query()
+            ->with('product:id,name')
+            ->whereIn('id', $returnUnitIds->all())
+            ->get()
+            ->keyBy('id');
+
+        $return = DB::transaction(function () use ($validated, $purchase, $selectedRows, $returnedBaseByItem, $returnUnits, $documentNumberService, $stockAvailabilityService, $conversionService) {
             $purchaseItems = $purchase->items->keyBy('id');
 
-            $prepared = $selectedRows->map(function (array $row) use ($purchaseItems, $returnedByItem) {
+            $prepared = $selectedRows->map(function (array $row) use ($purchaseItems, $returnedBaseByItem, $returnUnits, $conversionService) {
                 $purchaseItem = $purchaseItems->get((int) $row['purchase_item_id']);
                 if (! $purchaseItem) {
                     throw ValidationException::withMessages([
@@ -101,21 +122,41 @@ class PurchaseReturnController extends Controller
                     ]);
                 }
 
-                $alreadyReturned = (int) round((float) ($returnedByItem[$purchaseItem->id] ?? 0));
-                $availableQty = max((int) round((float) $purchaseItem->quantity) - $alreadyReturned, 0);
-                $quantity = max((int) $row['quantity'], 0);
+                $returnUnit = ! empty($row['product_unit_id'])
+                    ? $returnUnits->get((int) $row['product_unit_id'])
+                    : $purchaseItem->productUnit;
 
-                if ($quantity > $availableQty) {
+                if (! $returnUnit || (int) $returnUnit->product_id !== (int) $purchaseItem->product_id) {
+                    throw ValidationException::withMessages([
+                        'items' => 'Return unit must belong to the same product as the purchase line.',
+                    ]);
+                }
+
+                $quantity = max((int) $row['quantity'], 0);
+                $conversionFactor = $conversionService->conversionFactorSnapshot($returnUnit);
+                $baseQuantity = $conversionService->toBaseQuantity($quantity, $returnUnit);
+                $purchaseFactor = (float) ($purchaseItem->conversion_factor_snapshot ?: $conversionService->conversionFactorSnapshot($purchaseItem->productUnit));
+                $purchaseBaseQuantity = (float) ($purchaseItem->base_quantity ?: ((float) $purchaseItem->quantity * ($purchaseFactor > 0 ? $purchaseFactor : 1)));
+                $alreadyReturnedBase = (float) ($returnedBaseByItem[$purchaseItem->id] ?? 0);
+                $availableBaseQuantity = max(round($purchaseBaseQuantity - $alreadyReturnedBase, 3), 0);
+
+                if ($baseQuantity > $availableBaseQuantity) {
                     throw ValidationException::withMessages([
                         'items' => 'Returned quantity cannot be more than the remaining purchased quantity.',
                     ]);
                 }
 
+                $baseUnitCost = round((float) $purchaseItem->unit_cost / ($purchaseFactor > 0 ? $purchaseFactor : 1), 6);
+                $unitCost = round($baseUnitCost * $conversionFactor, 2);
+
                 return [
                     'purchase_item' => $purchaseItem,
+                    'return_unit' => $returnUnit,
                     'quantity' => $quantity,
-                    'unit_cost' => (float) $purchaseItem->unit_cost,
-                    'line_total' => round($quantity * (float) $purchaseItem->unit_cost, 2),
+                    'unit_cost' => $unitCost,
+                    'line_total' => round($quantity * $unitCost, 2),
+                    'base_quantity' => $baseQuantity,
+                    'conversion_factor_snapshot' => $conversionFactor,
                 ];
             });
 
@@ -148,34 +189,40 @@ class PurchaseReturnController extends Controller
 
             foreach ($prepared as $row) {
                 $purchaseItem = $row['purchase_item'];
-                $stockAvailabilityService->ensureAvailable(
+                $returnUnit = $row['return_unit'];
+                $stockAvailabilityService->ensureBaseAvailable(
                     (int) $purchase->store_id,
-                    $purchaseItem->productUnit,
-                    (int) $row['quantity'],
+                    $returnUnit,
+                    (float) $row['base_quantity'],
                     'items'
                 );
 
                 $returnItem = $return->items()->create([
                     'purchase_item_id' => $purchaseItem->id,
                     'product_id' => $purchaseItem->product_id,
-                    'product_unit_id' => $purchaseItem->product_unit_id,
+                    'product_unit_id' => $returnUnit->id,
                     'quantity' => $row['quantity'],
                     'unit_cost' => $row['unit_cost'],
                     'line_total' => $row['line_total'],
+                    'base_quantity' => $row['base_quantity'],
+                    'conversion_factor_snapshot' => $row['conversion_factor_snapshot'],
                 ]);
 
                 InventoryTransaction::create([
                     'transaction_date' => $return->return_date,
                     'store_id' => $return->store_id,
                     'product_id' => $purchaseItem->product_id,
-                    'product_unit_id' => $purchaseItem->product_unit_id,
+                    'product_unit_id' => $returnUnit->id,
                     'reference_type' => 'purchase_return',
                     'reference_id' => $returnItem->id,
                     'reference_no' => $return->return_no,
                     'movement_type' => 'purchase_return',
                     'quantity_in' => 0,
                     'quantity_out' => $row['quantity'],
-                    'unit_cost' => $purchaseItem->unit_cost,
+                    'base_quantity_in' => 0,
+                    'base_quantity_out' => $row['base_quantity'],
+                    'conversion_factor_snapshot' => $row['conversion_factor_snapshot'],
+                    'unit_cost' => $row['unit_cost'],
                     'unit_price' => null,
                 ]);
             }

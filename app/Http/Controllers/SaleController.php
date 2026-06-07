@@ -14,6 +14,7 @@ use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Support\AccessService;
 use App\Support\ApprovalPinService;
+use App\Support\ProductUnitConversionService;
 use App\Support\StockAvailabilityService;
 use App\Support\StoreAssignmentService;
 use Carbon\Carbon;
@@ -195,7 +196,8 @@ class SaleController extends Controller
         AuditLogService $auditLogService,
         StoreAssignmentService $storeAssignmentService,
         StockAvailabilityService $stockAvailabilityService,
-        ApprovalPinService $approvalPinService
+        ApprovalPinService $approvalPinService,
+        ProductUnitConversionService $conversionService
     ): RedirectResponse
     {
         $validated = $request->validate([
@@ -213,7 +215,7 @@ class SaleController extends Controller
             'exchange_return_id' => ['nullable', 'exists:sale_returns,id'],
             'items' => ['required', 'array'],
             'items.*.product_unit_id' => ['nullable', 'exists:product_units,id'],
-            'items.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'items.*.quantity' => ['nullable', 'numeric', 'gt:0'],
             'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
@@ -259,7 +261,8 @@ class SaleController extends Controller
             $access,
             $storeId,
             $stockAvailabilityService,
-            $approvalPinService
+            $approvalPinService,
+            $conversionService
         ) {
             $customerId = (int) ($validated['customer_id'] ?? 0);
             if (! $customerId) {
@@ -272,7 +275,7 @@ class SaleController extends Controller
             $priceOverrideApproved = $access->can('sales.override') || $approvalPinService->verify($validated['approval_pin'] ?? null);
             $priceOverrides = [];
 
-            $preparedItems = $items->map(function (array $item, int $index) use ($productUnits, $priceOverrideApproved, &$priceOverrides) {
+            $preparedItems = $items->map(function (array $item, int $index) use ($productUnits, $priceOverrideApproved, &$priceOverrides, $conversionService) {
                 /** @var ProductUnit|null $unit */
                 $unit = $productUnits->get((int) $item['product_unit_id']);
                 if (! $unit) {
@@ -281,7 +284,10 @@ class SaleController extends Controller
                     ]);
                 }
 
-                $quantity = max((int) $item['quantity'], 1);
+                $quantity = round(max((float) $item['quantity'], 0.001), 3);
+                $conversionService->validatePrecision($quantity, $unit, 'items');
+                $conversionFactor = $conversionService->conversionFactorSnapshot($unit);
+                $baseQuantity = $conversionService->toBaseQuantity($quantity, $unit);
                 $catalogPrice = round((float) $unit->selling_price, 2);
                 $requestedPrice = round((float) ($item['unit_price'] ?? $catalogPrice), 2);
 
@@ -307,6 +313,8 @@ class SaleController extends Controller
                 return [
                     'unit' => $unit,
                     'quantity' => $quantity,
+                    'base_quantity' => $baseQuantity,
+                    'conversion_factor_snapshot' => $conversionFactor,
                     'unit_price' => $unitPrice,
                     'line_total' => $lineTotal,
                 ];
@@ -358,8 +366,8 @@ class SaleController extends Controller
                 $correctionSourceSale = Sale::query()->with('items')->findOrFail($validated['corrected_from_sale_id']);
                 $this->guardCorrectionEligibility($correctionSourceSale);
                 $correctionRestockByUnit = $correctionSourceSale->items
-                    ->groupBy('product_unit_id')
-                    ->map(fn ($group) => (int) round((float) $group->sum('quantity')))
+                    ->groupBy('product_id')
+                    ->map(fn ($group) => round((float) $group->sum(fn ($item) => (float) ($item->base_quantity ?? 0)), 3))
                     ->all();
             }
 
@@ -393,14 +401,17 @@ class SaleController extends Controller
             foreach ($preparedItems as $item) {
                 /** @var ProductUnit $unit */
                 $unit = $item['unit'];
-                $availableQuantity = $stockAvailabilityService->availableQuantity($storeId, $unit->id)
-                    + (int) ($correctionRestockByUnit[$unit->id] ?? 0);
+                $availableBaseAdjustment = (float) ($correctionRestockByUnit[$unit->product_id] ?? 0);
 
-                if ($item['quantity'] > $availableQuantity) {
-                    throw ValidationException::withMessages([
-                        'items' => "{$unit->product?->name} - {$unit->unit_name} has only {$availableQuantity} available for this correction at the selected store.",
-                    ]);
-                }
+                $stockAvailabilityService->ensureBaseAvailable(
+                    $storeId,
+                    $unit,
+                    $item['base_quantity'],
+                    'items',
+                    "{$unit->product?->name} - {$unit->unit_name} does not have enough base stock at the selected store.",
+                    $availableBaseAdjustment
+                );
+
                 $allocatedDiscount = $discountAmount > 0
                     ? round(($item['line_total'] / max($subtotal, 0.01)) * $discountAmount, 2)
                     : 0;
@@ -416,6 +427,8 @@ class SaleController extends Controller
                     'product_id' => $unit->product_id,
                     'product_unit_id' => $unit->id,
                     'quantity' => $item['quantity'],
+                    'base_quantity' => $item['base_quantity'],
+                    'conversion_factor_snapshot' => $item['conversion_factor_snapshot'],
                     'unit_price' => $item['unit_price'],
                     'selling_price_snapshot' => $unit->selling_price,
                     'cost_price_snapshot' => $unit->cost_price,
@@ -435,6 +448,9 @@ class SaleController extends Controller
                     'movement_type' => 'sale',
                     'quantity_in' => 0,
                     'quantity_out' => $item['quantity'],
+                    'base_quantity_in' => 0,
+                    'base_quantity_out' => $item['base_quantity'],
+                    'conversion_factor_snapshot' => $item['conversion_factor_snapshot'],
                     'unit_cost' => $unit->cost_price,
                     'unit_price' => $item['unit_price'],
                 ]);

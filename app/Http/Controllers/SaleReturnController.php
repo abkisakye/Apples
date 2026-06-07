@@ -11,6 +11,7 @@ use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Support\AccessService;
 use App\Support\ApprovalPinService;
+use App\Support\ProductUnitConversionService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -52,7 +53,13 @@ class SaleReturnController extends Controller
         ]);
     }
 
-    public function store(Request $request, Sale $sale, DocumentNumberService $documentNumberService, AuditLogService $auditLogService): RedirectResponse
+    public function store(
+        Request $request,
+        Sale $sale,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        ProductUnitConversionService $conversionService
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'return_date' => ['required', 'date'],
@@ -85,7 +92,7 @@ class SaleReturnController extends Controller
             ->groupBy('sale_item_id')
             ->pluck('returned_qty', 'sale_item_id');
 
-        $prepared = $this->prepareReturnItems($sale, $selectedRows, $returnedByItem);
+        $prepared = $this->prepareReturnItems($sale, $selectedRows, $returnedByItem, $conversionService);
         $settlement = $this->calculateSettlement((float) $sale->balance_due, $prepared, $validated['return_type']);
 
         if ($validated['return_type'] === 'refund' && $settlement['refund_amount'] > 0) {
@@ -133,6 +140,8 @@ class SaleReturnController extends Controller
                     'quantity' => $row['quantity'],
                     'unit_price' => $row['unit_price'],
                     'line_total' => $row['line_total'],
+                    'base_quantity' => $row['base_quantity'],
+                    'conversion_factor_snapshot' => $row['conversion_factor_snapshot'],
                 ]);
 
                 InventoryTransaction::create([
@@ -146,6 +155,9 @@ class SaleReturnController extends Controller
                     'movement_type' => 'sale_return',
                     'quantity_in' => $row['quantity'],
                     'quantity_out' => 0,
+                    'base_quantity_in' => $row['base_quantity'],
+                    'base_quantity_out' => 0,
+                    'conversion_factor_snapshot' => $row['conversion_factor_snapshot'],
                     'unit_cost' => $saleItem->cost_price_snapshot,
                     'unit_price' => $saleItem->unit_price,
                 ]);
@@ -226,11 +238,11 @@ class SaleReturnController extends Controller
         }
     }
 
-    private function prepareReturnItems(Sale $sale, Collection $selectedRows, Collection $returnedByItem): Collection
+    private function prepareReturnItems(Sale $sale, Collection $selectedRows, Collection $returnedByItem, ProductUnitConversionService $conversionService): Collection
     {
         $saleItems = $sale->items->keyBy('id');
 
-        return $selectedRows->map(function (array $row) use ($saleItems, $returnedByItem) {
+        return $selectedRows->map(function (array $row) use ($saleItems, $returnedByItem, $conversionService) {
             $saleItem = $saleItems->get((int) $row['sale_item_id']);
             if (! $saleItem) {
                 throw ValidationException::withMessages([
@@ -241,6 +253,8 @@ class SaleReturnController extends Controller
             $alreadyReturned = (int) round((float) ($returnedByItem[$saleItem->id] ?? 0));
             $availableQty = max((int) round((float) $saleItem->quantity) - $alreadyReturned, 0);
             $quantity = max((int) $row['quantity'], 0);
+            $conversionFactor = (float) ($saleItem->conversion_factor_snapshot ?: $conversionService->conversionFactorSnapshot($saleItem->productUnit));
+            $baseQuantity = round($quantity * ($conversionFactor > 0 ? $conversionFactor : 1), 3);
 
             if ($quantity > $availableQty) {
                 throw ValidationException::withMessages([
@@ -253,6 +267,8 @@ class SaleReturnController extends Controller
                 'quantity' => $quantity,
                 'unit_price' => (float) $saleItem->unit_price,
                 'line_total' => round($quantity * (float) $saleItem->unit_price, 2),
+                'base_quantity' => $baseQuantity,
+                'conversion_factor_snapshot' => round($conversionFactor > 0 ? $conversionFactor : 1, 6),
             ];
         });
     }

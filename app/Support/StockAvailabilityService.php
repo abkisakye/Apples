@@ -33,4 +33,45 @@ class StockAvailabilityService
             $field => $message ?: "{$itemLabel} has only {$availableQty} in stock at this store. You cannot post {$requestedQty}.",
         ]);
     }
+
+    public function availableBaseQuantity(int $storeId, int $productId): float
+    {
+        $row = InventoryTransaction::query()
+            ->leftJoin('product_units', 'product_units.id', '=', 'inventory_transactions.product_unit_id')
+            ->where('inventory_transactions.store_id', $storeId)
+            ->where('inventory_transactions.product_id', $productId)
+            ->selectRaw('
+                COALESCE(SUM(
+                    CASE
+                        WHEN inventory_transactions.base_quantity_in != 0 THEN inventory_transactions.base_quantity_in
+                        ELSE inventory_transactions.quantity_in * COALESCE(NULLIF(inventory_transactions.conversion_factor_snapshot, 0), NULLIF(product_units.conversion_factor, 0), 1)
+                    END
+                ), 0)
+                -
+                COALESCE(SUM(
+                    CASE
+                        WHEN inventory_transactions.base_quantity_out != 0 THEN inventory_transactions.base_quantity_out
+                        ELSE inventory_transactions.quantity_out * COALESCE(NULLIF(inventory_transactions.conversion_factor_snapshot, 0), NULLIF(product_units.conversion_factor, 0), 1)
+                    END
+                ), 0) as balance_qty
+            ')
+            ->first();
+
+        return round((float) ($row?->balance_qty ?? 0), 3);
+    }
+
+    public function ensureBaseAvailable(int $storeId, ProductUnit $unit, float $requestedBaseQty, string $field, ?string $message = null, float $availableBaseAdjustment = 0): void
+    {
+        $availableQty = round($this->availableBaseQuantity($storeId, (int) $unit->product_id) + $availableBaseAdjustment, 3);
+
+        if ($requestedBaseQty <= $availableQty) {
+            return;
+        }
+
+        $itemLabel = trim(($unit->product?->name ?? 'Selected product').' - '.$unit->unit_name);
+
+        throw ValidationException::withMessages([
+            $field => $message ?: "{$itemLabel} has only {$availableQty} base unit(s) in stock at this store. You cannot post {$requestedBaseQty}.",
+        ]);
+    }
 }

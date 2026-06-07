@@ -12,6 +12,7 @@ use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Services\ExcelExportService;
 use App\Support\AccessService;
+use App\Support\ProductUnitConversionService;
 use App\Support\StockAvailabilityService;
 use App\Support\StoreAssignmentService;
 use Carbon\Carbon;
@@ -131,7 +132,8 @@ class StockController extends Controller
         DocumentNumberService $documentNumberService,
         AuditLogService $auditLogService,
         StoreAssignmentService $storeAssignmentService,
-        StockAvailabilityService $stockAvailabilityService
+        StockAvailabilityService $stockAvailabilityService,
+        ProductUnitConversionService $conversionService
     ): RedirectResponse
     {
         $validated = $request->validate([
@@ -159,13 +161,15 @@ class StockController extends Controller
         $fromStoreId = $storeAssignmentService->resolveStoreId((int) $validated['from_store_id'], $request->user(), app(AccessService::class), 'from_store_id');
         $toStoreId = (int) $validated['to_store_id'];
 
-        DB::transaction(function () use ($validated, $items, $units, $referenceNo, $fromStoreId, $toStoreId, $stockAvailabilityService) {
+        DB::transaction(function () use ($validated, $items, $units, $referenceNo, $fromStoreId, $toStoreId, $stockAvailabilityService, $conversionService) {
             foreach ($items as $index => $item) {
                 /** @var ProductUnit $unit */
                 $unit = $units->get((int) $item['product_unit_id']);
                 $quantity = max((int) $item['quantity'], 1);
+                $baseQuantity = $conversionService->toBaseQuantity($quantity, $unit);
+                $conversionFactor = $conversionService->conversionFactorSnapshot($unit);
                 $referenceId = abs(crc32($referenceNo.'-'.$index));
-                $stockAvailabilityService->ensureAvailable($fromStoreId, $unit, $quantity, 'items');
+                $stockAvailabilityService->ensureBaseAvailable($fromStoreId, $unit, $baseQuantity, 'items');
 
                 InventoryTransaction::create([
                     'transaction_date' => $validated['transfer_date'],
@@ -178,6 +182,9 @@ class StockController extends Controller
                     'movement_type' => 'transfer_out',
                     'quantity_in' => 0,
                     'quantity_out' => $quantity,
+                    'base_quantity_in' => 0,
+                    'base_quantity_out' => $baseQuantity,
+                    'conversion_factor_snapshot' => $conversionFactor,
                     'unit_cost' => $unit->cost_price,
                     'remarks' => $validated['remarks'] ?? null,
                 ]);
@@ -193,6 +200,9 @@ class StockController extends Controller
                     'movement_type' => 'transfer_in',
                     'quantity_in' => $quantity,
                     'quantity_out' => 0,
+                    'base_quantity_in' => $baseQuantity,
+                    'base_quantity_out' => 0,
+                    'conversion_factor_snapshot' => $conversionFactor,
                     'unit_cost' => $unit->cost_price,
                     'remarks' => $validated['remarks'] ?? null,
                 ]);
