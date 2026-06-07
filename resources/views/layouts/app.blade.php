@@ -881,6 +881,7 @@
             'label' => 'Overview',
             'items' => [
                 ['label' => 'Dashboard', 'route' => 'dashboard', 'match' => 'dashboard', 'ability' => 'dashboard.view', 'mark' => 'DB'],
+                ['label' => 'Management Centre', 'route' => 'management-centre', 'match' => 'management-centre', 'ability' => 'dashboard.view', 'mark' => 'MC'],
                 ['label' => 'Follow-ups', 'route' => 'follow-ups.index', 'match' => 'follow-ups.*', 'ability' => 'follow_ups.manage', 'mark' => 'FU'],
             ],
         ],

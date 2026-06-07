@@ -2722,6 +2722,65 @@ class WorkflowTest extends TestCase
         $this->get('/reports/daily-closing')->assertOk()->assertSee('Daily Closing Report');
     }
 
+    public function test_management_centre_loads_with_grouped_existing_shortcuts(): void
+    {
+        $this->get('/management-centre')
+            ->assertOk()
+            ->assertSee('Management Centre')
+            ->assertSee('Stock Sales')
+            ->assertSee('Stock Purchases')
+            ->assertSee('Stock Control')
+            ->assertSee('Accounts')
+            ->assertSee('Reports')
+            ->assertSee('Setup')
+            ->assertSee(route('sales.create', [], false), false)
+            ->assertSee(route('purchases.create', [], false), false)
+            ->assertSee(route('stock.balances', [], false), false)
+            ->assertSee(route('reports.financial-summary', [], false), false)
+            ->assertSee(route('products.create', [], false), false);
+    }
+
+    public function test_management_centre_requires_dashboard_access_and_hides_unauthorized_setup_links(): void
+    {
+        $this->signInAsRole('guest');
+        $this->get('/management-centre')->assertForbidden();
+
+        $this->signInAsRole('cashier');
+        $this->get('/management-centre')
+            ->assertOk()
+            ->assertSee('Stock Sales')
+            ->assertSee('New Sale')
+            ->assertDontSee('Business Settings')
+            ->assertDontSee('Product Categories');
+    }
+
+    public function test_product_forms_show_wholesale_unit_setup_guidance(): void
+    {
+        $product = Product::create(['name' => 'Guidance Product', 'is_active' => true]);
+        ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Piece',
+            'conversion_factor' => 1,
+            'selling_price' => 1000,
+            'cost_price' => 700,
+            'is_active' => true,
+            'is_pos_unit' => true,
+        ]);
+
+        $guidance = 'Create one product, then add all selling packs/units such as piece, dozen, box, carton, sack, bundle, bottle, tin, half carton where applicable.';
+        $duplicateWarning = 'Do not create separate products for carton and piece versions of the same item';
+
+        $this->get('/products/create')
+            ->assertOk()
+            ->assertSee($guidance)
+            ->assertSee($duplicateWarning);
+
+        $this->get('/products/'.$product->id.'/edit')
+            ->assertOk()
+            ->assertSee($guidance)
+            ->assertSee($duplicateWarning);
+    }
+
     public function test_follow_up_and_csv_export_routes_work(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);

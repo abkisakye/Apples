@@ -12,6 +12,7 @@ use App\Http\Controllers\CapitalEntryController;
 use App\Http\Controllers\CashShiftController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\FollowUpController;
+use App\Http\Controllers\ManagementCentreController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseController;
@@ -44,6 +45,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/change-password', [PasswordManagementController::class, 'change'])->name('password.change.update');
 
     Route::get('/', DashboardController::class)->middleware('ability:dashboard.view')->name('dashboard');
+    Route::get('/management-centre', ManagementCentreController::class)->middleware('ability:dashboard.view')->name('management-centre');
     Route::get('/customers', [CustomerController::class, 'index'])->middleware('ability:customers.view')->name('customers.index');
     Route::get('/customers/create', [CustomerController::class, 'create'])->middleware('ability:sales.manage')->name('customers.create');
     Route::post('/customers', [CustomerController::class, 'store'])->middleware('ability:sales.manage')->name('customers.store');

@@ -96,7 +96,7 @@
 <div class="page-head">
     <div>
         <h2>{{ $title }}</h2>
-        <p>Maintain the product master and all selling packs or units from one guided screen.</p>
+        <p>Maintain one wholesale + retail product record, then add every selling pack or unit from the same screen.</p>
     </div>
     <div class="actions">
         <a href="{{ route('products.index') }}" class="button-link">Back to Products</a>
@@ -194,7 +194,7 @@
                 <div class="section-heading units-head">
                     <div>
                         <h3 class="form-section-title">Units & Selling Packs</h3>
-                        <p class="list-note">Add how this product is sold, for example piece, box, carton, bottle.</p>
+                        <p class="list-note">Create one product, then add all selling packs/units such as piece, dozen, box, carton, sack, bundle, bottle, tin, half carton where applicable.</p>
                     </div>
                     <button type="button" class="button-link" id="add-unit-row">Add Another Unit</button>
                 </div>
@@ -256,15 +256,15 @@
                 <div class="help-panel-body">
                     <div class="help-note">
                         <strong>One product, many packs</strong>
-                        <div class="field-tip">Use one product record for piece, pack, box, or carton sales.</div>
+                        <div class="field-tip">Use one product record for piece, dozen, box, carton, sack, bundle, bottle, tin, and half carton sales where applicable.</div>
+                    </div>
+                    <div class="help-note">
+                        <strong>Avoid duplicate products</strong>
+                        <div class="field-tip">Do not create separate products for carton and piece versions of the same item; add them here as units.</div>
                     </div>
                     <div class="help-note">
                         <strong>Default POS Unit</strong>
-                        <div class="field-tip">Choose the pack size cashiers should see first.</div>
-                    </div>
-                    <div class="help-note">
-                        <strong>Inactive Units</strong>
-                        <div class="field-tip">Mark old units inactive so history stays intact.</div>
+                        <div class="field-tip">Choose the pack size cashiers should see first. Conversion behavior has not changed in this phase.</div>
                     </div>
                 </div>
             </details>

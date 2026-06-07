@@ -33,8 +33,11 @@
             <p>Use this dashboard to spot what needs management attention first: sales movement, unpaid credit, low stock, and pending follow-up work.</p>
         </div>
         <div class="actions">
+            @if ($access->can('dashboard.view'))
+                <a href="{{ route('management-centre') }}" class="button-link primary">Management Centre</a>
+            @endif
             @if ($access->can('sales.manage'))
-                <a href="{{ route('sales.create') }}" class="button-link primary">New Sale</a>
+                <a href="{{ route('sales.create') }}" class="button-link">New Sale</a>
             @endif
             @if ($access->can('purchases.manage'))
                 <a href="{{ route('purchases.create') }}" class="button-link">New Purchase</a>
