@@ -1,0 +1,357 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+SYSTEM OVERVIEW FOR SUPPORT
+
+1. TECHNICAL STACK
+
+Project branch:
+
+version-2.0.0-dev
+
+Framework:
+
+Laravel Framework 12.55.1
+
+PHP:
+
+composer.json requires PHP ^8.2
+Current inspected CLI version: PHP 8.2.26
+
+Database:
+
+MySQL for pilot/live use. SQLite may be used by tests depending on environment.
+
+Frontend:
+
+Vite 7, Tailwind CSS 4, laravel-vite-plugin 2.
+
+PDF/export packages:
+
+- barryvdh/laravel-dompdf
+- maatwebsite/excel
+
+2. MAIN MODULES
+
+- Authentication and password management
+- Dashboard
+- Customers and customer statements
+- Suppliers and supplier statements
+- Products and product units
+- Sales/POS
+- Sales returns
+- Purchases/stock receiving
+- Purchase returns
+- Customer payments
+- Supplier payments
+- Stock balances, history, transfers, adjustments, counts, reorder
+- Expenses
+- Capital inputs
+- Cash shifts
+- Reports
+- Follow-ups
+- Business settings
+- Master data setup
+- Users, roles, permissions
+- Activity logs
+- Admin readiness/UAT/demo pages
+
+3. KEY ROUTES
+
+Authentication:
+
+- GET /login
+- POST /login
+- POST /logout
+- GET /change-password
+
+Dashboard:
+
+- GET /
+
+Setup:
+
+- GET /setup/{resource}
+- POST /setup/{resource}
+- PUT /setup/{resource}/{record}
+- POST /setup/{resource}/{record}/status
+
+Supported setup resources:
+
+- stores
+- categories
+- payment-modes
+- capital-sources
+- expense-categories
+
+Quick add categories:
+
+- POST /products/categories/quick-store
+- POST /expenses/categories/quick-store
+
+Sales:
+
+- GET /sales
+- GET /sales/create
+- POST /sales
+- GET /sales/{sale}
+- GET /sales/{sale}/print
+- GET /sales/{sale}/correct
+- POST /sales/{sale}/void
+
+Purchases:
+
+- GET /purchases
+- GET /purchases/create
+- POST /purchases
+- GET /purchases/{purchase}
+- GET /purchases/{purchase}/print
+- GET /purchases/{purchase}/correct
+- POST /purchases/{purchase}/void
+
+Payments:
+
+- /customer-payments
+- /supplier-payments
+
+Stock:
+
+- /stock/balances
+- /stock/reorder
+- /stock/transfers
+- /stock/adjustments
+- /stock/counts
+- /stock/items/{productUnit}/history
+
+Reports:
+
+- /reports/financial-summary
+- /reports/payment-methods
+- /reports/customer-aging
+- /reports/supplier-aging
+- /reports/cashier-performance
+- /reports/daily-closing
+
+4. KEY CONTROLLERS
+
+- DashboardController
+- SaleController
+- SaleReturnController
+- PurchaseController
+- PurchaseReturnController
+- CustomerPaymentController
+- SupplierPaymentController
+- StockController
+- ProductController
+- CustomerController
+- SupplierController
+- ExpenseController
+- CashShiftController
+- ReportController
+- MasterDataController
+- QuickCategoryController
+- BusinessSettingsController
+- UserManagementController
+- RoleManagementController
+- AdminToolkitController
+
+5. KEY MODELS
+
+- User
+- Role
+- Store
+- Customer
+- Supplier
+- Category
+- Product
+- ProductUnit
+- Sale
+- SaleItem
+- SaleReturn
+- SaleReturnItem
+- Purchase
+- PurchaseItem
+- PurchaseReturn
+- PurchaseReturnItem
+- CustomerPayment
+- SupplierPayment
+- InventoryTransaction
+- Expense
+- ExpenseCategory
+- PaymentMode
+- CapitalSource
+- CapitalEntry
+- CashShift
+- StockCount
+- StockCountItem
+- BusinessSetting
+- ActivityLog
+- FollowUpAction
+
+6. DATABASE TABLES
+
+Important business tables include:
+
+- users
+- roles
+- role_user
+- stores
+- customers
+- suppliers
+- categories
+- products
+- product_units
+- payment_modes
+- sales
+- sale_items
+- sale_returns
+- sale_return_items
+- purchases
+- purchase_items
+- purchase_returns
+- purchase_return_items
+- customer_payments
+- supplier_payments
+- inventory_transactions
+- expenses
+- expense_categories
+- capital_sources
+- capital_entries
+- cash_shifts
+- stock_counts
+- stock_count_items
+- business_settings
+- activity_logs
+- follow_up_actions
+
+7. ROLES AND PERMISSIONS
+
+Roles are seeded in RoleSeeder.
+
+Default roles:
+
+- admin: permissions ["*"]
+- manager
+- cashier
+- stock_clerk
+- guest
+
+Routes are protected with ability middleware such as:
+
+- dashboard.view
+- sales.view
+- sales.manage
+- purchases.view
+- purchases.manage
+- stock.view
+- stock.manage
+- reports.view
+- business.manage
+- master_data.manage
+- users.manage
+
+Setup pages require business.manage or master_data.manage.
+
+8. SALES FLOW
+
+SaleController creates posted sales with sale_date, customer, store, selected product units, payment mode, amount paid, balance due, and stock-out inventory transactions.
+
+Cashier sales may require an open cash shift. Walk-in customer credit is blocked. Price/discount overrides can require sales.override permission or approval PIN.
+
+Sale::posted() filters status = posted.
+
+9. PURCHASE FLOW
+
+PurchaseController records supplier stock receiving using purchase_date, supplier, store, supplier invoice, payment mode, amount paid, balance due, and purchase items.
+
+Posted purchases increase stock with inventory transactions.
+
+Cash purchases paid during purchase entry remain on Purchases and do not create a separate Supplier Payment voucher unless business logic is changed intentionally.
+
+Purchase::posted() filters status = posted.
+
+10. STOCK FLOW
+
+Inventory is tracked through inventory_transactions and product units.
+
+Sources include:
+
+- Purchases
+- Sales
+- Returns
+- Adjustments
+- Transfers
+- Stock counts
+
+Stock balance pages display by product unit to distinguish pack sizes.
+
+11. CUSTOMER PAYMENT FLOW
+
+CustomerPaymentController records payments against credit sales or customer opening balances.
+
+Payments require payment mode and cannot exceed outstanding balance. Posted payments reduce the related sale or opening balance.
+
+12. SUPPLIER PAYMENT FLOW
+
+SupplierPaymentController records payments posted later against credit purchases.
+
+Create page supports:
+
+- purchase_id preselection from Purchases row
+- supplier_id preselection
+- manual supplier/purchase selection
+
+Payments require payment mode and cannot exceed purchase.balance_due. Partial payments reduce balance_due; full payments clear it.
+
+13. REPORTING / DASHBOARD LOGIC
+
+Dashboard uses selected date_from/date_to filters and business date columns:
+
+- sales.sale_date
+- purchases.purchase_date
+- expenses.expense_date
+- payment dates
+- return dates
+
+Gross profit is based on sale item revenue less cost_price_snapshot times quantity. Net profit is gross profit less expenses.
+
+Collections include received money from sale-time payments and posted customer payments.
+
+14. PRINT / RECEIPT LOGIC
+
+Print views exist for:
+
+- Sales
+- Sale returns
+- Purchases
+- Purchase returns
+- Customer payments
+- Supplier payments
+- Expenses
+- Stock documents
+- Customer/supplier statements
+
+Supplier payment print supports full A4 voucher and thermal theme:
+
+/supplier-payments/{id}/print
+/supplier-payments/{id}/print?theme=thermal
+
+15. CONSOLE COMMANDS
+
+Operations:
+
+php artisan ops:go-live-check
+php artisan ops:backup-database
+
+Data/import tools:
+
+php artisan access:audit-import
+php artisan access:clean-imported-data
+php artisan access:import-core-data
+
+16. KNOWN LIMITATIONS / SUPPORT NOTES
+
+- Offline installation requires vendor and public/build to already be included.
+- MySQL backup requires mysqldump on PATH.
+- Local http login can fail if SESSION_SECURE_COOKIE=true.
+- Cash purchases paid during purchase entry are shown under Purchases, not Supplier Payments.
+- Product stock balances are per product unit; repeated product names can be correct when units differ.
+- Admin seeder production fallback can generate a random password if INITIAL_ADMIN_PASSWORD is not set.

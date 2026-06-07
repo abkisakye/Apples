@@ -1,0 +1,192 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+USER MANUAL - STOCK AND PURCHASES
+
+1. CREATE SUPPLIER
+
+Menu:
+
+Stock & Buying > Suppliers
+
+Create supplier before recording purchases. Enter supplier name and contact details where available.
+
+2. CREATE PRODUCT
+
+Menu:
+
+Stock & Buying > Products
+
+Create product with:
+
+- Product Name
+- Code / Barcode
+- Category
+- Supplier
+- Reorder Level
+- VAT
+- Status
+
+If product category is missing and you have permission, use the "+ New" category modal beside Category.
+
+3. ADD UNITS / SELLING PACKS
+
+In the product form, use Units & Selling Packs.
+
+Examples:
+
+- Piece
+- Box
+- Carton
+- Bottle
+
+Each unit should have:
+
+- Conversion Factor
+- Cost Price
+- Selling Price
+- Barcode
+- Part Number
+- Unit Status
+- Default POS Unit where needed
+
+4. RECORD PURCHASE
+
+Menu:
+
+Stock & Buying > Purchases
+
+Click New Purchase.
+
+Purchase page areas:
+
+- Supplier & Invoice
+- Find Items
+- Incoming Items
+- Purchase Summary
+
+Steps:
+
+1. Choose supplier.
+2. Choose purchase date.
+3. Choose store.
+4. Enter supplier invoice number if available.
+5. Choose payment mode if paying now.
+6. Enter amount paid now.
+7. Add credit period if buying on credit.
+8. Search items by name, code, barcode, or part number.
+9. Add incoming items.
+10. Enter Qty Received and Buying Cost.
+11. Confirm subtotal, paid now, and balance.
+12. Click Record Purchase.
+
+5. CASH PURCHASE VS CREDIT PURCHASE
+
+Cash purchase:
+
+- Amount paid now equals total.
+- Balance due is zero.
+- Purchase remains visible under Purchases.
+- No separate Supplier Payment voucher is required.
+
+Credit purchase:
+
+- Amount paid now is less than total, or zero.
+- Balance due remains open.
+- Use Supplier Payments later.
+
+6. SUPPLIER PAYMENT LATER
+
+From Purchases:
+
+1. Find credit purchase with balance due.
+2. Click Record Payment.
+3. Supplier and purchase should be preselected.
+4. Enter amount.
+5. Choose payment mode.
+6. Record payment.
+
+From Supplier Payments:
+
+1. Open Supplier Payments.
+2. Click Outstanding Purchases if needed.
+3. Select supplier and purchase.
+4. Record payment.
+
+7. PARTIAL SUPPLIER PAYMENT
+
+Partial payments are allowed.
+
+Rules:
+
+- Amount must be greater than zero.
+- Amount must not exceed outstanding balance.
+- Remaining balance stays open after partial payment.
+- Full payment clears the purchase balance.
+
+8. OUTSTANDING PURCHASES
+
+Menu:
+
+Stock & Buying > Supplier Payments
+
+Click Outstanding Purchases to open Purchases filtered to posted purchases with balance_due greater than zero.
+
+9. STOCK BALANCES
+
+Menu:
+
+Stock & Buying > Stock
+
+Stock balances are shown by product unit. This prevents pack sizes from looking like duplicate products.
+
+Example:
+
+Product: GONJA CRISPS
+Unit: Box
+
+Product: GONJA CRISPS
+Unit: Piece
+
+10. STOCK ADJUSTMENTS
+
+Use adjustments only for controlled corrections:
+
+- Damaged stock
+- Shrinkage
+- Found stock
+- Manual correction
+
+Do not use adjustments for normal supplier purchases or customer sales.
+
+11. STOCK TRANSFERS
+
+Use transfers when moving stock between stores/locations.
+
+Confirm:
+
+- From store
+- To store
+- Product unit
+- Quantity
+- Remarks
+
+12. STOCK COUNTS
+
+Use stock counts for physical stocktaking.
+
+Steps:
+
+1. Create count.
+2. Assign staff/section if needed.
+3. Enter counted quantities.
+4. Save draft while counting.
+5. Post final count after verification.
+6. Print count document if needed.
+
+13. REORDER / LOW STOCK
+
+Menu:
+
+Stock & Buying > Stock > Reorder
+
+Products with stock at or below reorder level appear here. Use this page to plan purchases.
+

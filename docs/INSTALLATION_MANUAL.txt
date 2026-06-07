@@ -1,0 +1,181 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+INSTALLATION MANUAL
+
+Version: version-2.0.0-dev
+
+1. Purpose
+This manual explains how to install Apples Of Gold on a Windows computer using WAMP and MySQL. It also covers offline installation using the prepared ZIP package.
+
+2. Requirements
+Recommended software:
+- Windows 10 or newer
+- WAMP64
+- PHP version compatible with the project
+- MySQL/MariaDB
+- Composer, if installing from source
+- Node.js/NPM, if rebuilding frontend assets
+- Browser such as Chrome, Edge, or Firefox
+
+Offline ZIP includes:
+- Application code
+- Vendor dependencies
+- Built frontend assets in public/build
+- Environment examples
+- Installation note
+
+3. Offline Installation From ZIP
+1. Copy the ZIP file to the target computer.
+2. Extract it to:
+   C:\wamp64\www\apples
+
+3. Open MySQL/phpMyAdmin.
+4. Create database:
+   apples_of_gold
+
+5. In the project folder, copy:
+   .env.mysql.example
+   to:
+   .env
+
+6. Open .env and update:
+   APP_NAME="Apples Of Gold"
+   APP_URL=http://localhost:8000
+   DB_CONNECTION=mysql
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=apples_of_gold
+   DB_USERNAME=root
+   DB_PASSWORD=
+
+7. Open terminal in:
+   C:\wamp64\www\apples
+
+8. Run:
+   php artisan key:generate
+   php artisan migrate --force
+   php artisan db:seed --force
+   php artisan optimize:clear
+
+9. Start the application:
+   php artisan serve --host=0.0.0.0 --port=8000
+
+10. Open:
+   http://localhost:8000
+
+4. Online/Developer Installation
+Use this only when internet is available.
+
+1. Copy or clone the project.
+2. Run:
+   composer install
+   npm install
+   npm run build
+
+3. Configure .env.
+4. Run:
+   php artisan key:generate
+   php artisan migrate --force
+   php artisan db:seed --force
+   php artisan optimize:clear
+   php artisan test
+
+5. Start:
+   php artisan serve --host=0.0.0.0 --port=8000
+
+5. Folder Permissions
+Ensure these folders are writable:
+- storage
+- bootstrap/cache
+
+On Windows/WAMP, normal folder permissions usually work. If errors occur, give the Windows user write access to the project folder.
+
+6. Database Setup Notes
+Use MySQL database:
+apples_of_gold
+
+Do not use the SQLite test database for live supermarket data.
+
+7. First Login
+If a default admin seeder is available, use the seeded credentials from the project handover notes.
+
+If no admin user exists after hardening, create one using Laravel Tinker:
+
+php artisan tinker
+
+Then create a user according to the current User model fields and assign the admin role.
+
+8. Post-Installation Checks
+Run:
+php artisan ops:go-live-check
+php artisan test
+
+Then open these pages:
+- Dashboard
+- Sales
+- Products
+- Purchases
+- Supplier Payments
+- Stock
+- Reports
+- Setup
+
+9. Printer Setup
+Sales receipts:
+- Use browser print preview.
+- Select thermal printer for receipt mode.
+- Select A4 printer for invoice/voucher mode.
+
+Thermal receipts:
+- Use 80mm paper where possible.
+- Disable browser headers/footers if needed.
+
+10. Backup Setup
+Before using live:
+1. Decide backup folder.
+2. Confirm database backup command works.
+3. Copy backup to external storage regularly.
+
+11. Updating The System
+Before update:
+1. Backup database.
+2. Backup current project folder.
+3. Replace files or pull update.
+4. Run:
+   composer install --no-interaction --prefer-dist
+   npm install
+   npm run build
+   php artisan migrate --force
+   php artisan optimize:clear
+   php artisan test
+
+12. Troubleshooting
+Blank page:
+- Check storage/logs.
+- Run php artisan optimize:clear.
+- Confirm .env exists.
+
+Database connection error:
+- Confirm MySQL is running.
+- Confirm DB_DATABASE, DB_USERNAME, and DB_PASSWORD.
+- Confirm database apples_of_gold exists.
+
+Missing CSS/JS:
+- Confirm public/build exists.
+- If online/developer install, run npm run build.
+
+Permission error:
+- Confirm storage and bootstrap/cache are writable.
+
+Login fails:
+- Confirm user exists and is active.
+- Reset password or create admin user through approved admin process.
+
+13. Support Information To Record
+When reporting an issue, provide:
+- Computer name
+- Date/time
+- Logged-in user
+- Page URL
+- Screenshot
+- Exact action performed
+- Error message

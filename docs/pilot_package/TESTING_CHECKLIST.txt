@@ -1,0 +1,220 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+TESTING CHECKLIST
+
+Branch: version-2.0.0-dev
+
+1. TECHNICAL TEST
+
+Run from project folder:
+
+php artisan test
+php artisan ops:go-live-check
+php artisan optimize:clear
+
+Pass:
+
+- Test suite passes.
+- Go-live check has no blocking warnings.
+- Login page opens.
+
+2. LOGIN TEST
+
+1. Open http://localhost:8000.
+2. Log in as admin.
+3. Confirm Dashboard opens.
+4. Log out.
+5. Log in as cashier.
+6. Confirm cashier sees only allowed menus.
+7. Try opening /setup/categories as cashier.
+
+Pass:
+
+- Admin can access setup/admin pages.
+- Cashier is blocked from restricted setup pages.
+
+3. PRODUCT SETUP TEST
+
+1. Open Setup > Product Categories.
+2. Add test category.
+3. Open Products.
+4. Create product.
+5. Add unit/selling pack.
+6. Save.
+7. Edit product.
+8. Confirm category quick-add modal works if user has permission.
+
+Pass:
+
+- Product saves.
+- Unit appears.
+- Duplicate category name is rejected.
+
+4. PURCHASE / STOCK-IN TEST
+
+1. Create supplier.
+2. Open Purchases > New Purchase.
+3. Select supplier, store, and purchase date.
+4. Add product.
+5. Enter Qty Received and Buying Cost.
+6. Record purchase.
+7. Print purchase.
+8. Open Stock Balances.
+
+Pass:
+
+- Purchase is posted.
+- Stock balance increased.
+- Purchase print opens.
+
+5. SUPPLIER PARTIAL PAYMENT TEST
+
+1. Create credit purchase with balance due.
+2. From Purchases list, click Record Payment.
+3. Confirm supplier and purchase are preselected.
+4. Pay part of the balance.
+5. Save.
+6. Open purchase again.
+
+Pass:
+
+- Payment is saved.
+- Balance due is reduced but still open.
+
+6. SUPPLIER FULL PAYMENT TEST
+
+1. Open same credit purchase or another credit purchase.
+2. Record payment equal to outstanding balance.
+3. Save.
+
+Pass:
+
+- Balance due becomes zero.
+- Purchase is cleared according to existing status/display.
+
+7. SALE / POS TEST
+
+1. Open Sales > New Sale.
+2. Search product by name/code/barcode.
+3. Add product.
+4. Change Qty using + and -.
+5. Choose CASH shortcut.
+6. Enter Paid amount.
+7. Record sale.
+8. Print receipt.
+
+Pass:
+
+- Total, Paid, Change, and Balance are correct.
+- Stock decreases.
+- Receipt prints.
+
+8. WALK-IN CREDIT BLOCK TEST
+
+1. Start new sale.
+2. Select Walk-in Customer.
+3. Choose CREDIT or leave balance due.
+4. Try posting.
+
+Pass:
+
+- System blocks credit sale to Walk-in Customer.
+
+9. CUSTOMER CREDIT SALE TEST
+
+1. Create real customer.
+2. Create sale for that customer.
+3. Leave balance due.
+4. Save.
+5. Open customer statement.
+
+Pass:
+
+- Credit sale posts to customer balance.
+
+10. CUSTOMER PAYMENT TEST
+
+1. Open Customer Payments.
+2. Select customer.
+3. Select outstanding sale or opening balance.
+4. Record partial payment.
+5. Print payment receipt.
+
+Pass:
+
+- Payment reduces customer balance.
+- Overpayment is blocked.
+
+11. EXPENSE TEST
+
+1. Open Setup > Expense Categories.
+2. Add category.
+3. Open Expenses.
+4. Record expense with category, payment mode, store, date, and amount.
+5. Print expense.
+
+Pass:
+
+- Expense appears in list.
+- Dashboard/Financial Summary net profit reflects expense.
+
+12. DASHBOARD TEST
+
+1. Post one sale, purchase, expense, and customer payment.
+2. Open Dashboard.
+3. Select date range covering those records.
+4. Click each summary card.
+
+Pass:
+
+- Cards show expected amounts.
+- Voided sales are excluded.
+- Card links include date_from and date_to.
+
+13. STOCK BALANCE TEST
+
+1. Create product with multiple units.
+2. Purchase stock.
+3. Sell one unit.
+4. Open Stock Balances.
+5. Open Stock History.
+
+Pass:
+
+- Rows clearly show Product and Unit.
+- History shows purchase and sale movements.
+
+14. REPORTS TEST
+
+Open and compare:
+
+- Financial Summary
+- Payment Methods
+- Customer Aging
+- Supplier Aging
+- Cashier Performance
+- Daily Closing
+
+Pass:
+
+- Date filters work.
+- Totals match posted transactions.
+
+15. RECEIPT AND PRINT TEST
+
+Print preview:
+
+- Sales thermal receipt
+- Sales full A4 receipt
+- Purchase print
+- Supplier payment full A4 voucher
+- Supplier payment thermal receipt
+- Customer payment receipt
+- Expense print
+- Stock count print
+
+Pass:
+
+- Totals are visible.
+- Thermal receipt is short.
+- A4 pages are readable.
+

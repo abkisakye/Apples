@@ -1,0 +1,150 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+USER MANUAL - CASHIER
+
+1. LOGIN
+
+Open:
+
+http://localhost:8000
+
+Enter your username/email and password. Do not share your password.
+
+2. CHANGE PASSWORD
+
+Menu:
+
+Account > Change Password
+
+Change your password the first time you receive an account or whenever instructed by the owner.
+
+3. OPEN CASH SHIFT
+
+Menu:
+
+Sales Desk > Cash Shifts
+
+Open a shift before selling if your account requires cash shift control.
+
+Steps:
+
+1. Click Open Cash Shift.
+2. Enter opening balance.
+3. Save.
+
+If the system says a shift is already open, continue using the current shift or ask the manager.
+
+4. CREATE SALE
+
+Menu:
+
+Sales Desk > Sales
+
+Click New Sale or Create Sale.
+
+The POS screen has:
+
+- Left: Search and Products
+- Middle: Selected Products
+- Right: Checkout
+
+5. SEARCH AND ADD PRODUCT
+
+Use Search at the top left. Search by:
+
+- Product name
+- Code
+- Barcode
+- Part number
+
+Click Add to add the item. Use Qty + and - controls to change quantity.
+
+6. CHOOSE CUSTOMER
+
+For normal cash supermarket sales, use Walk-in Customer.
+
+For credit sales, choose a real customer account. Walk-in Customer should not be used for credit.
+
+If the customer is missing, ask a manager or authorized user to create the customer.
+
+7. CHOOSE PAYMENT MODE
+
+Use the payment shortcut buttons:
+
+- CASH
+- MOBILE MONEY
+- CARD
+- CREDIT
+
+The shortcut sets the payment mode/type for faster checkout.
+
+8. PAID AMOUNT, CHANGE, AND BALANCE
+
+Enter Paid amount.
+
+The system shows:
+
+- Total
+- Paid
+- Balance
+- Change
+
+Cash sale:
+
+- Paid should be equal to or greater than Total.
+- Change is given when Paid is greater than Total.
+
+Credit sale:
+
+- Customer must be a real customer.
+- Balance remains due.
+
+9. PRINT RECEIPT
+
+After posting sale, open the sale print page and print the receipt.
+
+For thermal printers:
+
+- Use 80mm paper if available.
+- Disable browser headers and footers if needed.
+
+10. CUSTOMER PAYMENT
+
+Menu:
+
+Sales Desk > Customer Payments
+
+Use this when a customer pays later for a credit sale or opening balance.
+
+Steps:
+
+1. Select customer.
+2. Select outstanding sale or opening balance.
+3. Enter amount.
+4. Choose payment mode.
+5. Record payment.
+6. Print receipt if needed.
+
+11. CLOSE SHIFT
+
+Menu:
+
+Sales Desk > Cash Shifts
+
+At the end of day:
+
+1. Open your active shift.
+2. Click Close.
+3. Enter counted cash.
+4. Confirm difference.
+5. Save.
+
+12. COMMON MISTAKES TO AVOID
+
+- Do not sell on credit to Walk-in Customer.
+- Do not skip payment mode for a paid sale.
+- Do not enter quantity in the wrong unit, for example box instead of piece.
+- Do not override price unless approved.
+- Do not close another cashier's shift unless you have permission.
+- Do not share your login.
+- Confirm receipt total before handing receipt to customer.
+

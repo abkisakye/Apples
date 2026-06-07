@@ -1,0 +1,162 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+OFFLINE INSTALLATION GUIDE
+
+Branch: version-2.0.0-dev
+
+1. PURPOSE
+
+Use this guide when the target computer has no internet access.
+
+2. WHAT THE OFFLINE ZIP MUST INCLUDE
+
+The offline ZIP should include:
+
+- app
+- bootstrap
+- config
+- database
+- public
+- resources
+- routes
+- storage/app if needed
+- vendor
+- artisan
+- composer.json
+- composer.lock
+- package.json
+- package-lock.json
+- .env.example
+- .env.mysql.example
+
+It should exclude:
+
+- .git
+- .env
+- storage/logs/*
+- storage/framework/cache/*
+- storage/framework/sessions/*
+- storage/framework/views/*
+- node_modules
+- database/database.sqlite
+- backups
+- temporary files
+
+3. EXTRACT FILES
+
+Copy the ZIP to the target computer and extract to:
+
+C:\wamp64\www\apples
+
+After extraction, confirm this file exists:
+
+C:\wamp64\www\apples\artisan
+
+4. CREATE MYSQL DATABASE
+
+Open phpMyAdmin from WAMP or use MySQL command line.
+
+Create database:
+
+apples_of_gold
+
+Recommended character set:
+
+utf8mb4
+
+5. CREATE .env
+
+In:
+
+C:\wamp64\www\apples
+
+Copy:
+
+.env.mysql.example
+
+to:
+
+.env
+
+Edit .env. For local WAMP testing, use values like:
+
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://localhost:8000
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=apples_of_gold
+DB_USERNAME=root
+DB_PASSWORD=
+SESSION_SECURE_COOKIE=false
+
+Do not use real passwords in shared screenshots or documents.
+
+6. RUN SETUP COMMANDS
+
+Open PowerShell in:
+
+C:\wamp64\www\apples
+
+Run:
+
+php artisan key:generate
+php artisan migrate --force
+php artisan db:seed --force
+php artisan optimize:clear
+
+7. START THE SYSTEM
+
+Run:
+
+php artisan serve --host=0.0.0.0 --port=8000
+
+Open:
+
+http://localhost:8000
+
+8. IF COMPOSER IS NOT AVAILABLE
+
+If the ZIP includes vendor, Composer is not needed for normal installation.
+
+If vendor is missing, installation cannot be completed offline. Move the ZIP to a computer with internet, run:
+
+composer install
+
+Then rebuild the ZIP including vendor.
+
+9. IF NPM IS NOT AVAILABLE
+
+If public/build exists, npm is not needed for normal installation.
+
+If public/build is missing, the frontend assets must be built on an internet-connected development computer:
+
+npm install
+npm run build
+
+Then rebuild the ZIP including public/build.
+
+10. FIRST LOGIN
+
+The seeder creates an admin account. The password depends on environment:
+
+- If INITIAL_ADMIN_PASSWORD is set in .env, use that value.
+- In local/testing, fallback password is password.
+- In production, a random password is generated if INITIAL_ADMIN_PASSWORD is not set.
+
+Change the admin password immediately after first login.
+
+11. OFFLINE SUPPORT CHECKLIST
+
+Before taking the computer to the supermarket:
+
+- Confirm WAMP starts.
+- Confirm MySQL starts.
+- Confirm http://localhost:8000 opens.
+- Confirm admin login works.
+- Confirm product, purchase, sale, and print pages open.
+- Confirm printer is installed.
+- Run php artisan test if development dependencies are available.
+- Run php artisan ops:go-live-check.
+- Create a backup with php artisan ops:backup-database.
+

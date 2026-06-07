@@ -1,0 +1,211 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+TESTING AND UAT MANUAL
+
+Version: version-2.0.0-dev
+
+1. Purpose
+This manual provides a practical checklist for testing the Apples Of Gold system before live use, after updates, or after installation on a new computer.
+
+2. Technical Test Commands
+Run these from the project folder:
+
+php artisan test
+php artisan ops:go-live-check
+php artisan optimize:clear
+
+Expected result:
+- Tests should pass.
+- Go-live check should not show critical blockers.
+- Login page should open successfully.
+
+3. Login and Access Tests
+1. Open http://localhost:8000
+2. Log in as admin.
+3. Confirm Dashboard opens.
+4. Log in as cashier.
+5. Confirm cashier sees only allowed menus.
+6. Confirm restricted setup/admin pages are blocked for cashier.
+
+Pass criteria:
+- Users can log in.
+- Permissions match assigned roles.
+- Unauthorized pages are blocked.
+
+4. Product Setup Tests
+1. Create a product category.
+2. Create a product.
+3. Add at least one selling unit.
+4. Add barcode or code.
+5. Save product.
+6. Open product list and product profile.
+
+Pass criteria:
+- Product appears in product list.
+- Product unit appears in stock and sales search.
+- Duplicate category names are rejected.
+
+5. Purchase and Stock Receiving Tests
+1. Create supplier.
+2. Record a cash purchase.
+3. Record a credit purchase with partial payment.
+4. Print purchase document.
+5. Open stock balances.
+6. Confirm stock increased.
+
+Pass criteria:
+- Cash purchase appears under Purchases.
+- Credit purchase shows balance due.
+- Stock balance updates correctly.
+- Purchase print opens.
+
+6. Supplier Payment Tests
+1. Open Purchases.
+2. Find credit purchase with balance due.
+3. Click Record Payment.
+4. Confirm supplier and purchase are preselected.
+5. Record partial payment.
+6. Confirm balance reduces.
+7. Record final payment.
+8. Confirm balance clears.
+9. Try overpayment.
+
+Pass criteria:
+- Partial payment is allowed.
+- Full payment clears balance.
+- Overpayment is blocked.
+- Supplier payment voucher prints.
+- Cash purchases paid at purchase entry do not appear as supplier payment vouchers.
+
+7. Sales/POS Tests
+1. Open Sales create page.
+2. Search product by name/code/barcode.
+3. Add item to cart.
+4. Increase/decrease quantity.
+5. Select payment shortcut.
+6. Enter paid amount.
+7. Save sale.
+8. Print receipt.
+
+Pass criteria:
+- Cart totals are correct.
+- Change/balance is correct.
+- Stock decreases.
+- Receipt prints.
+- Walk-in customer cannot receive credit.
+
+8. Customer Payment Tests
+1. Create credit sale.
+2. Open Customer Payments.
+3. Select customer and sale.
+4. Record partial payment.
+5. Confirm sale balance reduces.
+6. Record payment against opening balance if applicable.
+
+Pass criteria:
+- Payment cannot exceed balance.
+- Receipt prints.
+- Customer statement updates.
+
+9. Expense Tests
+1. Create expense category.
+2. Record expense.
+3. Print expense.
+4. Check Dashboard and Financial Summary.
+
+Pass criteria:
+- Expense appears in list.
+- Expense affects net profit.
+- Expense category displays correctly.
+
+10. Stock Control Tests
+Stock adjustment:
+1. Create adjustment in.
+2. Confirm stock increases.
+3. Create adjustment out.
+4. Confirm stock decreases.
+
+Stock count:
+1. Create physical count.
+2. Save draft.
+3. Resume draft.
+4. Post count.
+5. Print count document.
+
+Pass criteria:
+- Stock movements appear in history.
+- Count variances are posted correctly.
+- Print document shows assigned staff/section.
+
+11. Returns Tests
+Sales return:
+1. Create sale.
+2. Return one item.
+3. Confirm stock restores.
+4. Confirm customer balance/refund behavior.
+
+Purchase return:
+1. Create purchase.
+2. Return item to supplier.
+3. Confirm stock decreases.
+4. Confirm supplier balance adjusts.
+
+Pass criteria:
+- Stock and balances update correctly.
+- Return documents print.
+
+12. Dashboard and Report Tests
+Test date filters:
+1. Select date range on Dashboard.
+2. Confirm Sales, Purchases, Expenses, Collections, Gross Profit, Net Profit, and Sales Returns.
+3. Click dashboard cards.
+4. Confirm drill-down pages carry same date range.
+
+Pass criteria:
+- Voided records are excluded.
+- Posted records in selected date range are included.
+- Card links include date_from and date_to.
+
+13. Print Tests
+Open and print/preview:
+- Sales receipt
+- Full A4 sales invoice
+- Purchase invoice
+- Supplier payment voucher
+- Supplier payment thermal receipt
+- Customer payment receipt
+- Expense voucher
+- Stock count print
+
+Pass criteria:
+- No important totals split incorrectly.
+- Thermal receipts are compact.
+- A4 vouchers are readable.
+
+14. Backup and Restore Tests
+1. Create database backup.
+2. Confirm backup file exists.
+3. Restore backup on test computer if possible.
+4. Log in and confirm data.
+
+Pass criteria:
+- Backup can be restored.
+- Data matches original.
+
+15. UAT Sign-Off
+Before go-live, confirm:
+- Admin login works.
+- Cashier login works.
+- Product setup complete.
+- Sales workflow tested.
+- Purchase workflow tested.
+- Supplier/customer balances tested.
+- Stock balances tested.
+- Reports tested.
+- Backup tested.
+- Printer tested.
+
+Sign-off:
+Name:
+Role:
+Date:
+Signature:

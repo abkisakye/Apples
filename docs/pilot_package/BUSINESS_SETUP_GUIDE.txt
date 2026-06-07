@@ -1,0 +1,223 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+BUSINESS SETUP GUIDE
+
+1. PURPOSE
+
+Use this guide after installation and before entering live supermarket transactions.
+
+2. BUSINESS SETTINGS
+
+Menu:
+
+Admin > Business Settings
+
+Set:
+
+- Business Name
+- Tagline
+- Address
+- Phone
+- Email
+- TIN
+- Currency, for example UGX
+- Receipt Footer
+- Invoice Footer
+- Statement Footer
+- Logo
+- Admin Approval PIN
+- Cashier Discount Limit
+
+The approval PIN is used for sensitive overrides when the logged-in user does not already have override permission.
+
+3. STORES
+
+Menu:
+
+Setup > Stores
+
+Route:
+
+/setup/stores
+
+Create each branch or stock location. Fields include store name, code, location, person in charge, and status.
+
+4. USERS AND ROLES
+
+Menus:
+
+Admin > Users
+Admin > Roles
+Admin > Permissions
+
+Seeded roles:
+
+- admin: full access
+- manager: operational management and reports
+- cashier: sales desk, customer payments, cash shifts
+- stock_clerk: purchases, supplier payments, stock work
+- guest: no permissions
+
+Create a separate user account for every person. Do not share passwords. Change the default admin password immediately.
+
+5. PAYMENT MODES
+
+Menu:
+
+Setup > Payment Modes
+
+Route:
+
+/setup/payment-modes
+
+Default seed includes common payment modes. Add or edit modes used by the shop, such as Cash, Mobile Money, Card, or Credit. Inactive modes should not be used for new posting.
+
+6. PRODUCT CATEGORIES
+
+Menu:
+
+Setup > Product Categories
+
+Route:
+
+/setup/categories
+
+Use clear supermarket groups, for example Beverages, Groceries, Bakery, Household, Toiletries, or Fresh Foods.
+
+Product create/edit also has a quick "+ New" category button for users with business.manage or master_data.manage permission.
+
+7. EXPENSE CATEGORIES
+
+Menu:
+
+Setup > Expense Categories
+
+Route:
+
+/setup/expense-categories
+
+Use categories such as Rent, Transport, Utilities, Salaries, Repairs, Packaging, or Cleaning.
+
+Expense create also has a quick "Add Category" option for authorized users.
+
+8. CAPITAL SOURCES
+
+Menu:
+
+Setup > Capital Sources
+
+Route:
+
+/setup/capital-sources
+
+Use this for owner injections, business funds, loans, or other funding sources. Capital entries are posted from Finance > Capital Inputs.
+
+9. SUPPLIERS
+
+Menu:
+
+Stock & Buying > Suppliers
+
+Create suppliers before recording purchases. Seeded system suppliers include OTHERS and OUT PURCHASE for controlled fallback use.
+
+10. CUSTOMERS
+
+Menu:
+
+Sales Desk > Customers
+
+Seeded system customers include Walk-in Customer and Unknown Customer.
+
+Important rule:
+
+Walk-in Customer should not be used for credit sales. Credit sales require a real customer account.
+
+11. PRODUCTS AND UNITS/SELLING PACKS
+
+Menu:
+
+Stock & Buying > Products
+
+For each product:
+
+1. Enter Product Name.
+2. Enter Code / Barcode.
+3. Choose Category.
+4. Choose Supplier if known.
+5. Enter Reorder Level.
+6. Set VAT and Status.
+7. Add Units & Selling Packs.
+
+Each unit can include:
+
+- Unit Name
+- Conversion Factor
+- Cost Price
+- Selling Price
+- Barcode
+- Part Number
+- Unit Status
+- Default POS Unit
+
+Example:
+
+Product: GONJA CRISPS
+Unit 1: Piece, conversion factor 1
+Unit 2: Box, conversion factor 12
+
+12. OPENING STOCK
+
+Recommended pilot approach:
+
+1. Create products and units.
+2. Record opening stock using Purchases if stock came from a supplier invoice.
+3. Use Stock Adjustments only for controlled corrections where there is no supplier invoice.
+4. Add clear remarks on every adjustment.
+
+Stock balances are tracked by product unit.
+
+13. CUSTOMER OPENING DEBTS
+
+Customers support opening balance tracking. Enter customer opening balances where the form provides it, then use Customer Payments to clear those opening balances later.
+
+14. SUPPLIER BALANCES AND CREDIT PURCHASES
+
+Supplier balances are mainly created by credit purchases.
+
+Cash purchases paid during purchase entry remain under Purchases and do not need separate supplier payment vouchers.
+
+For a credit purchase:
+
+1. Record purchase.
+2. Enter amount paid now if any.
+3. Leave balance due.
+4. Later open Purchases or Supplier Payments and record supplier payment.
+
+Partial supplier payments are supported.
+
+15. CASH SHIFTS
+
+Menu:
+
+Sales Desk > Cash Shifts
+
+Cashiers should open a cash shift before selling if the account requires shift control. Close the shift at the end of the day and record counted cash.
+
+16. APPROVAL PIN
+
+Set Admin Approval PIN under Business Settings. Use it for sensitive actions such as overrides when the user role does not already have permission.
+
+Keep the PIN private.
+
+17. FIRST ADMIN PASSWORD
+
+The seeded admin is:
+
+- Email: admin@apples.local
+- Username: admin
+
+The password is controlled by INITIAL_ADMIN_PASSWORD, or local fallback password if not set.
+
+Change it immediately:
+
+Account > Change Password
+

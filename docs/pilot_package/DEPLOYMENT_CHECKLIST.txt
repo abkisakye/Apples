@@ -1,0 +1,172 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+DEPLOYMENT CHECKLIST
+
+Branch: version-2.0.0-dev
+
+1. CODE STATUS
+
+Run:
+
+git branch --show-current
+git status --short
+
+Confirm:
+
+- Current branch is version-2.0.0-dev.
+- No unexpected code changes are present.
+- Documentation/ZIP artifacts are expected if present.
+
+2. INSTALL DEPENDENCIES
+
+Online/development install:
+
+composer install
+npm install
+npm run build
+
+Offline install:
+
+- Confirm vendor exists.
+- Confirm public/build exists.
+
+3. ENVIRONMENT
+
+Confirm .env:
+
+- APP_ENV correct
+- APP_DEBUG false for live use
+- APP_URL correct
+- DB_CONNECTION=mysql
+- DB_DATABASE correct
+- SESSION_SECURE_COOKIE false for local http, true only for HTTPS
+
+4. DATABASE MIGRATION
+
+Run:
+
+php artisan migrate --force
+php artisan db:seed --force
+
+5. CLEAR AND CACHE
+
+Run:
+
+php artisan optimize:clear
+
+For live deployment after settings are correct:
+
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+6. TESTS
+
+Run:
+
+php artisan test
+
+7. GO-LIVE CHECK
+
+Run:
+
+php artisan ops:go-live-check
+
+Review warnings before handing over.
+
+8. BACKUP
+
+Run:
+
+php artisan ops:backup-database
+
+Confirm backup file exists and can be copied outside the computer.
+
+9. CONFIRM USERS
+
+Confirm:
+
+- Admin user exists.
+- Default admin password changed.
+- Cashier users created.
+- Stock/purchase users created if needed.
+- Inactive staff accounts disabled.
+
+10. CONFIRM STORES
+
+Open:
+
+/setup/stores
+
+Confirm every store/location exists and active status is correct.
+
+11. CONFIRM PAYMENT MODES
+
+Open:
+
+/setup/payment-modes
+
+Confirm Cash, Mobile Money, Card, Credit, or the business's actual modes exist.
+
+12. CONFIRM PRODUCTS
+
+Open:
+
+/products
+
+Confirm:
+
+- Products exist.
+- Categories are correct.
+- Units/selling packs are correct.
+- Barcodes and part numbers are correct.
+- Selling prices are correct.
+- Reorder levels are correct.
+
+13. CONFIRM OPENING STOCK
+
+Open:
+
+/stock/balances
+
+Confirm stock balances per product unit.
+
+14. CONFIRM RECEIPT PRINTING
+
+Print preview:
+
+- Sales receipt
+- Full A4 sale print
+- Purchase print
+- Supplier payment voucher
+- Supplier payment thermal receipt
+- Customer payment receipt
+
+15. CONFIRM DASHBOARD TOTALS
+
+Open Dashboard and select a known date range.
+
+Confirm:
+
+- Sales
+- Purchases
+- Expenses
+- Collections
+- Gross Profit
+- Net Profit
+- Sales Returns
+
+Click each card and confirm date filters carry through.
+
+16. FINAL HANDOVER
+
+Record:
+
+- Server computer name
+- Server IP address
+- Project folder
+- Database name
+- Backup folder
+- Admin user changed password confirmation
+- Printer used for receipts
+- Date/time of handover
+

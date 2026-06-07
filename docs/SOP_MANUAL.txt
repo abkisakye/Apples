@@ -1,0 +1,191 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+STANDARD OPERATING PROCEDURE (SOP)
+
+Version: version-2.0.0-dev
+
+1. Purpose
+This SOP explains the daily operating procedure for Apples Of Gold staff using the Laravel supermarket/POS system. It covers sales, purchases, supplier payments, expenses, stock control, reports, backups, and basic administration.
+
+2. User Roles
+- Admin: full system access, settings, users, roles, setup, reports, and corrections.
+- Manager: operational oversight, reports, sales, purchases, stock, suppliers, customers, and approvals as assigned.
+- Cashier: sales/POS, customer receipts, and assigned daily cashier tasks.
+- Stock staff: purchases, stock counts, transfers, and adjustments as assigned.
+
+3. Daily Opening Procedure
+1. Start WAMP/MySQL and confirm the application opens.
+2. Log in using your assigned user account.
+3. Cashier opens a cash shift if required.
+4. Manager checks Dashboard:
+   - Sales
+   - Purchases
+   - Collections
+   - Expenses
+   - Low stock
+   - Overdue customer/supplier balances
+5. Confirm printer availability for receipts and vouchers.
+
+4. Sales Procedure
+1. Open Sales, then create a new sale.
+2. Search product by name, code, barcode, or part number.
+3. Add items to Selected Products.
+4. Confirm quantity and price.
+5. Select customer if not walk-in.
+6. Choose payment mode:
+   - Cash
+   - Mobile Money
+   - Card
+   - Credit
+7. Enter paid amount.
+8. Confirm balance/change.
+9. Save/checkout the sale.
+10. Print receipt where required.
+
+Rules:
+- Walk-in customers should not receive credit.
+- Price override requires permission or approval where configured.
+- Credit sales must have a valid customer.
+
+5. Customer Payment Procedure
+1. Open Customer Payments.
+2. Select customer.
+3. Choose outstanding sale or opening balance.
+4. Enter payment mode and amount.
+5. Save payment.
+6. Print receipt if required.
+
+Rules:
+- Payment must not exceed outstanding balance.
+- Posted payments reduce customer balance immediately.
+
+6. Purchase / Stock Receiving Procedure
+1. Open Purchases.
+2. Click Record Purchase.
+3. Select supplier.
+4. Enter purchase date, store, supplier invoice number, payment mode, amount paid, and credit period if any.
+5. Search and add incoming items.
+6. Enter quantity received and buying cost.
+7. Confirm purchase summary.
+8. Record purchase.
+9. Print purchase document if required.
+
+Rules:
+- Cash purchases paid during purchase entry remain under Purchases.
+- Credit purchases with balance due can later receive supplier payments.
+- Stock increases when a purchase is posted.
+
+7. Supplier Payment Procedure
+1. Open Purchases and find a posted credit purchase with balance due.
+2. Click Record Payment from that purchase row.
+3. Confirm supplier, purchase number, and outstanding balance.
+4. Enter amount paid and payment mode.
+5. Save payment.
+6. Print supplier payment voucher if required.
+
+Rules:
+- Supplier Payments page shows payments posted later against credit purchases.
+- Cash purchases paid during purchase entry are shown under Purchases and do not need separate supplier payment vouchers.
+- Partial payments are allowed.
+- Overpayment is blocked.
+
+8. Expense Procedure
+1. Open Expenses.
+2. Click New Expense.
+3. Select expense category, store, payment mode, date, and amount.
+4. Add notes/reference if needed.
+5. Save and print if required.
+
+Rules:
+- Use setup categories for consistent reporting.
+- New expense categories can be quick-added if user has permission.
+
+9. Product and Category Procedure
+1. Open Products.
+2. Create or edit product.
+3. Set product name, code/barcode, category, supplier, reorder level, VAT, and status.
+4. Add selling units/packs.
+5. Save product.
+
+Rules:
+- Use Add Category only for valid supermarket categories.
+- Avoid duplicate product names and barcodes.
+- Each unit should have correct conversion, cost, selling price, and POS default where applicable.
+
+10. Stock Control Procedure
+Stock balances:
+1. Open Stock.
+2. Review product/unit balances.
+3. Use History to inspect stock movement.
+
+Stock adjustment:
+1. Use only for corrections, damage, shrinkage, or physical discrepancies.
+2. Select adjustment type, store, item, and quantity.
+3. Add clear remarks.
+4. Post adjustment.
+
+Stock count:
+1. Create physical count.
+2. Assign staff/section where needed.
+3. Enter physical counts.
+4. Save draft or post final count.
+
+Rules:
+- Do not use stock adjustment for normal purchases or sales.
+- Always add remarks for adjustments and stock counts.
+
+11. Returns Procedure
+Sales returns:
+1. Open the sale or sale returns section.
+2. Select items returned.
+3. Choose refund, store credit, balance reduction, or exchange as appropriate.
+4. Save return and print note.
+
+Purchase returns:
+1. Open purchase returns.
+2. Select supplier purchase and returned items.
+3. Confirm balance/stock impact.
+4. Save return.
+
+12. Reports Procedure
+Managers should review:
+- Dashboard
+- Financial Summary
+- Payment Methods
+- Customer Aging
+- Supplier Aging
+- Daily Closing
+- Stock History
+
+Use date filters consistently and verify totals against receipts/vouchers.
+
+13. Setup Procedure
+Setup pages are for controlled master data:
+- Product Categories
+- Expense Categories
+- Payment Modes
+- Stores
+- Capital Sources
+
+Only authorized users should add, edit, activate, or deactivate setup records.
+
+14. Backup Procedure
+1. Run backup daily before closing or before major changes.
+2. Store backup outside the computer when possible.
+3. Confirm backup file can be found and copied.
+4. Do not store backups inside public web folders.
+
+15. Daily Closing Procedure
+1. Confirm all sales are posted.
+2. Confirm purchases and supplier payments are posted.
+3. Enter all expenses.
+4. Close cashier shift.
+5. Review daily reports.
+6. Print/export reports if required.
+7. Backup database.
+8. Log out.
+
+16. Support Rules
+- Do not share passwords.
+- Do not edit database directly unless guided by a developer/admin.
+- Report errors with screenshot, user, time, and action performed.
+- Keep system computer protected from power loss where possible.

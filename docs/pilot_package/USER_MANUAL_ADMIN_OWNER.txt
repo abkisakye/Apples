@@ -1,0 +1,202 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+USER MANUAL - ADMIN / OWNER
+
+1. LOGIN
+
+Open:
+
+http://localhost:8000
+
+Log in using the assigned admin or owner account. Change the default admin password immediately after first login.
+
+2. DASHBOARD
+
+Menu:
+
+Overview > Dashboard
+
+The dashboard summarizes posted business activity for the selected date range:
+
+- Sales
+- Purchases
+- Expenses
+- Collections
+- Gross Profit
+- Net Profit
+- Sales Returns
+
+Cards are clickable and open the matching detail/report page with date_from and date_to filters.
+
+The dashboard uses business dates:
+
+- sales.sale_date
+- purchases.purchase_date
+- expenses.expense_date
+- sale_returns.return_date
+- payment dates for customer collections
+
+Voided, cancelled, or draft records should not be counted.
+
+3. BUSINESS SETTINGS
+
+Menu:
+
+Admin > Business Settings
+
+Update business name, contact details, TIN, currency, print footer wording, logo, approval PIN, and cashier discount limit.
+
+4. USERS AND ROLES
+
+Menus:
+
+Admin > Users
+Admin > Roles
+Admin > Permissions
+
+Use Users to create staff accounts. Use Roles and Permissions to control access.
+
+Common roles:
+
+- admin
+- manager
+- cashier
+- stock_clerk
+- guest
+
+Do not give cashier users business setup permissions unless they should create setup records.
+
+5. SETUP / MASTER DATA
+
+Menu:
+
+Setup
+
+Supported setup pages:
+
+- /setup/stores
+- /setup/categories
+- /setup/payment-modes
+- /setup/capital-sources
+- /setup/expense-categories
+
+Use setup pages for full management: create, edit, search, activate, and deactivate records.
+
+6. PRODUCTS
+
+Menu:
+
+Stock & Buying > Products
+
+Use Products to create supermarket items and selling units. A product can have multiple units such as Piece, Bottle, Box, Carton, or Pack.
+
+The product form supports quick product category creation for authorized users. Duplicate category names are blocked.
+
+7. STOCK
+
+Menu:
+
+Stock & Buying > Stock
+
+Stock pages include:
+
+- Stock Balances
+- Reorder / Low Stock
+- Stock History
+- Transfers
+- Adjustments
+- Counts
+
+Stock balances are shown by product unit to avoid confusion between pack sizes.
+
+8. REPORTS
+
+Menu:
+
+Finance > Reports
+
+Reports include:
+
+- Financial Summary
+- Payment Methods
+- Customer Aging
+- Supplier Aging
+- Cashier Performance
+- Daily Closing
+
+Use the same date range when comparing dashboard and reports.
+
+9. PURCHASES
+
+Menu:
+
+Stock & Buying > Purchases
+
+Use purchases to receive stock from suppliers. The purchase page is a receiving/invoice workflow, not a cashier sale screen.
+
+Cash purchase:
+
+- Enter amount paid now equal to total.
+- The purchase is shown under Purchases.
+- No separate Supplier Payment voucher is required.
+
+Credit purchase:
+
+- Enter amount paid now lower than total, or zero.
+- Balance due remains open.
+- Later use Supplier Payments to clear the balance.
+
+10. SUPPLIER BALANCES
+
+Menus:
+
+Stock & Buying > Purchases
+Stock & Buying > Supplier Payments
+Reports > Supplier Aging
+
+Use the Outstanding Purchases button on Supplier Payments to find posted purchases with balance_due greater than zero.
+
+11. CUSTOMER BALANCES
+
+Menus:
+
+Sales Desk > Customers
+Sales Desk > Customer Payments
+Reports > Customer Aging
+
+Credit sales and customer opening balances can be paid through Customer Payments.
+
+12. EXPENSES
+
+Menu:
+
+Finance > Expenses
+
+Record operating expenses using controlled expense categories and payment modes. Expenses reduce net profit.
+
+13. BACKUPS AND GO-LIVE CHECKS
+
+Run before updates and at daily closing:
+
+php artisan ops:backup-database
+
+Run readiness checks:
+
+php artisan ops:go-live-check
+
+Run tests before deployment:
+
+php artisan test
+
+14. DAILY OWNER REVIEW
+
+Recommended daily checks:
+
+1. Dashboard totals for the day.
+2. Sales list and voided/corrected sales.
+3. Cash shifts and counted cash.
+4. Purchases and supplier balances.
+5. Customer balances.
+6. Expenses.
+7. Low stock.
+8. Backup file created.
+

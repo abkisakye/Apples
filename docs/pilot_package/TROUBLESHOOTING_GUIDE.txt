@@ -1,0 +1,183 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+TROUBLESHOOTING GUIDE
+
+1. LOGIN NOT WORKING
+
+Check:
+
+- User exists.
+- User is active.
+- Password is correct.
+- Database connection is working.
+- SESSION_SECURE_COOKIE=false for local http testing.
+
+Clear caches:
+
+php artisan optimize:clear
+
+2. ADMIN USER MISSING
+
+Run:
+
+php artisan db:seed --force
+
+The AdminUserSeeder creates admin@apples.local / username admin. The password is INITIAL_ADMIN_PASSWORD if set. On local/testing, fallback password is password. Change it immediately after login.
+
+If production seeding generated a random password and no one knows it, create or reset the admin user using an approved Laravel Tinker/admin process.
+
+3. 500 SERVER ERROR
+
+Run:
+
+php artisan optimize:clear
+
+Check:
+
+- .env exists.
+- APP_KEY exists.
+- Database settings are correct.
+- storage and bootstrap/cache are writable.
+- storage/logs contains the detailed error.
+
+4. MIGRATION NOT RUN
+
+Symptoms:
+
+- Table not found.
+- Page errors after fresh install.
+
+Fix:
+
+php artisan migrate --force
+
+5. EXPENSE_CATEGORIES TABLE MISSING
+
+The system includes expense_categories and links expenses to controlled categories.
+
+Fix:
+
+php artisan migrate --force
+php artisan optimize:clear
+
+Then open:
+
+/setup/expense-categories
+
+6. MYSQL KEY TOO LONG / DEFAULT STRING LENGTH
+
+The application is hardened with Schema::defaultStringLength(191).
+
+If this error appears:
+
+1. Confirm you are using the current version-2.0.0-dev code.
+2. Drop the failed empty database if safe to do so.
+3. Recreate database with utf8mb4.
+4. Run php artisan migrate --force again.
+
+Do not drop a live database without backup.
+
+7. SESSION_SECURE_COOKIE TRUE BLOCKING LOCAL LOGIN
+
+For local http testing, set:
+
+SESSION_SECURE_COOKIE=false
+
+Then run:
+
+php artisan optimize:clear
+
+Use true only when serving through HTTPS.
+
+8. APP_URL WARNING
+
+Set APP_URL to the URL users open:
+
+APP_URL=http://localhost:8000
+
+or for LAN:
+
+APP_URL=http://192.168.1.25:8000
+
+Then run:
+
+php artisan optimize:clear
+
+9. MYSQLDUMP NOT FOUND
+
+The backup command uses mysqldump for MySQL:
+
+php artisan ops:backup-database
+
+If it fails:
+
+- Find mysqldump.exe in WAMP MySQL bin folder.
+- Add that folder to Windows PATH.
+- Open a new terminal.
+- Run mysqldump --version.
+- Run backup command again.
+
+10. FIREWALL / NETWORK ACCESS PROBLEMS
+
+If another computer cannot open the system:
+
+1. Confirm the server opens http://localhost:8000.
+2. Run ipconfig on the server.
+3. Use http://SERVER-IP:8000 from the client computer.
+4. Allow port 8000 in Windows Firewall.
+5. Confirm both computers are on the same Wi-Fi/LAN.
+
+11. NGROK OR BROWSER CERTIFICATE WARNING
+
+If using ngrok or HTTPS tunnel:
+
+- Browser certificate warnings can happen with wrong HTTPS settings.
+- For local testing, prefer http://localhost:8000.
+- Make APP_URL match the active URL.
+- SESSION_SECURE_COOKIE should match the protocol: false for http, true for https.
+
+12. NPM / VITE BUILD PROBLEMS
+
+If CSS/JS is missing:
+
+npm install
+npm run build
+
+If offline:
+
+- public/build must already exist in the ZIP.
+- Rebuild assets on an internet-connected computer and recreate ZIP.
+
+13. ROUTE / CACHE / CONFIG CACHE ISSUES
+
+After .env, route, or config changes, run:
+
+php artisan optimize:clear
+
+For deployment optimization:
+
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+If a cached route/config causes an error, clear it again:
+
+php artisan optimize:clear
+
+14. PRINT PAGE LOOKS WRONG
+
+Check:
+
+- Browser print preview settings.
+- Paper size: A4 for full vouchers, 80mm for thermal receipts.
+- Disable browser headers/footers if needed.
+- Use correct print URL/theme.
+
+15. TESTS FAIL BECAUSE OF LOCAL ENVIRONMENT
+
+Run:
+
+php artisan optimize:clear
+php artisan test
+
+If Xdebug warns about log file access, it normally does not block Laravel tests. Fix by making the Xdebug log folder writable or disabling Xdebug for CLI.
+

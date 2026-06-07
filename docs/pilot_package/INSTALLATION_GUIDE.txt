@@ -1,0 +1,238 @@
+APPLES OF GOLD SUPERMARKET/POS SYSTEM
+INSTALLATION GUIDE
+
+Branch: version-2.0.0-dev
+Laravel: 12.55.1
+PHP requirement from composer.json: PHP 8.2 or newer
+Database: MySQL recommended for pilot/live use
+
+1. REQUIRED SOFTWARE
+
+Install these on the target Windows computer:
+
+- WAMP64, with Apache, MySQL/MariaDB, and PHP 8.2 or newer
+- PHP CLI available in Command Prompt or PowerShell
+- MySQL or MariaDB
+- Composer
+- Node.js and npm
+- Git
+- Browser such as Chrome, Edge, or Firefox
+
+For offline installation, Composer and npm are only required if the ZIP does not already include the vendor folder and built public/build assets.
+
+2. INSTALL FROM GIT
+
+Open PowerShell or Git Bash.
+
+Example location:
+
+cd C:\wamp64\www
+git clone <repository-url> apples
+cd apples
+git checkout version-2.0.0-dev
+
+Install PHP dependencies:
+
+composer install
+
+Install and build frontend assets:
+
+npm install
+npm run build
+
+3. INSTALL FROM OFFLINE ZIP
+
+If using the offline installer ZIP:
+
+1. Copy the ZIP to the target computer.
+2. Extract it to:
+
+C:\wamp64\www\apples
+
+3. Confirm these folders/files exist:
+
+- app
+- bootstrap
+- config
+- database
+- public
+- resources
+- routes
+- storage
+- vendor
+- artisan
+- composer.json
+- composer.lock
+- package.json
+- package-lock.json
+- .env.example
+- .env.mysql.example
+
+If vendor exists and public/build exists, do not run composer install or npm install on an offline computer.
+
+4. CREATE MYSQL DATABASE
+
+Using phpMyAdmin or MySQL command line, create the database:
+
+apples_of_gold
+
+Example MySQL command:
+
+CREATE DATABASE apples_of_gold CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+5. CREATE .env FILE
+
+In:
+
+C:\wamp64\www\apples
+
+Copy:
+
+.env.mysql.example
+
+to:
+
+.env
+
+Edit .env and set your local database details. Example for a local WAMP test computer:
+
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://localhost:8000
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=apples_of_gold
+DB_USERNAME=root
+DB_PASSWORD=
+SESSION_SECURE_COOKIE=false
+
+Do not put real passwords in documentation or screenshots.
+
+6. RUN LARAVEL SETUP COMMANDS
+
+Open PowerShell in:
+
+C:\wamp64\www\apples
+
+Run:
+
+php artisan key:generate
+php artisan migrate --force
+php artisan db:seed --force
+php artisan optimize:clear
+
+The seeders create roles, payment modes, capital sources, system customers/suppliers, and an admin user.
+
+The admin seeder uses:
+
+- Email: admin@apples.local
+- Username: admin
+- Password: value of INITIAL_ADMIN_PASSWORD if set
+- Local/testing fallback password: password
+- Production fallback: generated random password
+
+Change the default admin password immediately after first login.
+
+7. START THE SYSTEM
+
+Run:
+
+php artisan serve --host=0.0.0.0 --port=8000
+
+Access on the same computer:
+
+http://localhost:8000
+
+8. ACCESS FROM ANOTHER COMPUTER ON SAME WI-FI/LAN
+
+On the server computer, run:
+
+ipconfig
+
+Find the IPv4 address, for example:
+
+192.168.1.25
+
+On another computer connected to the same network, open:
+
+http://192.168.1.25:8000
+
+Replace 192.168.1.25 with the actual server IP address.
+
+9. FIREWALL NOTES
+
+If another computer cannot open the system:
+
+1. Confirm the server computer can open http://localhost:8000.
+2. Confirm both computers are on the same network.
+3. Allow PHP, WAMP/Apache, or port 8000 through Windows Firewall.
+4. Try turning off firewall temporarily only for testing, then turn it back on and add the correct allow rule.
+
+10. BACKUP COMMAND
+
+Run before live use, before updates, and at the end of each business day:
+
+php artisan ops:backup-database
+
+Optional custom backup folder:
+
+php artisan ops:backup-database --path=C:\apples_backups
+
+For MySQL, mysqldump must be available on the Windows PATH.
+
+11. COMMON INSTALLATION ERRORS AND FIXES
+
+Database connection failed:
+- Make sure MySQL is running in WAMP.
+- Confirm DB_DATABASE, DB_USERNAME, and DB_PASSWORD in .env.
+- Confirm the database apples_of_gold exists.
+
+No application key:
+- Run php artisan key:generate.
+
+Tables missing:
+- Run php artisan migrate --force.
+
+Default data missing:
+- Run php artisan db:seed --force.
+
+Styles missing or page looks plain:
+- Confirm public/build exists.
+- If internet is available, run npm install and npm run build.
+
+500 server error:
+- Run php artisan optimize:clear.
+- Check storage/logs.
+- Confirm storage and bootstrap/cache are writable.
+
+Local login blocked:
+- For local testing, set SESSION_SECURE_COOKIE=false.
+- Use http://localhost:8000, not https, unless SSL is configured.
+
+APP_URL warning:
+- Set APP_URL to the address users will open, for example http://localhost:8000 or http://192.168.1.25:8000.
+
+MySQL key too long:
+- The application includes Schema::defaultStringLength(191). If using an older MySQL version, rerun migrations after pulling the fixed code.
+
+12. POST-INSTALL CHECKS
+
+Run:
+
+php artisan test
+php artisan ops:go-live-check
+
+Then open:
+
+- Dashboard
+- Sales
+- Purchases
+- Products
+- Stock
+- Supplier Payments
+- Customer Payments
+- Reports
+- Setup
+- Business Settings
+
