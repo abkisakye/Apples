@@ -16,6 +16,7 @@ class StockCount extends Model
             'count_date' => 'date',
             'line_count' => 'integer',
             'total_variance_qty' => 'integer',
+            'total_variance_base_qty' => 'decimal:3',
         ];
     }
 
@@ -37,5 +38,10 @@ class StockCount extends Model
     public function items(): HasMany
     {
         return $this->hasMany(StockCountItem::class);
+    }
+
+    public function unitEntries(): HasMany
+    {
+        return $this->hasMany(StockCountUnitEntry::class);
     }
 }

@@ -39,4 +39,9 @@ class Product extends Model
     {
         return $this->hasMany(ProductUnit::class);
     }
+
+    public function stockCountUnitEntries(): HasMany
+    {
+        return $this->hasMany(StockCountUnitEntry::class);
+    }
 }

@@ -4,28 +4,28 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class StockCountItem extends Model
+class StockCountUnitEntry extends Model
 {
     protected $guarded = [];
 
     protected function casts(): array
     {
         return [
-            'system_qty' => 'integer',
-            'physical_qty' => 'integer',
-            'variance_qty' => 'integer',
-            'system_base_qty' => 'decimal:3',
-            'physical_base_qty' => 'decimal:3',
-            'variance_base_qty' => 'decimal:3',
-            'quantity_adjusted' => 'integer',
+            'entered_quantity' => 'decimal:3',
+            'conversion_factor_snapshot' => 'decimal:6',
+            'base_quantity' => 'decimal:3',
         ];
     }
 
     public function stockCount(): BelongsTo
     {
         return $this->belongsTo(StockCount::class);
+    }
+
+    public function stockCountItem(): BelongsTo
+    {
+        return $this->belongsTo(StockCountItem::class);
     }
 
     public function product(): BelongsTo
@@ -36,10 +36,5 @@ class StockCountItem extends Model
     public function productUnit(): BelongsTo
     {
         return $this->belongsTo(ProductUnit::class);
-    }
-
-    public function unitEntries(): HasMany
-    {
-        return $this->hasMany(StockCountUnitEntry::class);
     }
 }
