@@ -298,11 +298,11 @@
                     <div class="summary-row"><span>Count Priority</span><strong>{{ $countFocus === 'all' ? 'All stock lines' : ($countFocus === 'low_stock' ? 'Low stock first' : 'Zero / negative first') }}</strong></div>
                 </div>
                 <div class="summary-callout" style="margin-top:14px;">
-                    Count and save in batches. After each save, the working sheet stays focused on pending lines so already-counted items stop occupying space. Use <strong>Counted only</strong> any time you want to review what has already been done.
+                    Count and save in batches. After each save, the working sheet stays focused on pending lines so already-counted items stop occupying space. Use <strong>Counted only</strong> to review and post saved count lines.
                 </div>
                 <div class="actions" style="margin-top:14px;">
                     <button type="button" data-submit-action="draft" class="button-link" style="flex:1 1 180px;" @disabled($rowCollection->isEmpty())>Save Progress</button>
-                    <button type="button" class="button-link" style="flex:1 1 180px;" disabled title="Final base-unit posting will be enabled in Phase 2D-3.">Post Final Count</button>
+                    <button type="button" data-submit-action="post" style="flex:1 1 180px;" @disabled($rowCollection->isEmpty())>Post Final Count</button>
                 </div>
             </section>
         </div>

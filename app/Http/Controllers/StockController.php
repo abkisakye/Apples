@@ -482,20 +482,27 @@ class StockController extends Controller
             ->contains(fn (array $item) => ! empty($item['product_id']) && array_key_exists('unit_entries', $item));
 
         if ($hasProductLevelItems && $validated['action'] === 'draft') {
-            return $this->saveProductLevelCountDraft(
+            return $this->saveProductLevelCount(
                 $request,
                 $validated,
                 $documentNumberService,
                 $auditLogService,
                 $storeAssignmentService,
-                $stockCountCalculationService
+                $stockCountCalculationService,
+                $stockAvailabilityService
             );
         }
 
         if ($hasProductLevelItems && $validated['action'] === 'post') {
-            throw ValidationException::withMessages([
-                'items' => 'Final posting for multi-unit stock counts will be enabled in Phase 2D-3. Save this count as a draft for now.',
-            ]);
+            return $this->saveProductLevelCount(
+                $request,
+                $validated,
+                $documentNumberService,
+                $auditLogService,
+                $storeAssignmentService,
+                $stockCountCalculationService,
+                $stockAvailabilityService
+            );
         }
 
         $sheetUnitIds = collect($validated['items'])
@@ -733,13 +740,14 @@ class StockController extends Controller
             ->with('auto_print_document', true);
     }
 
-    private function saveProductLevelCountDraft(
+    private function saveProductLevelCount(
         Request $request,
         array $validated,
         DocumentNumberService $documentNumberService,
         AuditLogService $auditLogService,
         StoreAssignmentService $storeAssignmentService,
-        StockCountCalculationService $stockCountCalculationService
+        StockCountCalculationService $stockCountCalculationService,
+        StockAvailabilityService $stockAvailabilityService
     ): RedirectResponse {
         $countedItems = collect($validated['items'])
             ->filter(fn (array $item) => ! empty($item['product_id']) && ! empty($item['is_counted']))
@@ -775,7 +783,7 @@ class StockController extends Controller
             ->get()
             ->keyBy('id');
 
-        $currentRows = $countedItems->map(function (array $item) use ($units, $products, $stockCountCalculationService) {
+        $currentRows = $countedItems->map(function (array $item) use ($units, $products, $stockCountCalculationService, $stockAvailabilityService, $storeId, $validated) {
             $productId = (int) $item['product_id'];
             /** @var Product|null $product */
             $product = $products->get($productId);
@@ -806,12 +814,14 @@ class StockController extends Controller
                 ->filter()
                 ->values();
 
-            $systemBaseQty = round((float) ($item['system_base_qty'] ?? 0), 3);
+            $systemBaseQty = $validated['action'] === 'post'
+                ? $stockAvailabilityService->availableBaseQuantity($storeId, $productId)
+                : round((float) ($item['system_base_qty'] ?? 0), 3);
             $physicalBaseQty = round((float) $entryAttributes->sum('base_quantity'), 3);
             $varianceBaseQty = $stockCountCalculationService->varianceBaseQuantity($physicalBaseQty, $systemBaseQty);
             $baseUnit = $product->baseProductUnit
                 ?? $product->units->firstWhere('is_base_unit', true)
-                ?? $product->units->firstWhere('conversion_factor', '1.000')
+                ?? $product->units->first(fn (ProductUnit $unit) => (float) $unit->conversion_factor === 1.0)
                 ?? $product->units->first();
 
             if (! $baseUnit) {
@@ -829,6 +839,7 @@ class StockController extends Controller
                 'physical_base_qty' => $physicalBaseQty,
                 'variance_base_qty' => $varianceBaseQty,
                 'unit_entries' => $entryAttributes,
+                'unit_cost' => (float) $baseUnit->cost_price,
             ];
         })->filter()->values();
 
@@ -842,7 +853,7 @@ class StockController extends Controller
 
         if (! empty($validated['stock_count_id'])) {
             $existingCount = StockCount::query()
-                ->with(['items.unitEntries'])
+                ->with(['items.unitEntries', 'items.productUnit.product:id,name'])
                 ->findOrFail((int) $validated['stock_count_id']);
 
             if ($existingCount->status !== 'draft') {
@@ -855,29 +866,38 @@ class StockController extends Controller
         $preservedRows = $existingCount
             ? $existingCount->items
                 ->reject(fn ($item) => $sheetProductIds->contains((int) $item->product_id))
-                ->map(fn ($item) => [
-                    'product_id' => $item->product_id,
-                    'product_unit_id' => $item->product_unit_id,
-                    'system_qty' => (int) $item->system_qty,
-                    'physical_qty' => (int) $item->physical_qty,
-                    'variance_qty' => (int) $item->variance_qty,
-                    'quantity_adjusted' => (int) $item->quantity_adjusted,
-                    'system_base_qty' => (float) ($item->system_base_qty ?? $item->system_qty),
-                    'physical_base_qty' => (float) ($item->physical_base_qty ?? $item->physical_qty),
-                    'variance_base_qty' => (float) ($item->variance_base_qty ?? $item->variance_qty),
-                    'unit_entries' => $item->unitEntries->map(fn ($entry) => [
-                        'product_id' => $entry->product_id,
-                        'product_unit_id' => $entry->product_unit_id,
-                        'entered_quantity' => (float) $entry->entered_quantity,
-                        'conversion_factor_snapshot' => (float) $entry->conversion_factor_snapshot,
-                        'base_quantity' => (float) $entry->base_quantity,
-                    ])->values(),
-                ])
+                ->map(function ($item) use ($validated, $stockAvailabilityService, $storeId, $stockCountCalculationService) {
+                    $physicalBaseQty = round((float) ($item->physical_base_qty ?? $item->physical_qty), 3);
+                    $systemBaseQty = $validated['action'] === 'post'
+                        ? $stockAvailabilityService->availableBaseQuantity($storeId, (int) $item->product_id)
+                        : round((float) ($item->system_base_qty ?? $item->system_qty), 3);
+                    $varianceBaseQty = $stockCountCalculationService->varianceBaseQuantity($physicalBaseQty, $systemBaseQty);
+
+                    return [
+                        'product_id' => $item->product_id,
+                        'product_unit_id' => $item->product_unit_id,
+                        'system_qty' => max((int) round($systemBaseQty), 0),
+                        'physical_qty' => max((int) round($physicalBaseQty), 0),
+                        'variance_qty' => (int) round($varianceBaseQty),
+                        'quantity_adjusted' => abs((int) round($varianceBaseQty)),
+                        'system_base_qty' => $systemBaseQty,
+                        'physical_base_qty' => $physicalBaseQty,
+                        'variance_base_qty' => $varianceBaseQty,
+                        'unit_cost' => (float) ($item->productUnit?->cost_price ?? 0),
+                        'unit_entries' => $item->unitEntries->map(fn ($entry) => [
+                            'product_id' => $entry->product_id,
+                            'product_unit_id' => $entry->product_unit_id,
+                            'entered_quantity' => (float) $entry->entered_quantity,
+                            'conversion_factor_snapshot' => (float) $entry->conversion_factor_snapshot,
+                            'base_quantity' => (float) $entry->base_quantity,
+                        ])->values(),
+                    ];
+                })
             : collect();
 
         $mergedRows = $preservedRows->concat($currentRows)->values();
 
-        $count = DB::transaction(function () use ($validated, $existingCount, $documentNumberService, $storeId, $mergedRows) {
+        $count = DB::transaction(function () use ($validated, $existingCount, $documentNumberService, $storeId, $mergedRows, $stockAvailabilityService) {
             $count = $existingCount;
             $attributes = [
                 'count_date' => $validated['count_date'],
@@ -889,7 +909,7 @@ class StockController extends Controller
                 'line_count' => $mergedRows->count(),
                 'total_variance_qty' => (int) $mergedRows->sum('quantity_adjusted'),
                 'total_variance_base_qty' => round((float) $mergedRows->sum(fn (array $item) => abs((float) $item['variance_base_qty'])), 3),
-                'status' => 'draft',
+                'status' => $validated['action'] === 'post' ? 'posted' : 'draft',
             ];
 
             if ($count) {
@@ -926,8 +946,63 @@ class StockController extends Controller
                 }
             }
 
+            if ($validated['action'] === 'post') {
+                foreach ($mergedRows->filter(fn (array $item) => abs((float) $item['variance_base_qty']) >= 0.001) as $row) {
+                    $baseVariance = round((float) $row['variance_base_qty'], 3);
+                    $adjustmentQty = abs($baseVariance);
+                    $unit = ProductUnit::query()
+                        ->with('product:id,name')
+                        ->find((int) $row['product_unit_id']);
+
+                    if (! $unit) {
+                        continue;
+                    }
+
+                    if ($baseVariance < 0) {
+                        $stockAvailabilityService->ensureBaseAvailable(
+                            $storeId,
+                            $unit,
+                            $adjustmentQty,
+                            'items',
+                            "{$unit->product?->name} no longer has enough base stock to post this count reduction. Refresh the count and try again."
+                        );
+                    }
+
+                    InventoryTransaction::create([
+                        'transaction_date' => $validated['count_date'],
+                        'store_id' => $storeId,
+                        'product_id' => $row['product_id'],
+                        'product_unit_id' => $row['product_unit_id'],
+                        'reference_type' => 'stock_count',
+                        'reference_id' => $count->id,
+                        'reference_no' => $count->count_no,
+                        'movement_type' => $baseVariance > 0 ? 'count_in' : 'count_out',
+                        'quantity_in' => $baseVariance > 0 ? $adjustmentQty : 0,
+                        'quantity_out' => $baseVariance < 0 ? $adjustmentQty : 0,
+                        'base_quantity_in' => $baseVariance > 0 ? $adjustmentQty : 0,
+                        'base_quantity_out' => $baseVariance < 0 ? $adjustmentQty : 0,
+                        'conversion_factor_snapshot' => 1,
+                        'unit_cost' => $row['unit_cost'],
+                        'remarks' => $validated['remarks'] ?? null,
+                    ]);
+                }
+            }
+
             return $count->fresh(['items.unitEntries']);
         });
+
+        if ($validated['action'] === 'post') {
+            $auditLogService->record('stock_count.posted', null, "Physical stock count {$count->count_no} posted.", [
+                'reference_no' => $count->count_no,
+                'store_id' => $storeId,
+                'line_count' => $mergedRows->count(),
+            ]);
+
+            return redirect()
+                ->route('stock.counts.show', $count->count_no)
+                ->with('status', "Physical stock count {$count->count_no} posted successfully.")
+                ->with('auto_print_document', true);
+        }
 
         $auditLogService->record('stock_count.draft_saved', null, "Physical stock count draft {$count->count_no} saved.", [
             'reference_no' => $count->count_no,

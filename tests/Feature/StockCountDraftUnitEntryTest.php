@@ -215,6 +215,192 @@ class StockCountDraftUnitEntryTest extends TestCase
         ]);
     }
 
+    public function test_posting_cartons_and_pieces_creates_positive_base_count_in(): void
+    {
+        [$product, $piece, $carton] = $this->pieceCartonProduct('Positive Crisps');
+        $this->postBaseStock($product, $piece, 48);
+
+        $this->postProductLevelCount('post', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 48)->assertRedirect('/stock/counts/CNT-20260607-0001')->assertSessionHasNoErrors();
+
+        $count = StockCount::query()->firstOrFail();
+        $item = $count->items()->firstOrFail();
+        $this->assertSame('48.000', $item->system_base_qty);
+        $this->assertSame('54.000', $item->physical_base_qty);
+        $this->assertSame('6.000', $item->variance_base_qty);
+        $this->assertSame('6.000', $count->total_variance_base_qty);
+
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'stock_count',
+            'reference_no' => 'CNT-20260607-0001',
+            'movement_type' => 'count_in',
+            'product_id' => $product->id,
+            'product_unit_id' => $piece->id,
+            'quantity_in' => '6.000',
+            'base_quantity_in' => '6.000',
+            'quantity_out' => '0.000',
+            'base_quantity_out' => '0.000',
+            'conversion_factor_snapshot' => '1.000000',
+        ]);
+        $this->assertSame(2, StockCountUnitEntry::query()->count());
+    }
+
+    public function test_negative_base_variance_creates_base_count_out(): void
+    {
+        [$product, $piece, $carton] = $this->pieceCartonProduct('Negative Crisps');
+        $this->postBaseStock($product, $piece, 60);
+
+        $this->postProductLevelCount('post', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 60)->assertRedirect('/stock/counts/CNT-20260607-0001')->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('stock_count_items', [
+            'product_id' => $product->id,
+            'system_base_qty' => '60.000',
+            'physical_base_qty' => '54.000',
+            'variance_base_qty' => '-6.000',
+        ]);
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'stock_count',
+            'movement_type' => 'count_out',
+            'product_id' => $product->id,
+            'product_unit_id' => $piece->id,
+            'quantity_in' => '0.000',
+            'base_quantity_in' => '0.000',
+            'quantity_out' => '6.000',
+            'base_quantity_out' => '6.000',
+            'conversion_factor_snapshot' => '1.000000',
+        ]);
+    }
+
+    public function test_zero_base_variance_creates_no_inventory_movement(): void
+    {
+        [$product, $piece, $carton] = $this->pieceCartonProduct('Matched Crisps');
+        $this->postBaseStock($product, $piece, 54);
+
+        $this->postProductLevelCount('post', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 54)->assertRedirect('/stock/counts/CNT-20260607-0001')->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('stock_count_items', [
+            'product_id' => $product->id,
+            'variance_base_qty' => '0.000',
+        ]);
+        $this->assertDatabaseMissing('inventory_transactions', [
+            'reference_type' => 'stock_count',
+            'reference_no' => 'CNT-20260607-0001',
+        ]);
+    }
+
+    public function test_stale_draft_recalculates_current_system_base_stock_when_posted(): void
+    {
+        [$product, $piece, $carton] = $this->pieceCartonProduct('Stale Crisps');
+        $this->postBaseStock($product, $piece, 48);
+
+        $this->postProductLevelCount('draft', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 48)->assertRedirect();
+
+        $this->postBaseStock($product, $piece, 2, 'EXTRA-'.$product->id);
+
+        $this->postProductLevelCount('post', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 48, 1)->assertRedirect('/stock/counts/CNT-20260607-0001')->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('stock_count_items', [
+            'product_id' => $product->id,
+            'system_base_qty' => '50.000',
+            'physical_base_qty' => '54.000',
+            'variance_base_qty' => '4.000',
+        ]);
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'stock_count',
+            'reference_no' => 'CNT-20260607-0001',
+            'movement_type' => 'count_in',
+            'base_quantity_in' => '4.000',
+        ]);
+    }
+
+    public function test_same_product_level_stock_count_cannot_be_posted_twice(): void
+    {
+        [$product, $piece, $carton] = $this->pieceCartonProduct('Duplicate Crisps');
+        $this->postBaseStock($product, $piece, 48);
+
+        $this->postProductLevelCount('draft', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 48)->assertRedirect();
+
+        $this->postProductLevelCount('post', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 48, 1)->assertRedirect();
+
+        $this->postProductLevelCount('post', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 48, 1)->assertSessionHasErrors();
+
+        $this->assertSame(1, InventoryTransaction::query()
+            ->where('reference_type', 'stock_count')
+            ->where('reference_no', 'CNT-20260607-0001')
+            ->count());
+    }
+
+    public function test_legacy_single_unit_count_posting_remains_compatible(): void
+    {
+        $product = Product::create(['name' => 'Legacy Soap', 'is_active' => true]);
+        $bar = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Bar',
+            'conversion_factor' => 1,
+            'cost_price' => 1000,
+            'is_base_unit' => true,
+            'is_active' => true,
+        ]);
+        $product->update(['base_product_unit_id' => $bar->id, 'base_unit_label' => 'Bar']);
+        $this->postBaseStock($product, $bar, 12);
+
+        $this->post('/stock/counts', [
+            'action' => 'post',
+            'count_date' => '2026-06-07',
+            'store_id' => $this->store->id,
+            'items' => [
+                ['product_unit_id' => $bar->id, 'physical_count' => 10, 'is_counted' => 1],
+            ],
+        ])->assertRedirect('/stock/counts/CNT-20260607-0001')->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'stock_count',
+            'reference_no' => 'CNT-20260607-0001',
+            'movement_type' => 'count_out',
+            'product_unit_id' => $bar->id,
+            'quantity_out' => '2.000',
+        ]);
+    }
+
+    public function test_stock_balance_reflects_base_variance_after_posted_count(): void
+    {
+        [$product, $piece, $carton] = $this->pieceCartonProduct('Balance Crisps');
+        $this->postBaseStock($product, $piece, 48);
+
+        $this->postProductLevelCount('post', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 48)->assertRedirect();
+
+        $this->get('/stock/balances?store_id='.$this->store->id)
+            ->assertOk()
+            ->assertSee('Balance Crisps')
+            ->assertSee('Base Stock 54 pieces');
+    }
+
     /**
      * @return array{0: Product, 1: ProductUnit, 2: ProductUnit, 3: ProductUnit}
      */
@@ -276,7 +462,31 @@ class StockCountDraftUnitEntryTest extends TestCase
         return [$product, $kg, $sack];
     }
 
-    private function postBaseStock(Product $product, ProductUnit $unit, float $baseQuantity): void
+    private function postProductLevelCount(string $action, Product $product, array $entries, float $systemBaseQty, ?int $stockCountId = null)
+    {
+        return $this->post('/stock/counts', [
+            'action' => $action,
+            'stock_count_id' => $stockCountId,
+            'count_date' => '2026-06-07',
+            'store_id' => $this->store->id,
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'system_base_qty' => $systemBaseQty,
+                    'is_counted' => 1,
+                    'unit_entries' => collect($entries)
+                        ->map(fn (array $entry) => [
+                            'product_unit_id' => $entry[0]->id,
+                            'entered_quantity' => $entry[1],
+                        ])
+                        ->values()
+                        ->all(),
+                ],
+            ],
+        ]);
+    }
+
+    private function postBaseStock(Product $product, ProductUnit $unit, float $baseQuantity, ?string $referenceNo = null): void
     {
         InventoryTransaction::create([
             'transaction_date' => '2026-06-01',
@@ -284,8 +494,8 @@ class StockCountDraftUnitEntryTest extends TestCase
             'product_id' => $product->id,
             'product_unit_id' => $unit->id,
             'reference_type' => 'opening',
-            'reference_id' => $product->id,
-            'reference_no' => 'OPEN-'.$product->id,
+            'reference_id' => abs(crc32(($referenceNo ?: 'OPEN-'.$product->id).'-'.$baseQuantity)),
+            'reference_no' => $referenceNo ?: 'OPEN-'.$product->id,
             'movement_type' => 'opening_stock',
             'quantity_in' => $baseQuantity,
             'quantity_out' => 0,
