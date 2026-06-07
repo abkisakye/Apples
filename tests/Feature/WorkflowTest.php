@@ -781,7 +781,7 @@ class WorkflowTest extends TestCase
         $this->get('/products/'.$product->id)
             ->assertOk()
             ->assertSee($product->name)
-            ->assertSee('Selling Units And Stock Position')
+            ->assertSee('Selling Unit Configuration')
             ->assertSee($unit->unit_name);
     }
 

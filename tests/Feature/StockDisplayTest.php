@@ -187,6 +187,30 @@ class StockDisplayTest extends TestCase
             ->assertSee('Balance 15 packs');
     }
 
+    public function test_product_profile_shows_base_stock_after_carton_purchase_and_piece_sale(): void
+    {
+        [$product, $piece, $carton] = $this->pieceCartonProduct('Profile Crisps');
+
+        $this->postPurchase($carton, 1, 24000)->assertRedirect()->assertSessionHasNoErrors();
+        $this->postSale($piece, 3, 1500)->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->get('/products/'.$product->id)
+            ->assertOk()
+            ->assertSee('Profile Crisps')
+            ->assertSee('Current Base Stock')
+            ->assertSee('21 pieces')
+            ->assertSee('Friendly Breakdown')
+            ->assertSee('Breakdown: 21 pieces')
+            ->assertSee('Base Unit')
+            ->assertSee('Piece')
+            ->assertSee('Configured Units')
+            ->assertSee('Carton 24, Half Carton 12, Piece 1')
+            ->assertSee(route('stock.product-history', $product, false), false)
+            ->assertDontSee('System Count')
+            ->assertDontSee('Units In')
+            ->assertDontSee('Units Out');
+    }
+
     /**
      * @return array{0: Product, 1: ProductUnit, 2: ProductUnit, 3: ProductUnit}
      */

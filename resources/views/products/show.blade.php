@@ -2,6 +2,7 @@
 
 @section('content')
     @php($currency = config('business.currency', 'UGX'))
+    @php($stockSummary = $productSummary['stock_summary'])
     <div class="page-head">
         <div>
             <h2>{{ $product->name }}</h2>
@@ -11,6 +12,7 @@
             @if ($access->can('stock.view'))
                 <a href="{{ route('stock.balances', ['q' => $product->code ?: $product->name]) }}" class="button-link">Stock Balance</a>
                 <a href="{{ route('stock.reorder', ['q' => $product->code ?: $product->name]) }}" class="button-link">Reorder View</a>
+                <a href="{{ route('stock.product-history', $product) }}" class="button-link primary">Recent Movements</a>
             @endif
             @if ($access->can('purchases.manage'))
                 <a href="{{ route('purchases.create', ['product_id' => $product->id, 'return_to' => url()->full()]) }}" class="button-link primary">Add Stock</a>
@@ -25,8 +27,14 @@
 
     <section class="cards">
         <div class="card"><div class="label">Units</div><div class="value">{{ number_format($productSummary['units']) }}</div></div>
+        <div class="card"><div class="label">Current Base Stock</div><div class="value">{{ $stockSummary->base_stock_label }}</div></div>
+        <div class="card"><div class="label">Friendly Breakdown</div><div class="value" style="font-size:1rem;">Breakdown: {{ $stockSummary->friendly_breakdown }}</div></div>
+        <div class="card"><div class="label">Base Unit</div><div class="value">{{ $stockSummary->base_unit_label }}</div></div>
+    </section>
+
+    <section class="cards">
         <div class="card"><div class="label">Active Units</div><div class="value">{{ number_format($productSummary['active_units']) }}</div></div>
-        <div class="card"><div class="label">System Stock</div><div class="value">{{ number_format((float) $productSummary['stock_balance_units'], 0) }}</div></div>
+        <div class="card"><div class="label">Configured Units</div><div class="value" style="font-size:1rem;">{{ $stockSummary->configured_units ?: 'No active units' }}</div></div>
         <div class="card"><div class="label">Estimated Stock Value</div><div class="value money">{{ $currency }} {{ number_format((float) $productSummary['stock_value'], 0) }}</div></div>
     </section>
 
@@ -61,19 +69,17 @@
     </section>
 
     <section class="panel" style="margin-bottom: 16px;">
-        <h3>Selling Units And Stock Position</h3>
-        <p class="list-note">These figures show the current system count for each selling unit. During physical stock count, compare the shelf count to this view before posting any adjustment.</p>
+        <h3>Selling Unit Configuration</h3>
+        <p class="list-note">Stock is controlled above in the base unit. This table keeps the configured selling and buying packs visible without treating each unit as a separate stock balance.</p>
         <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
                         <th>Unit</th>
+                        <th>Conversion</th>
                         <th>Selling Price</th>
                         <th>Cost Price</th>
-                        <th>Units In</th>
-                        <th>Units Out</th>
-                        <th>System Count</th>
-                        <th>Stock Value</th>
+                        <th>Setup</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -90,16 +96,30 @@
                                     @endif
                                 </div>
                             </td>
+                            <td>
+                                <div class="table-title">{{ rtrim(rtrim(number_format((float) $row['unit']->conversion_factor, 3, '.', ''), '0'), '.') ?: '1' }}</div>
+                                <div class="table-meta">{{ $row['unit']->is_base_unit ? 'Base unit' : 'Base units per selected unit' }}</div>
+                            </td>
                             <td class="money">{{ $currency }} {{ number_format((float) $row['unit']->selling_price, 0) }}</td>
                             <td class="money">{{ $currency }} {{ number_format((float) $row['unit']->cost_price, 0) }}</td>
-                            <td>{{ number_format((float) $row['quantity_in'], 0) }}</td>
-                            <td>{{ number_format((float) $row['quantity_out'], 0) }}</td>
-                            <td><span class="badge {{ (float) $row['balance_qty'] <= 0 ? 'credit' : 'success' }}">{{ number_format((float) $row['balance_qty'], 0) }}</span></td>
-                            <td class="money">{{ $currency }} {{ number_format((float) $row['stock_value'], 0) }}</td>
+                            <td>
+                                <div class="status-inline">
+                                    @if ($row['unit']->allow_fractional_quantity)
+                                        <span class="badge soft">Decimals {{ (int) $row['unit']->quantity_precision }}</span>
+                                    @else
+                                        <span class="badge soft">Whole qty</span>
+                                    @endif
+                                    @if ($row['unit']->is_active)
+                                        <span class="badge success">Active</span>
+                                    @else
+                                        <span class="badge credit">Inactive</span>
+                                    @endif
+                                </div>
+                            </td>
                             <td>
                                 <div class="action-stack">
                                     @if ($access->can('stock.view'))
-                                        <a href="{{ route('stock.history', $row['unit']->id) }}" class="action-chip">History</a>
+                                        <a href="{{ route('stock.product-history', $product) }}" class="action-chip">History</a>
                                     @endif
                                     @if ($access->can('purchases.manage'))
                                         <a href="{{ route('purchases.create', ['product_unit_id' => $row['unit']->id, 'return_to' => url()->full()]) }}" class="action-chip primary">Add Stock</a>
@@ -111,7 +131,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="muted">No units are configured for this product.</td></tr>
+                        <tr><td colspan="6" class="muted">No units are configured for this product.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -121,6 +141,7 @@
     <section class="grid-two">
         <div class="panel">
             <h3>Recent Stock Movement</h3>
+            <p class="list-note"><a href="{{ route('stock.product-history', $product) }}">Open product-level stock history</a> to see selected units, base impact, and running base balance.</p>
             <div class="table-wrap">
                 <table>
                     <thead>

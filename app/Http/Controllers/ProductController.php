@@ -10,6 +10,7 @@ use App\Models\PurchaseItem;
 use App\Models\SaleItem;
 use App\Models\Supplier;
 use App\Services\AuditLogService;
+use App\Support\StockDisplayService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -106,9 +107,9 @@ class ProductController extends Controller
             ->with('status', "Product {$product->name} saved successfully.");
     }
 
-    public function show(Product $product): View
+    public function show(Product $product, StockDisplayService $stockDisplayService): View
     {
-        $product->load(['category:id,name', 'supplier:id,name,phone,country', 'units']);
+        $product->load(['category:id,name', 'supplier:id,name,phone,country', 'units', 'baseProductUnit']);
 
         $units = ProductUnit::query()
             ->where('product_id', $product->id)
@@ -117,27 +118,12 @@ class ProductController extends Controller
             ->orderBy('unit_name')
             ->get();
 
-        $stockSnapshot = InventoryTransaction::query()
-            ->selectRaw('product_unit_id, COALESCE(SUM(quantity_in), 0) as quantity_in, COALESCE(SUM(quantity_out), 0) as quantity_out')
-            ->where('product_id', $product->id)
-            ->groupBy('product_unit_id')
-            ->get()
-            ->keyBy('product_unit_id');
-
-        $unitRows = $units->map(function (ProductUnit $unit) use ($stockSnapshot) {
-            $snapshot = $stockSnapshot->get($unit->id);
-            $quantityIn = (int) round((float) ($snapshot?->quantity_in ?? 0));
-            $quantityOut = (int) round((float) ($snapshot?->quantity_out ?? 0));
-            $balance = $quantityIn - $quantityOut;
-
+        $unitRows = $units->map(function (ProductUnit $unit) {
             return [
                 'unit' => $unit,
-                'quantity_in' => $quantityIn,
-                'quantity_out' => $quantityOut,
-                'balance_qty' => $balance,
-                'stock_value' => round($balance * (float) $unit->cost_price, 2),
             ];
         });
+        $stockSummary = $stockDisplayService->productSummary($product);
 
         $recentMovements = InventoryTransaction::query()
             ->with(['store:id,name', 'productUnit:id,unit_name'])
@@ -170,8 +156,8 @@ class ProductController extends Controller
             'productSummary' => [
                 'units' => $units->count(),
                 'active_units' => $units->where('is_active', true)->count(),
-                'stock_value' => $unitRows->sum('stock_value'),
-                'stock_balance_units' => $unitRows->sum('balance_qty'),
+                'stock_value' => round((float) $stockSummary->base_balance * (float) ($stockSummary->base_unit?->cost_price ?? 0), 2),
+                'stock_summary' => $stockSummary,
             ],
         ]);
     }

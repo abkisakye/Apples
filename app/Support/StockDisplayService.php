@@ -285,6 +285,6 @@ class StockDisplayService
 
     private function isUncountableUnit(string $label): bool
     {
-        return in_array($label, ['g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms', 'ml', 'l', 'ltr', 'litre', 'litres', 'liter', 'liters'], true);
+        return in_array($label, ['each', 'g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms', 'ml', 'l', 'ltr', 'litre', 'litres', 'liter', 'liters'], true);
     }
 }
