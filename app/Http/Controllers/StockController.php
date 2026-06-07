@@ -13,6 +13,7 @@ use App\Services\DocumentNumberService;
 use App\Services\ExcelExportService;
 use App\Support\AccessService;
 use App\Support\ProductUnitConversionService;
+use App\Support\StockDisplayService;
 use App\Support\StockAvailabilityService;
 use App\Support\StoreAssignmentService;
 use Carbon\Carbon;
@@ -25,16 +26,18 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StockController extends Controller
 {
-    public function balances(Request $request): View
+    public function balances(Request $request, StockDisplayService $stockDisplayService): View
     {
-        [$rows, $stores, $categories, $filters] = $this->stockRows($request);
+        [$stores, $categories, $filters] = $this->stockReferenceData($request);
+        $rows = $stockDisplayService->rows($request);
 
         return view('stock.balances', compact('rows', 'stores', 'categories', 'filters'));
     }
 
-    public function reorder(Request $request): View
+    public function reorder(Request $request, StockDisplayService $stockDisplayService): View
     {
-        [$rows, $stores, $categories, $filters] = $this->stockRows($request, true);
+        [$stores, $categories, $filters] = $this->stockReferenceData($request);
+        $rows = $stockDisplayService->rows($request, true);
 
         return view('stock.reorder', compact('rows', 'stores', 'categories', 'filters'));
     }
@@ -76,38 +79,38 @@ class StockController extends Controller
         return view('stock.counts_index', compact('rows'));
     }
 
-    public function balancesExport(Request $request, ExcelExportService $excelExportService): BinaryFileResponse
+    public function balancesExport(Request $request, ExcelExportService $excelExportService, StockDisplayService $stockDisplayService): BinaryFileResponse
     {
-        [$rows] = $this->stockRows($request);
+        $rows = $stockDisplayService->rows($request);
 
         return $excelExportService->download('stock-balance.xlsx', [
-            'Product', 'Code', 'Unit', 'Category', 'Reorder Level', 'In', 'Out', 'Balance', 'Stock Value',
+            'Product', 'Code', 'Base Unit', 'Category', 'Reorder Level', 'Base Stock', 'Friendly Breakdown', 'Stock Value',
         ], $rows->map(fn ($row) => [
             $row->product_name,
             $row->product_code,
-            $row->unit_name,
+            $row->base_unit_label,
             $row->category_name,
-            $row->reorder_level,
-            $row->quantity_in,
-            $row->quantity_out,
-            $row->balance_qty,
+            $row->reorder_level_label,
+            $row->base_stock_label,
+            $row->friendly_breakdown,
             $row->stock_value,
         ]));
     }
 
-    public function reorderExport(Request $request, ExcelExportService $excelExportService): BinaryFileResponse
+    public function reorderExport(Request $request, ExcelExportService $excelExportService, StockDisplayService $stockDisplayService): BinaryFileResponse
     {
-        [$rows] = $this->stockRows($request, true);
+        $rows = $stockDisplayService->rows($request, true);
 
         return $excelExportService->download('stock-reorder.xlsx', [
-            'Product', 'Unit', 'Category', 'Reorder Level', 'Current Balance', 'Shortfall',
+            'Product', 'Base Unit', 'Category', 'Reorder Level', 'Base Stock', 'Shortage', 'Friendly Breakdown',
         ], $rows->map(fn ($row) => [
             $row->product_name,
-            $row->unit_name,
+            $row->base_unit_label,
             $row->category_name,
-            $row->reorder_level,
-            $row->balance_qty,
-            max((float) $row->reorder_level - (float) $row->balance_qty, 0),
+            $row->reorder_level_label,
+            $row->base_stock_label,
+            $row->shortage_label,
+            $row->friendly_breakdown,
         ]));
     }
 

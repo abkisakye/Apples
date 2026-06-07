@@ -30,7 +30,7 @@
     <div class="page-head">
         <div>
             <h2>Reorder List</h2>
-            <p>Products at or below their reorder level based on the current system stock count.</p>
+            <p>Products at or below their base-unit reorder level based on the current product stock count.</p>
         </div>
         <div class="actions">
             @if ($access->can('purchases.manage'))
@@ -48,8 +48,8 @@
 
     <section class="cards">
         <div class="card"><div class="label">Items To Reorder</div><div class="value">{{ number_format($rows->count()) }}</div></div>
-        <div class="card"><div class="label">Total Units Short</div><div class="value">{{ number_format($rows->sum(fn ($row) => max((float) $row->reorder_level - (float) $row->balance_qty, 0)), 0) }}</div></div>
-        <div class="card"><div class="label">Zero / Negative</div><div class="value">{{ number_format($rows->filter(fn ($row) => (float) $row->balance_qty <= 0)->count()) }}</div></div>
+        <div class="card"><div class="label">Base Units Short</div><div class="value">{{ number_format($rows->sum('shortage'), 0) }}</div></div>
+        <div class="card"><div class="label">Zero / Negative</div><div class="value">{{ number_format($rows->filter(fn ($row) => (float) $row->base_balance <= 0)->count()) }}</div></div>
     </section>
 
     <section class="panel">
@@ -84,30 +84,38 @@
                     <tr>
                         <td>
                             <div class="stock-unit-title">
-                                <a href="{{ route('stock.history', $row->id) }}" class="stock-product-link">{{ $row->product_name }}</a>
-                                <div class="stock-unit-chip"><span>Unit</span>{{ $row->unit_name }}</div>
+                                @if ($row->primary_unit_id)
+                                    <a href="{{ route('stock.history', $row->primary_unit_id) }}" class="stock-product-link">{{ $row->product_name }}</a>
+                                @else
+                                    <span class="stock-product-link">{{ $row->product_name }}</span>
+                                @endif
+                                <div class="stock-unit-chip">Base unit: {{ $row->base_unit_label }}</div>
                             </div>
                             <div class="table-meta">{{ $row->product_code ?: 'No code' }}</div>
                             <div class="table-meta">Category: {{ $row->category_name ?? 'Uncategorized' }}</div>
+                            <div class="table-meta">Units: {{ $row->configured_units ?: 'No active units' }}</div>
                         </td>
                         <td>
                             <div class="cell-stack">
                                 <div class="status-inline">
-                                    <span class="badge credit">Short {{ number_format(max((float) $row->reorder_level - (float) $row->balance_qty, 0), 0) }}</span>
-                                    <span class="badge soft">System Count {{ number_format((float) $row->balance_qty, 0) }}</span>
+                                    <span class="badge credit">Shortage: {{ $row->shortage_label }}</span>
+                                    <span class="badge soft">Base Stock {{ $row->base_stock_label }}</span>
                                 </div>
-                                <div class="table-meta">Reorder at: {{ number_format((float) $row->reorder_level, 0) }}</div>
+                                <div class="table-meta">Reorder Level: {{ $row->reorder_level_label }}</div>
+                                <div class="table-meta">Breakdown: {{ $row->friendly_breakdown }}</div>
                             </div>
                         </td>
                         <td>
                             <div class="action-stack">
-                                <a href="{{ route('stock.history', $row->id) }}" class="action-chip">History</a>
+                                @if ($row->primary_unit_id)
+                                    <a href="{{ route('stock.history', $row->primary_unit_id) }}" class="action-chip">History</a>
+                                @endif
                                 @if ($access->can('purchases.manage'))
-                                    <a href="{{ route('purchases.create') }}" class="action-chip primary">Reorder</a>
+                                    <a href="{{ route('purchases.create', ['product_id' => $row->product_id, 'return_to' => url()->full()]) }}" class="action-chip primary">Reorder</a>
                                 @endif
                                 @if ($access->can('stock.manage'))
                                     <a href="{{ route('stock.counts.create', ['store_id' => $filters['store_id'], 'q' => $row->product_name]) }}" class="action-chip">Count</a>
-                                    <a href="{{ route('stock.adjustments.create') }}" class="action-chip">Adjust</a>
+                                    <a href="{{ route('stock.adjustments.create', ['product_id' => $row->product_id, 'return_to' => url()->full()]) }}" class="action-chip">Adjust</a>
                                 @endif
                             </div>
                         </td>
