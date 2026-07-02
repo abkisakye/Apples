@@ -137,6 +137,7 @@
         <input type="hidden" name="store_id" value="{{ $selectedStore?->id ?? $filters['store_id'] }}">
         <input type="hidden" name="q" value="{{ $filters['q'] }}">
         <input type="hidden" name="category_id" value="{{ $filters['category_id'] }}">
+        <input type="hidden" name="product_id" value="{{ $focusedProductId ?: '' }}">
         <input type="hidden" name="count_focus" value="{{ $countFocus }}">
         <input type="hidden" name="show_status" value="{{ $showStatus }}">
         <input type="hidden" name="page" value="{{ method_exists($rows, 'currentPage') ? $rows->currentPage() : 1 }}">
