@@ -275,6 +275,10 @@ class StockDisplayService
         $precision = max($precision, $this->hasDecimalRemainder($quantity) ? 3 : 0);
         $formatted = number_format($quantity, $precision, '.', '');
 
+        if ($precision === 0) {
+            return $formatted;
+        }
+
         return rtrim(rtrim($formatted, '0'), '.') ?: '0';
     }
 

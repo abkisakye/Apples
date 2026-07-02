@@ -384,7 +384,7 @@
 </head>
 <body>
     @php($printedAt = now())
-    @php($totalVariance = $rows->sum('variance_qty'))
+    @php($totalVariance = (float) $stockCount->total_variance_base_qty)
 
     <div class="toolbar">
         <button onclick="window.print()">🖨️ Print / Save PDF</button>
@@ -423,8 +423,8 @@
                     <div class="metric-value">{{ number_format($rows->count()) }}</div>
                 </div>
                 <div class="overview-item">
-                    <div class="section-kicker">TOTAL VARIANCE</div>
-                    <div class="metric-value">{{ number_format((int) $totalVariance) }}</div>
+                    <div class="section-kicker">TOTAL BASE VARIANCE</div>
+                    <div class="metric-value">{{ number_format($totalVariance, 3) }}</div>
                 </div>
                 <div class="overview-item">
                     <div class="section-kicker">STORE</div>
@@ -441,28 +441,31 @@
                 <thead>
                     <tr>
                         <th>PRODUCT</th>
-                        <th>UNIT</th>
-                        <th class="qty">SYSTEM COUNT</th>
-                        <th class="qty">PHYSICAL COUNT</th>
+                        <th>SYSTEM STOCK</th>
+                        <th>COUNTED</th>
+                        <th>ENTERED UNITS</th>
+                        <th>BREAKDOWN</th>
                         <th class="qty">VARIANCE</th>
+                        <th>MOVEMENT</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($rows as $row)
-                        @php($variance = (int) $row->variance_qty)
                         <tr>
                             <td>{{ $row->product?->name ?? '-' }}</td>
-                            <td>{{ $row->productUnit?->unit_name ?? '-' }}</td>
-                            <td class="qty">{{ number_format((int) $row->system_qty) }}</td>
-                            <td class="qty">{{ number_format((int) $row->physical_qty) }}</td>
+                            <td>{{ $row->system_base_label }}</td>
+                            <td>{{ $row->physical_base_label }}</td>
+                            <td>{{ $row->entered_unit_breakdown }}</td>
+                            <td>{{ $row->friendly_breakdown }}</td>
                             <td class="qty">
-                                <span class="@if($variance > 0) variance-positive @elseif($variance < 0) variance-negative @else variance-zero @endif">
-                                    {{ $variance > 0 ? '+' : '' }}{{ number_format($variance) }}
+                                <span class="@if($row->variance_base_qty > 0) variance-positive @elseif($row->variance_base_qty < 0) variance-negative @else variance-zero @endif">
+                                    {{ $row->variance_base_label }}
                                 </span>
                             </td>
+                            <td>{{ $row->movement_created }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" style="text-align: center;">No items found</td></tr>
+                        <tr><td colspan="6" style="text-align: center;">No items found</td></tr>
                     @endforelse
                 </tbody>
             </table>

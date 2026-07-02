@@ -1171,11 +1171,22 @@ class StockController extends Controller
                 'store:id,name',
                 'user:id,name',
                 'assignedUser:id,name',
-                'items.product:id,name',
-                'items.productUnit:id,unit_name',
+                'items.product.units',
+                'items.product.baseProductUnit',
+                'items.productUnit:id,unit_name,conversion_factor,quantity_precision,allow_fractional_quantity',
+                'items.unitEntries.productUnit:id,unit_name,conversion_factor,quantity_precision,allow_fractional_quantity',
             ])
             ->where('count_no', $referenceNo)
             ->firstOrFail();
+        $movementRows = InventoryTransaction::query()
+            ->where('reference_type', 'stock_count')
+            ->where('reference_id', $count->id)
+            ->get()
+            ->keyBy('product_id');
+        $stockDisplayService = app(StockDisplayService::class);
+        $rows = $count->items->map(function ($item) use ($movementRows, $stockDisplayService) {
+            return $this->formatStockCountDocumentRow($item, $movementRows->get((int) $item->product_id), $stockDisplayService);
+        });
 
         return [
             'stockCount' => $count,
@@ -1184,9 +1195,69 @@ class StockController extends Controller
             'store' => $count->store,
             'countedBy' => $count->user,
             'assignedTo' => $count->assignedUser,
-            'rows' => $count->items,
+            'rows' => $rows,
             'remarks' => $count->remarks,
         ];
+    }
+
+    private function formatStockCountDocumentRow($item, ?InventoryTransaction $movement, StockDisplayService $stockDisplayService): object
+    {
+        $product = $item->product;
+        $baseUnit = $product?->baseProductUnit ?? $item->productUnit;
+        $baseUnitLabel = $product?->base_unit_label ?: $baseUnit?->unit_name ?: $item->productUnit?->unit_name ?: 'base unit(s)';
+        $systemBaseQty = $this->displayBaseQuantity($item->system_base_qty, $item->system_qty);
+        $physicalBaseQty = $this->displayBaseQuantity($item->physical_base_qty, $item->physical_qty);
+        $varianceBaseQty = $this->displayBaseQuantity($item->variance_base_qty, $item->variance_qty);
+        $entries = $item->unitEntries
+            ->filter(fn ($entry) => (float) $entry->entered_quantity > 0)
+            ->map(fn ($entry) => $stockDisplayService->formatQuantityWithUnit(
+                (float) $entry->entered_quantity,
+                $entry->productUnit?->unit_name ?? 'unit',
+                $entry->productUnit
+            ))
+            ->values();
+        $enteredBreakdown = $entries->isNotEmpty()
+            ? $entries->implode(' + ')
+            : $stockDisplayService->formatQuantityWithUnit((float) $item->physical_qty, $item->productUnit?->unit_name ?? 'unit', $item->productUnit);
+
+        return (object) [
+            'model' => $item,
+            'product' => $product,
+            'productUnit' => $item->productUnit,
+            'system_base_qty' => $systemBaseQty,
+            'physical_base_qty' => $physicalBaseQty,
+            'variance_base_qty' => $varianceBaseQty,
+            'system_base_label' => $stockDisplayService->formatQuantityWithUnit($systemBaseQty, $baseUnitLabel, $baseUnit),
+            'physical_base_label' => $stockDisplayService->formatQuantityWithUnit($physicalBaseQty, $baseUnitLabel, $baseUnit),
+            'variance_base_label' => $this->signedQuantityLabel($varianceBaseQty, $baseUnitLabel, $baseUnit, $stockDisplayService),
+            'friendly_breakdown' => $product
+                ? $stockDisplayService->friendlyBreakdown($physicalBaseQty, $product, $baseUnit)
+                : $stockDisplayService->formatQuantityWithUnit($physicalBaseQty, $baseUnitLabel, $baseUnit),
+            'entered_unit_breakdown' => $enteredBreakdown,
+            'movement_created' => $movement?->movement_type ?? 'none',
+        ];
+    }
+
+    private function signedQuantityLabel(float $quantity, string $unitLabel, ?ProductUnit $unit, StockDisplayService $stockDisplayService): string
+    {
+        if (abs($quantity) < 0.001) {
+            return $stockDisplayService->formatQuantityWithUnit(0, $unitLabel, $unit);
+        }
+
+        return ($quantity > 0 ? '+' : '-')
+            .$stockDisplayService->formatQuantityWithUnit(abs($quantity), $unitLabel, $unit);
+    }
+
+    private function displayBaseQuantity(float|int|string|null $baseQuantity, float|int|string|null $legacyQuantity): float
+    {
+        $base = round((float) ($baseQuantity ?? 0), 3);
+        $legacy = round((float) ($legacyQuantity ?? 0), 3);
+
+        if ($base == 0.0 && $legacy != 0.0) {
+            return $legacy;
+        }
+
+        return $base;
     }
 
     private function stockSnapshot(int $storeId, array $productUnitIds = []): \Illuminate\Support\Collection

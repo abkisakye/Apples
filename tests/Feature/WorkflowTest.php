@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Carbon\Carbon;
 use App\Models\ActivityLog;
 use App\Models\BusinessSetting;
 use App\Models\CashShift;
@@ -3158,6 +3159,9 @@ class WorkflowTest extends TestCase
 
     public function test_dashboard_shows_pending_follow_ups_and_aging_bucket_totals(): void
     {
+        Carbon::setTestNow('2026-03-25 12:00:00');
+        $this->beforeApplicationDestroyed(fn () => Carbon::setTestNow());
+
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
         $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
         $customer = Customer::create(['name' => 'Bucket Customer', 'is_active' => true]);

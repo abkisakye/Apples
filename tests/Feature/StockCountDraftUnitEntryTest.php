@@ -401,6 +401,114 @@ class StockCountDraftUnitEntryTest extends TestCase
             ->assertSee('Base Stock 54 pieces');
     }
 
+    public function test_count_show_and_print_display_positive_base_count_details(): void
+    {
+        [$product, $piece, $carton] = $this->pieceCartonProduct('Show Positive Crisps');
+        $this->postBaseStock($product, $piece, 48);
+
+        $this->postProductLevelCount('post', $product, [
+            [$carton, 2],
+            [$piece, 6],
+        ], 48)->assertRedirect();
+
+        $this->get('/stock/counts/CNT-20260607-0001')
+            ->assertOk()
+            ->assertSee('System Base Stock')
+            ->assertSee('Physical Base Count')
+            ->assertSee('Show Positive Crisps')
+            ->assertSee('48 pieces')
+            ->assertSee('54 pieces')
+            ->assertSee('2 cartons + 6 pieces')
+            ->assertSee('+6 pieces')
+            ->assertSee('count_in');
+
+        $this->get('/stock/counts/CNT-20260607-0001/print')
+            ->assertOk()
+            ->assertSee('SYSTEM STOCK')
+            ->assertSee('COUNTED')
+            ->assertSee('ENTERED UNITS')
+            ->assertSee('Show Positive Crisps')
+            ->assertSee('2 cartons + 6 pieces')
+            ->assertSee('+6 pieces')
+            ->assertSee('count_in');
+    }
+
+    public function test_count_show_and_print_display_negative_and_zero_base_variances(): void
+    {
+        [$negativeProduct, $negativePiece, $negativeCarton] = $this->pieceCartonProduct('Show Negative Crisps');
+        $this->postBaseStock($negativeProduct, $negativePiece, 60);
+
+        $this->postProductLevelCount('post', $negativeProduct, [
+            [$negativeCarton, 2],
+            [$negativePiece, 6],
+        ], 60)->assertRedirect();
+
+        $this->get('/stock/counts/CNT-20260607-0001')
+            ->assertOk()
+            ->assertSee('Show Negative Crisps')
+            ->assertSee('-6 pieces')
+            ->assertSee('count_out');
+        $this->get('/stock/counts/CNT-20260607-0001/print')
+            ->assertOk()
+            ->assertSee('-6 pieces')
+            ->assertSee('count_out');
+
+        [$zeroProduct, $zeroPiece, $zeroCarton] = $this->pieceCartonProduct('Show Zero Crisps');
+        $this->postBaseStock($zeroProduct, $zeroPiece, 54);
+
+        $this->postProductLevelCount('post', $zeroProduct, [
+            [$zeroCarton, 2],
+            [$zeroPiece, 6],
+        ], 54)->assertRedirect();
+
+        $this->get('/stock/counts/CNT-20260607-0002')
+            ->assertOk()
+            ->assertSee('Show Zero Crisps')
+            ->assertSee('0 pieces')
+            ->assertSee('none');
+        $this->get('/stock/counts/CNT-20260607-0002/print')
+            ->assertOk()
+            ->assertSee('0 pieces')
+            ->assertSee('none');
+    }
+
+    public function test_count_show_and_print_display_single_unit_product_cleanly(): void
+    {
+        $product = Product::create(['name' => 'Show Single Soap', 'is_active' => true]);
+        $bar = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Bar',
+            'conversion_factor' => 1,
+            'cost_price' => 1000,
+            'is_base_unit' => true,
+            'is_active' => true,
+        ]);
+        $product->update(['base_product_unit_id' => $bar->id, 'base_unit_label' => 'Bar']);
+        $this->postBaseStock($product, $bar, 12);
+
+        $this->post('/stock/counts', [
+            'action' => 'post',
+            'count_date' => '2026-06-07',
+            'store_id' => $this->store->id,
+            'items' => [
+                ['product_unit_id' => $bar->id, 'physical_count' => 10, 'is_counted' => 1],
+            ],
+        ])->assertRedirect();
+
+        $this->get('/stock/counts/CNT-20260607-0001')
+            ->assertOk()
+            ->assertSee('Show Single Soap')
+            ->assertSee('12 bars')
+            ->assertSee('10 bars')
+            ->assertSee('-2 bars')
+            ->assertSee('count_out');
+        $this->get('/stock/counts/CNT-20260607-0001/print')
+            ->assertOk()
+            ->assertSee('Show Single Soap')
+            ->assertSee('10 bars')
+            ->assertSee('-2 bars');
+    }
+
     /**
      * @return array{0: Product, 1: ProductUnit, 2: ProductUnit, 3: ProductUnit}
      */

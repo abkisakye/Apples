@@ -19,7 +19,7 @@
         <div class="card"><div class="label">Counted By</div><div class="value">{{ $countedBy?->name ?? 'System User' }}</div></div>
         <div class="card"><div class="label">Assigned Staff</div><div class="value">{{ $assignedTo?->name ?? ($countedBy?->name ?? 'System User') }}</div></div>
         <div class="card"><div class="label">Lines</div><div class="value">{{ number_format($rows->count()) }}</div></div>
-        <div class="card"><div class="label">Total Variance</div><div class="value">{{ number_format((int) $rows->sum('quantity_adjusted')) }}</div></div>
+        <div class="card"><div class="label">Total Base Variance</div><div class="value">{{ number_format((float) $stockCount->total_variance_base_qty, 3) }}</div></div>
     </section>
 
     <section class="grid-two" style="margin-bottom:16px;">
@@ -55,30 +55,34 @@
 
     <section class="panel">
         <h3>Count Items</h3>
-        <p class="list-note">These lines show what the system had before the count, what was physically found, and the variance that was posted.</p>
+        <p class="list-note">These lines show the base-unit system stock, the physical count from entered packs/units, and the movement created by posting.</p>
         <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
                         <th>Product</th>
-                        <th>Unit</th>
-                        <th>System Count</th>
-                        <th>Physical Count</th>
-                        <th>Variance</th>
+                        <th>System Base Stock</th>
+                        <th>Physical Base Count</th>
+                        <th>Entered Unit Breakdown</th>
+                        <th>Friendly Breakdown</th>
+                        <th>Variance Base Qty</th>
+                        <th>Movement Created</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($rows as $row)
                         <tr>
                             <td>{{ $row->product?->name ?? '-' }}</td>
-                            <td>{{ $row->productUnit?->unit_name ?? '-' }}</td>
-                            <td>{{ number_format((int) $row->system_qty) }}</td>
-                            <td>{{ number_format((int) $row->physical_qty) }}</td>
+                            <td>{{ $row->system_base_label }}</td>
+                            <td>{{ $row->physical_base_label }}</td>
+                            <td>{{ $row->entered_unit_breakdown }}</td>
+                            <td>{{ $row->friendly_breakdown }}</td>
                             <td>
-                                <span class="badge {{ (int) $row->variance_qty < 0 ? 'credit' : 'success' }}">
-                                    {{ (int) $row->variance_qty > 0 ? '+' : '' }}{{ number_format((int) $row->variance_qty) }}
+                                <span class="badge {{ $row->variance_base_qty < 0 ? 'credit' : ($row->variance_base_qty > 0 ? 'success' : 'soft') }}">
+                                    {{ $row->variance_base_label }}
                                 </span>
                             </td>
+                            <td><span class="badge soft">{{ $row->movement_created }}</span></td>
                         </tr>
                     @endforeach
                 </tbody>
