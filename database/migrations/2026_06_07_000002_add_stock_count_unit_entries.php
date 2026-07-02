@@ -24,7 +24,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['stock_count_id', 'product_id']);
-            $table->index(['stock_count_item_id', 'product_unit_id']);
+            $table->index(['stock_count_item_id', 'product_unit_id'], 'scue_item_unit_idx');
         });
     }
 
