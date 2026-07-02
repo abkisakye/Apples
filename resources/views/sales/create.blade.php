@@ -51,6 +51,14 @@
     @endphp
 
     <style>
+        .workspace {
+            padding-left: 8px;
+            padding-right: 8px;
+        }
+        .page {
+            width: 100%;
+            max-width: none;
+        }
         .sale-workspace {
             display: grid;
             grid-template-columns: minmax(0, 1.55fr) minmax(320px, .85fr);
@@ -447,10 +455,22 @@
         }
         .bill-list {
             display: grid;
-            gap: 7px;
+            gap: 4px;
             max-height: 248px;
             overflow-y: auto;
             padding-right: 2px;
+        }
+        .bill-table-head {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) minmax(142px, .7fr) minmax(104px, .48fr) minmax(108px, .5fr) 68px;
+            gap: 6px;
+            align-items: center;
+            padding: 0 8px 3px;
+            color: var(--muted);
+            font-size: .64rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: .05em;
         }
         .bill-empty {
             padding: 16px 12px;
@@ -463,60 +483,85 @@
         }
         .bill-row {
             display: grid;
-            gap: 7px;
-            padding: 8px;
-            border-radius: 14px;
+            grid-template-columns: minmax(180px, 1fr) minmax(142px, .7fr) minmax(104px, .48fr) minmax(108px, .5fr) 68px;
+            gap: 6px;
+            align-items: center;
+            padding: 5px 8px;
+            border-radius: 10px;
             border: 1px solid color-mix(in srgb, var(--line) 84%, var(--brand) 16%);
             background: #fff;
         }
         .bill-row-top {
-            display: flex;
-            justify-content: space-between;
-            gap: 8px;
-            align-items: start;
+            display: contents;
+        }
+        .bill-row-title {
+            display: grid;
+            gap: 2px;
+            min-width: 0;
+            grid-column: 1;
+        }
+        .bill-row-grid > div:nth-child(1) {
+            grid-column: 2;
+        }
+        .bill-row-grid > div:nth-child(2) {
+            grid-column: 3;
+        }
+        .bill-row-grid > div:nth-child(3) {
+            grid-column: 4;
         }
         .bill-row-title strong {
             display: block;
-            font-size: .82rem;
+            font-size: .8rem;
             line-height: 1.25;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .bill-row-sub {
-            margin-top: 2px;
             color: var(--muted);
-            font-size: .7rem;
+            font-size: .66rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .bill-remove {
-            min-width: 34px;
-            height: 34px;
-            border-radius: 10px;
+            min-width: 64px;
+            height: 30px;
+            border-radius: 8px;
             border: 1px solid rgba(102, 40, 40, 0.18);
             background: rgba(102, 40, 40, 0.08);
             color: var(--apple);
+            font-size: .72rem;
             font-weight: 900;
             cursor: pointer;
+            grid-column: 5;
+            grid-row: 1;
         }
         .bill-row-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1.1fr) minmax(0, .92fr) minmax(0, .82fr);
-            gap: 6px;
+            display: contents;
         }
         .bill-label {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
             font-size: .68rem;
             color: var(--muted);
             text-transform: uppercase;
             letter-spacing: .06em;
-            margin-bottom: 5px;
         }
         .qty-box {
             display: grid;
-            grid-template-columns: 34px minmax(0, 1fr) 34px;
-            gap: 6px;
+            grid-template-columns: 30px minmax(0, 1fr) 30px;
+            gap: 4px;
             align-items: center;
         }
         .qty-box button {
-            min-width: 34px;
-            height: 34px;
-            border-radius: 11px;
+            min-width: 30px;
+            height: 30px;
+            border-radius: 8px;
             border: 1px solid color-mix(in srgb, var(--line) 76%, var(--brand) 24%);
             background: rgba(6, 104, 56, 0.08);
             color: var(--brand);
@@ -528,13 +573,13 @@
         .bill-row-grid input,
         .sale-payment-grid input {
             width: 100%;
-            min-height: 36px;
-            padding: 8px 10px;
-            border-radius: 12px;
+            min-height: 30px;
+            padding: 5px 8px;
+            border-radius: 9px;
             border: 1px solid color-mix(in srgb, var(--line) 78%, var(--brand) 22%);
             background: #fff;
             color: var(--ink);
-            font-size: .86rem;
+            font-size: .8rem;
         }
         .qty-box input {
             text-align: center;
@@ -542,13 +587,14 @@
         .bill-line-total {
             display: flex;
             align-items: center;
-            min-height: 36px;
-            padding: 0 10px;
-            border-radius: 12px;
+            min-height: 30px;
+            padding: 0 8px;
+            border-radius: 9px;
             background: rgba(6, 104, 56, 0.08);
             color: var(--brand);
-            font-size: .83rem;
+            font-size: .78rem;
             font-weight: 800;
+            white-space: nowrap;
         }
         .sale-total-stack {
             display: grid;
@@ -758,9 +804,9 @@
             font-size: .74rem;
         }
         .sale-workspace {
-            grid-template-columns: minmax(270px, .78fr) minmax(430px, 1.36fr) minmax(292px, .82fr);
+            grid-template-columns: minmax(236px, .62fr) minmax(420px, 1.85fr) minmax(292px, 320px);
             grid-template-rows: auto minmax(0, 1fr);
-            gap: 8px;
+            gap: 6px;
             height: calc(100vh - 150px);
             min-height: 560px;
             overflow: visible;
@@ -769,7 +815,7 @@
         .sale-lane {
             grid-column: 1;
             grid-row: 1 / span 2;
-            grid-template-rows: auto minmax(0, 1fr) auto;
+            grid-template-rows: auto minmax(0, 1fr);
             min-height: 0;
             overflow: hidden;
         }
@@ -954,16 +1000,13 @@
             grid-column: 3;
             grid-row: 1 / span 2;
             display: grid;
-            grid-template-rows: auto auto auto auto auto auto;
+            grid-template-rows: auto auto auto auto auto auto auto;
             align-content: start;
             overflow-y: auto !important;
         }
         .sale-keypad {
-            grid-column: 1;
-            grid-row: auto;
-            align-self: end;
             gap: 6px;
-            max-height: 188px;
+            padding-top: 2px;
         }
         .sale-mini-grid {
             grid-template-columns: 122px minmax(0, 1fr);
@@ -1031,7 +1074,7 @@
             font-size: .75rem;
         }
         .bill-list {
-            gap: 4px;
+            gap: 3px;
             max-height: none;
             min-height: 0;
             overflow-y: auto;
@@ -1042,17 +1085,11 @@
             font-size: .76rem;
         }
         .bill-row {
-            grid-template-columns: minmax(0, 1fr) 150px 88px 104px 30px;
+            grid-template-columns: minmax(0, 1fr) 142px 86px 102px 62px;
             align-items: center;
-            gap: 5px;
-            padding: 5px 6px;
-            border-radius: 10px;
-        }
-        .bill-row-title {
-            display: grid;
-            grid-template-columns: 28px minmax(0, 1fr);
-            gap: 6px;
-            align-items: center;
+            gap: 4px;
+            padding: 4px 6px;
+            border-radius: 9px;
         }
         .bill-row-top,
         .bill-row-grid {
@@ -1085,8 +1122,8 @@
         .bill-remove {
             grid-column: 5;
             grid-row: 1;
-            min-width: 28px;
-            height: 30px;
+            min-width: 60px;
+            height: 28px;
             border-radius: 8px;
         }
         .qty-box {
@@ -1095,19 +1132,19 @@
         }
         .qty-box button {
             min-width: 28px;
-            height: 30px;
+            height: 28px;
             border-radius: 8px;
         }
         .qty-box input,
         .bill-row-grid input,
         .sale-payment-grid input {
-            min-height: 30px;
+            min-height: 28px;
             padding: 5px 7px;
             border-radius: 9px;
             font-size: .76rem;
         }
         .bill-line-total {
-            min-height: 30px;
+            min-height: 28px;
             padding: 0 7px;
             border-radius: 9px;
             font-size: .72rem;
@@ -1219,9 +1256,44 @@
             .sale-search-row,
             .sale-mini-grid,
             .sale-payment-grid,
-            .bill-row-grid,
             .form-grid {
                 grid-template-columns: 1fr;
+            }
+            .bill-table-head {
+                display: none;
+            }
+            .bill-row {
+                grid-template-columns: 1fr;
+                gap: 7px;
+                padding: 8px;
+            }
+            .bill-row-top {
+                display: flex;
+                justify-content: space-between;
+                gap: 8px;
+                align-items: start;
+            }
+            .bill-row-grid {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 6px;
+            }
+            .bill-row-title,
+            .bill-row-grid > div:nth-child(1),
+            .bill-row-grid > div:nth-child(2),
+            .bill-row-grid > div:nth-child(3),
+            .bill-remove {
+                grid-column: auto;
+                grid-row: auto;
+            }
+            .bill-label {
+                position: static;
+                width: auto;
+                height: auto;
+                overflow: visible;
+                clip: auto;
+                white-space: normal;
+                margin-bottom: 5px;
             }
             .sale-inline-status {
                 justify-content: start;
@@ -1385,29 +1457,6 @@
                 <div id="product-search-results" class="sale-product-grid"></div>
             </section>
 
-            <section class="panel sale-keypad">
-                <div>
-                    <h3 class="sale-panel-title">Keypad</h3>
-                    <p class="keypad-note">Tap a number field first.</p>
-                </div>
-                <div class="sale-keypad-grid" id="sale-keypad">
-                    <button type="button" class="sale-key" data-keypad="7">7</button>
-                    <button type="button" class="sale-key" data-keypad="8">8</button>
-                    <button type="button" class="sale-key" data-keypad="9">9</button>
-                    <button type="button" class="sale-key action" data-keypad-action="backspace">Back</button>
-                    <button type="button" class="sale-key" data-keypad="4">4</button>
-                    <button type="button" class="sale-key" data-keypad="5">5</button>
-                    <button type="button" class="sale-key" data-keypad="6">6</button>
-                    <button type="button" class="sale-key action" data-keypad-action="clear">C</button>
-                    <button type="button" class="sale-key" data-keypad="1">1</button>
-                    <button type="button" class="sale-key" data-keypad="2">2</button>
-                    <button type="button" class="sale-key" data-keypad="3">3</button>
-                    <button type="button" class="sale-key action" data-keypad-action="full">Full</button>
-                    <button type="button" class="sale-key wide" data-keypad="0">0</button>
-                    <button type="button" class="sale-key" data-keypad=".">.</button>
-                    <button type="button" class="sale-key action" data-keypad-action="plus-one">+1</button>
-                </div>
-            </section>
         </div>
 
         <div class="sale-bill-shell">
@@ -1456,7 +1505,7 @@
                     <div>
                         <h3>Cart</h3>
                     </div>
-                    <button type="button" id="clear-cart" class="button-link">Clear</button>
+                    <button type="button" id="clear-cart" class="button-link">Clear All</button>
                 </div>
 
                 <div id="cart-empty" class="bill-empty">
@@ -1578,6 +1627,32 @@
                     <span>Note</span>
                     <textarea name="remarks" class="sale-textarea" placeholder="Optional note">{{ old('remarks', $prefillSale['remarks']) }}</textarea>
                 </label>
+
+                <div style="height: 8px;"></div>
+
+                <section class="sale-keypad" data-pos-area="checkout-keypad">
+                    <div>
+                        <h3 class="sale-panel-title">Keypad</h3>
+                        <p class="keypad-note">Tap a number field first.</p>
+                    </div>
+                    <div class="sale-keypad-grid" id="sale-keypad">
+                        <button type="button" class="sale-key" data-keypad="7">7</button>
+                        <button type="button" class="sale-key" data-keypad="8">8</button>
+                        <button type="button" class="sale-key" data-keypad="9">9</button>
+                        <button type="button" class="sale-key action" data-keypad-action="backspace">Back</button>
+                        <button type="button" class="sale-key" data-keypad="4">4</button>
+                        <button type="button" class="sale-key" data-keypad="5">5</button>
+                        <button type="button" class="sale-key" data-keypad="6">6</button>
+                        <button type="button" class="sale-key action" data-keypad-action="clear">C</button>
+                        <button type="button" class="sale-key" data-keypad="1">1</button>
+                        <button type="button" class="sale-key" data-keypad="2">2</button>
+                        <button type="button" class="sale-key" data-keypad="3">3</button>
+                        <button type="button" class="sale-key action" data-keypad-action="full">Full</button>
+                        <button type="button" class="sale-key wide" data-keypad="0">0</button>
+                        <button type="button" class="sale-key" data-keypad=".">.</button>
+                        <button type="button" class="sale-key action" data-keypad-action="plus-one">+1</button>
+                    </div>
+                </section>
 
                 <div style="height: 12px;"></div>
 
@@ -1955,17 +2030,24 @@
 
             function renderCart() {
                 cartEmpty.style.display = cart.length ? 'none' : 'block';
-                cartList.innerHTML = cart.map((item, index) => `
+                cartList.innerHTML = cart.length ? `
+                    <div class="bill-table-head" aria-hidden="true">
+                        <span>Product / Pack</span>
+                        <span>Qty</span>
+                        <span>Price</span>
+                        <span>Total</span>
+                        <span>Remove</span>
+                    </div>
+                    ${cart.map((item, index) => `
                     <div class="bill-row">
                         <div class="bill-row-top">
                             <div class="bill-row-title">
-                                ${productToken(item, 'cart-token')}
                                 <div>
                                     <strong>${item.label}</strong>
                                     <div class="bill-row-sub">${item.code || item.barcode || 'No code'}</div>
                                 </div>
                             </div>
-                            <button type="button" class="bill-remove" data-remove-index="${index}" aria-label="Remove item">×</button>
+                            <button type="button" class="bill-remove" data-remove-index="${index}" title="Remove item" aria-label="Remove ${item.label}">Remove</button>
                         </div>
                         <div class="bill-row-grid">
                             <div>
@@ -1986,7 +2068,8 @@
                             </div>
                         </div>
                     </div>
-                `).join('');
+                    `).join('')}
+                ` : '';
 
                 hiddenInputs.innerHTML = cart.map((item, index) => `
                     <input type="hidden" name="items[${index}][product_unit_id]" value="${item.id}">

@@ -3380,6 +3380,15 @@ class WorkflowTest extends TestCase
         PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
         PaymentMode::create(['name' => 'Card', 'is_active' => true]);
         PaymentMode::create(['name' => 'Credit', 'is_active' => true]);
+        $product = Product::create(['name' => 'GONJA CRISPS', 'is_active' => true]);
+        ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'box',
+            'conversion_factor' => 24,
+            'selling_price' => 114000,
+            'cost_price' => 90000,
+            'is_active' => true,
+        ]);
 
         $this->get('/sales/create')
             ->assertOk()
@@ -3389,7 +3398,28 @@ class WorkflowTest extends TestCase
             ->assertSee('CARD')
             ->assertSee('CREDIT')
             ->assertSee('Scan / barcode / code')
-            ->assertSee('Cart');
+            ->assertSee('Cart')
+            ->assertSee('Clear All')
+            ->assertSee('GONJA CRISPS - box')
+            ->assertSee('data-pos-area="checkout-keypad"', false)
+            ->assertSeeInOrder([
+                '<section class="panel sale-checkout-panel">',
+                'class="sale-payment-grid"',
+                'data-pos-area="checkout-keypad"',
+                'id="fill-total"',
+                'Checkout',
+            ], false)
+            ->assertSee('bill-table-head', false)
+            ->assertSee('Product / Pack')
+            ->assertSee('data-qty-minus', false)
+            ->assertSee('data-qty-input', false)
+            ->assertSee('data-qty-plus', false)
+            ->assertSee('data-price-input', false)
+            ->assertSee('bill-line-total', false)
+            ->assertSee('data-remove-index', false)
+            ->assertSee('title="Remove item"', false)
+            ->assertSee('>Remove</button>', false)
+            ->assertSee('<strong>${item.label}</strong>', false);
     }
 
     public function test_permissions_matrix_can_be_updated_from_one_page(): void
