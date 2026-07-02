@@ -97,7 +97,12 @@
                 <tbody>
                     @foreach ($sale->items as $item)
                         <tr>
-                            <td>{{ $item->product?->name ?? '-' }}</td>
+                            <td>
+                                <strong>{{ $item->product?->name ?? '-' }}</strong>
+                                @if ($item->base_stock_impact_label)
+                                    <div class="table-meta">{{ $item->base_stock_impact_label }}</div>
+                                @endif
+                            </td>
                             <td>{{ $item->productUnit?->unit_name ?? '-' }}</td>
                             <td>{{ number_format((float) $item->quantity, 0) }}</td>
                             <td class="money">{{ $currency }} {{ number_format((float) $item->unit_price, 0) }}</td>

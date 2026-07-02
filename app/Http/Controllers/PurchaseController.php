@@ -14,9 +14,11 @@ use App\Support\ProductUnitConversionService;
 use App\Support\StoreAssignmentService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class PurchaseController extends Controller
@@ -95,7 +97,7 @@ class PurchaseController extends Controller
                 ->where('is_active', true)
                 ->withSum(['purchases as outstanding_credit' => fn ($query) => $query->posted()], 'balance_due')
                 ->orderBy('name')
-                ->get(['id', 'name', 'country']),
+                ->get(['id', 'name', 'phone', 'country']),
             'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'productUnits' => ProductUnit::query()
                 ->with('product:id,name,code')
@@ -113,6 +115,36 @@ class PurchaseController extends Controller
     public function correct(Purchase $purchase): RedirectResponse
     {
         return redirect()->route('purchases.create', ['correct_purchase_id' => $purchase->id]);
+    }
+
+    public function quickSupplierStore(Request $request, AuditLogService $auditLogService): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', Rule::unique('suppliers', 'name')],
+            'phone' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $supplier = Supplier::query()->create([
+            'name' => $validated['name'],
+            'phone' => $validated['phone'] ?? null,
+            'opening_balance' => 0,
+            'is_active' => true,
+        ]);
+
+        $auditLogService->record('supplier.quick_created', $supplier, "Supplier {$supplier->name} quick-created from purchase entry.", [
+            'supplier_id' => $supplier->id,
+        ]);
+
+        return response()->json([
+            'supplier' => [
+                'id' => $supplier->id,
+                'name' => $supplier->name,
+                'phone' => $supplier->phone,
+                'country' => $supplier->country,
+                'credit' => 0,
+                'search' => strtolower(trim(implode(' ', array_filter([$supplier->name, $supplier->phone, $supplier->country])))),
+            ],
+        ], 201);
     }
 
     public function show(Purchase $purchase): View

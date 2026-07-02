@@ -10,6 +10,24 @@
         'part_number' => $unit->part_number,
         'search' => strtolower(trim(implode(' ', array_filter([$unit->product->name, $unit->unit_name, $unit->barcode, $unit->part_number])))),
     ]))
+    @php($initialItems = collect(old('items', $prefillTransfer['items'] ?? []))->map(function ($item) use ($productUnits) {
+        $unit = $productUnits->firstWhere('id', (int) data_get($item, 'product_unit_id'));
+
+        if (! $unit) {
+            return null;
+        }
+
+        return [
+            'id' => $unit->id,
+            'label' => trim($unit->product->name.' - '.$unit->unit_name),
+            'product_name' => $unit->product->name,
+            'unit_name' => $unit->unit_name,
+            'barcode' => $unit->barcode,
+            'part_number' => $unit->part_number,
+            'search' => strtolower(trim(implode(' ', array_filter([$unit->product->name, $unit->unit_name, $unit->barcode, $unit->part_number])))),
+            'quantity' => max((int) data_get($item, 'quantity', 1), 1),
+        ];
+    })->filter()->values())
     <style>
         .workflow-shell { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(320px,.9fr); gap:16px; align-items:start; }
         .workflow-stack { display:grid; gap:14px; }
@@ -98,6 +116,7 @@
     <script>
         (() => {
             const units = @json($unitsPayload);
+            const initialItems = @json($initialItems);
             const form = document.getElementById('transfer-form');
             if (!form) return;
             const searchInput = document.getElementById('transfer-search');
@@ -107,7 +126,7 @@
             const hidden = document.getElementById('transfer-items-hidden');
             const linesSummary = document.getElementById('transfer-lines-summary');
             const qtySummary = document.getElementById('transfer-qty-summary');
-            let cart = [];
+            let cart = initialItems;
             const normalizeQuantity = (value) => Math.max(Math.round(Number(value || 0)), 1);
 
             function renderResults() {

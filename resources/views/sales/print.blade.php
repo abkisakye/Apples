@@ -445,7 +445,7 @@
                 <tbody>
                     @foreach ($sale->items as $item)
                         <tr>
-                            <td class="item-name">{{ $item->product?->name ?? '-' }}</td>
+                            <td class="item-name">{{ $item->display_item_label ?? $item->product?->name ?? '-' }}</td>
                             <td class="qty">{{ number_format((float) $item->quantity, 0) }}</td>
                             <td class="money">{{ number_format((float) $item->unit_price, 0) }}</td>
                             <td class="money">{{ number_format((float) $item->line_total, 0) }}</td>
@@ -556,7 +556,7 @@
             <tbody>
                 @foreach ($sale->items as $item)
                     <tr>
-                        <td>{{ $item->product?->name ?? '-' }}</td>
+                        <td>{{ $item->display_item_label ?? $item->product?->name ?? '-' }}</td>
                         <td>{{ $item->productUnit?->unit_name ?? 'Unit not set' }}</td>
                         <td class="qty">{{ number_format((float) $item->quantity, 0) }}</td>
                         <td class="money">{{ $currency }} {{ number_format((float) $item->unit_price, 0) }}</td>

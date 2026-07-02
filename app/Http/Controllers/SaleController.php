@@ -163,7 +163,8 @@ class SaleController extends Controller
             'customer:id,name,phone,location,address',
             'store:id,name',
             'paymentMode:id,name',
-            'items.product:id,name',
+            'items.product:id,name,base_product_unit_id,base_unit_label',
+            'items.product.baseProductUnit:id,unit_name',
             'items.productUnit:id,unit_name',
             'payments.paymentMode:id,name',
             'returns.paymentMode:id,name',
@@ -171,6 +172,7 @@ class SaleController extends Controller
             'correctedFrom:id,sale_no',
             'replacedBy:id,sale_no',
         ]);
+        $this->decorateSaleItemsForDisplay($sale);
 
         return view('sales.show', compact('sale'));
     }
@@ -181,11 +183,13 @@ class SaleController extends Controller
             'customer:id,name,phone,location,address',
             'store:id,name',
             'paymentMode:id,name',
-            'items.product:id,name',
+            'items.product:id,name,base_product_unit_id,base_unit_label',
+            'items.product.baseProductUnit:id,unit_name',
             'items.productUnit:id,unit_name',
             'payments.paymentMode:id,name',
             'createdBy:id,name,username',
         ]);
+        $this->decorateSaleItemsForDisplay($sale);
 
         return view('sales.print', compact('sale'));
     }
@@ -598,6 +602,94 @@ class SaleController extends Controller
             ->whereRaw('UPPER(name) = ?', [strtoupper($preferredName)])
             ->value('id')
             ?? PaymentMode::query()->orderBy('name')->value('id');
+    }
+
+    private function decorateSaleItemsForDisplay(Sale $sale): void
+    {
+        $sale->items->each(function ($item) {
+            $item->setAttribute('display_item_label', $this->compactItemUnitLabel(
+                (string) ($item->product?->name ?? ''),
+                (string) ($item->productUnit?->unit_name ?? '')
+            ));
+            $item->setAttribute('base_stock_impact_label', $this->baseStockImpactLabel($item));
+        });
+    }
+
+    private function compactItemUnitLabel(string $productName, string $unitName): string
+    {
+        $productName = trim(preg_replace('/\s+/', ' ', $productName) ?? '');
+        $unitName = trim(preg_replace('/\s+/', ' ', $unitName) ?? '');
+
+        if ($productName === '') {
+            return $unitName ?: '-';
+        }
+
+        if ($unitName === '') {
+            return $productName;
+        }
+
+        $suffix = $this->unitSuffixAfterProductName($productName, $unitName);
+
+        if ($suffix === null && str_ends_with(strtolower($productName), 's')) {
+            $suffix = $this->unitSuffixAfterProductName(substr($productName, 0, -1), $unitName);
+        }
+
+        if ($suffix !== null) {
+            return $suffix === '' ? $productName : "{$productName} - {$suffix}";
+        }
+
+        return "{$productName} - {$unitName}";
+    }
+
+    private function unitSuffixAfterProductName(string $productName, string $unitName): ?string
+    {
+        $productLower = strtolower($productName);
+        $unitLower = strtolower($unitName);
+
+        if ($productLower === '' || ! str_starts_with($unitLower, $productLower)) {
+            return null;
+        }
+
+        return trim(substr($unitName, strlen($productName)));
+    }
+
+    private function baseStockImpactLabel($item): string
+    {
+        $baseQuantity = (float) ($item->base_quantity ?? 0);
+
+        if ($baseQuantity <= 0) {
+            return '';
+        }
+
+        $baseUnit = $item->product?->base_unit_label
+            ?: $item->product?->baseProductUnit?->unit_name
+            ?: 'base unit';
+
+        return 'Base stock out: '.$this->formatQuantity($baseQuantity).' '.$this->unitLabel($baseUnit, $baseQuantity);
+    }
+
+    private function formatQuantity(float $quantity): string
+    {
+        return rtrim(rtrim(number_format($quantity, 3, '.', ''), '0'), '.');
+    }
+
+    private function unitLabel(string $label, float $quantity): string
+    {
+        $label = strtolower(trim($label));
+
+        if (abs($quantity - 1.0) < 0.0005 || $label === '' || str_ends_with($label, 's')) {
+            return $label;
+        }
+
+        if (str_ends_with($label, 'y')) {
+            return substr($label, 0, -1).'ies';
+        }
+
+        if (str_ends_with($label, 'piece')) {
+            return $label.'s';
+        }
+
+        return $label.'s';
     }
 
     private function requiresCashShift(AccessService $access): bool

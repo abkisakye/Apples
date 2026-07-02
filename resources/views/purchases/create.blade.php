@@ -5,9 +5,10 @@
     @php($suppliersPayload = $suppliers->map(fn ($supplier) => [
         'id' => $supplier->id,
         'name' => $supplier->name,
+        'phone' => $supplier->phone,
         'country' => $supplier->country,
         'credit' => (float) ($supplier->outstanding_credit ?? 0),
-        'search' => strtolower(trim(implode(' ', array_filter([$supplier->name, $supplier->country])))),
+        'search' => strtolower(trim(implode(' ', array_filter([$supplier->name, $supplier->phone, $supplier->country])))),
     ]))
     @php($unitsPayload = $productUnits->map(fn ($unit) => [
         'id' => $unit->id,
@@ -61,6 +62,9 @@
         .party-results { display:grid; gap:6px; max-height:120px; overflow-y:auto; }
         .party-result { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:7px 8px; border:1px solid #e7e5e4; border-radius:9px; background:#fff; }
         .party-result strong { display:block; margin:0; font-size:.88rem; }
+        .quick-supplier-box { display:none; gap:8px; margin-top:8px; padding:9px; border:1px dashed #fed7aa; border-radius:9px; background:var(--purchase-soft); }
+        .quick-supplier-box.is-visible { display:grid; }
+        .quick-supplier-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.8fr); gap:8px; }
         .picker-empty { padding:10px; border:1px dashed #fed7aa; border-radius:9px; color:#78716c; background:var(--purchase-soft); font-size:.84rem; }
         .store-pill { display:inline-flex; align-items:center; min-height:38px; width:100%; padding:0 10px; border-radius:9px; border:1px solid #fed7aa; background:var(--purchase-soft); color:var(--purchase-main); font-weight:700; }
         .receive-warning { display:none; margin-top:10px; padding:8px 10px; border:1px solid var(--purchase-border); border-radius:9px; background:var(--purchase-soft); color:var(--purchase-main); font-weight:700; font-size:.82rem; }
@@ -147,6 +151,24 @@
                         <input type="hidden" name="supplier_id" id="purchase-supplier" value="{{ old('supplier_id', $prefillPurchase['supplier_id']) }}">
                         <input type="text" id="supplier-search" class="picker-input" placeholder="Search supplier">
                         <div id="supplier-results" class="party-results" style="margin-top:8px;"></div>
+                        <button type="button" id="toggle-quick-supplier" class="button-link" style="margin-top:8px;">Quick Add Supplier</button>
+                        <div id="quick-supplier-box" class="quick-supplier-box">
+                            <div class="quick-supplier-grid">
+                                <label class="form-field">
+                                    <span>Supplier Name</span>
+                                    <input type="text" id="quick-supplier-name" placeholder="Supplier name">
+                                </label>
+                                <label class="form-field">
+                                    <span>Phone</span>
+                                    <input type="text" id="quick-supplier-phone" placeholder="Optional phone">
+                                </label>
+                            </div>
+                            <div class="actions">
+                                <button type="button" id="save-quick-supplier">Save Supplier</button>
+                                <button type="button" id="cancel-quick-supplier" class="button-link">Cancel</button>
+                            </div>
+                            <div id="quick-supplier-error" class="receive-warning"></div>
+                        </div>
                         <div id="supplier-warning" class="receive-warning">Choose supplier before recording purchase.</div>
                     </div>
                     <label class="form-field">
@@ -202,7 +224,9 @@
         (() => {
             const currency = @json($currency);
             const units = @json($unitsPayload);
-            const suppliers = @json($suppliersPayload);
+            let suppliers = @json($suppliersPayload);
+            const quickSupplierUrl = @json(route('suppliers.quick-store'));
+            const csrfToken = @json(csrf_token());
             const form = document.getElementById('purchase-form');
             if (!form) return;
 
@@ -215,6 +239,10 @@
             const supplierResults = document.getElementById('supplier-results');
             const supplierInput = document.getElementById('purchase-supplier');
             const supplierWarning = document.getElementById('supplier-warning');
+            const quickSupplierBox = document.getElementById('quick-supplier-box');
+            const quickSupplierName = document.getElementById('quick-supplier-name');
+            const quickSupplierPhone = document.getElementById('quick-supplier-phone');
+            const quickSupplierError = document.getElementById('quick-supplier-error');
             const amountPaidInput = document.getElementById('purchase-amount-paid');
             const creditPeriodInput = document.getElementById('purchase-credit-period');
             const creditPeriodWrap = document.getElementById('purchase-credit-period-wrap');
@@ -299,7 +327,7 @@
                     <div class="party-result">
                         <div>
                             <strong>${supplier.name}</strong>
-                            <div class="result-meta">${[supplier.country, supplier.credit > 0 ? `${money(supplier.credit)} credit` : null].filter(Boolean).join(' / ')}</div>
+                            <div class="result-meta">${[supplier.phone, supplier.country, supplier.credit > 0 ? `${money(supplier.credit)} credit` : null].filter(Boolean).join(' / ')}</div>
                         </div>
                         <button type="button" class="button-link" data-pick-supplier="${supplier.id}">${selectedId === String(supplier.id) ? 'Selected' : 'Select'}</button>
                     </div>
@@ -312,6 +340,51 @@
                 supplierSearch.value = selected ? selected.name : '';
                 renderSuppliers();
                 renderCart();
+            }
+
+            function setQuickSupplierOpen(open) {
+                quickSupplierBox?.classList.toggle('is-visible', open);
+                quickSupplierError?.classList.remove('is-visible');
+                if (open) {
+                    quickSupplierName.value = supplierSearch.value || '';
+                    quickSupplierName.focus();
+                }
+            }
+
+            async function saveQuickSupplier() {
+                const name = String(quickSupplierName.value || '').trim();
+                const phone = String(quickSupplierPhone.value || '').trim();
+                if (!name) {
+                    quickSupplierError.textContent = 'Enter supplier name.';
+                    quickSupplierError.classList.add('is-visible');
+                    quickSupplierName.focus();
+                    return;
+                }
+
+                const response = await fetch(quickSupplierUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: JSON.stringify({ name, phone }),
+                });
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    const message = data?.message || Object.values(data?.errors || {})?.[0]?.[0] || 'Supplier could not be saved.';
+                    quickSupplierError.textContent = message;
+                    quickSupplierError.classList.add('is-visible');
+                    return;
+                }
+
+                suppliers.push(data.supplier);
+                suppliers.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+                selectSupplier(data.supplier.id);
+                setQuickSupplierOpen(false);
+                quickSupplierName.value = '';
+                quickSupplierPhone.value = '';
             }
 
             function syncPurchaseSummary() {
@@ -418,6 +491,9 @@
                 const button = event.target.closest('[data-pick-supplier]');
                 if (button) selectSupplier(button.dataset.pickSupplier);
             });
+            document.getElementById('toggle-quick-supplier').addEventListener('click', () => setQuickSupplierOpen(!quickSupplierBox.classList.contains('is-visible')));
+            document.getElementById('cancel-quick-supplier').addEventListener('click', () => setQuickSupplierOpen(false));
+            document.getElementById('save-quick-supplier').addEventListener('click', saveQuickSupplier);
 
             cartList.addEventListener('click', (event) => {
                 const remove = event.target.closest('[data-remove]');

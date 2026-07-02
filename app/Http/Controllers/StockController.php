@@ -117,9 +117,13 @@ class StockController extends Controller
         ]));
     }
 
-    public function transferCreate(): View
+    public function transferCreate(Request $request): View
     {
         $currentStore = auth()->user()?->defaultStore;
+        $selectedUnit = $this->resolveSelectedUnit(
+            $request->integer('product_unit_id'),
+            $request->integer('product_id')
+        );
 
         return view('stock.transfer', [
             'currentStore' => $currentStore ?? Store::query()->orderBy('name')->first(['id', 'name']),
@@ -130,6 +134,13 @@ class StockController extends Controller
                 ->orderBy('product_id')
                 ->orderBy('unit_name')
                 ->get(['id', 'product_id', 'unit_name', 'cost_price', 'barcode', 'part_number']),
+            'prefillTransfer' => [
+                'items' => $selectedUnit ? [[
+                    'product_unit_id' => $selectedUnit->id,
+                    'quantity' => 1,
+                ]] : [],
+            ],
+            'returnTo' => $this->safeReturnTo($request->input('return_to')),
         ]);
     }
 
@@ -294,7 +305,11 @@ class StockController extends Controller
         [$stores, $categories, $filters] = $this->stockReferenceData($stockRequest);
         $savedItems = $draftCount?->items?->keyBy('product_id') ?? collect();
         $savedProductIds = $savedItems->keys()->map(fn ($id) => (int) $id)->values();
-        $rowsCollection = $stockDisplayService->rows($stockRequest);
+        $focusedProductId = $request->integer('product_id');
+        $rowsCollection = $stockDisplayService->rows($stockRequest)
+            ->when($focusedProductId > 0, fn ($rows) => $rows
+                ->filter(fn ($row) => (int) $row->product_id === $focusedProductId)
+                ->values());
         $products = Product::query()
             ->with(['units' => fn ($query) => $query
                 ->where('is_active', true)
@@ -339,6 +354,7 @@ class StockController extends Controller
                 'count_focus' => $filters['count_focus'],
                 'show_status' => $showStatus,
                 'per_page' => $perPage,
+                'product_id' => $focusedProductId ?: null,
             ]);
 
         return view('stock.count', [
@@ -360,6 +376,7 @@ class StockController extends Controller
             'selectedAssignedUserId' => $selectedAssignedUserId,
             'defaultSectionName' => old('section_name', $draftCount?->section_name),
             'countFocus' => $countFocus,
+            'focusedProductId' => $focusedProductId,
         ]);
     }
 
@@ -463,6 +480,7 @@ class StockController extends Controller
             'remarks' => ['nullable', 'string'],
             'q' => ['nullable', 'string', 'max:255'],
             'category_id' => ['nullable', 'integer'],
+            'product_id' => ['nullable', 'integer', 'exists:products,id'],
             'count_focus' => ['nullable', 'in:all,low_stock,zero_or_negative'],
             'show_status' => ['nullable', 'in:all,pending,counted'],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -715,6 +733,9 @@ class StockController extends Controller
 
             if (! empty($validated['category_id'])) {
                 $redirectParams['category_id'] = (int) $validated['category_id'];
+            }
+            if (! empty($validated['product_id'])) {
+                $redirectParams['product_id'] = (int) $validated['product_id'];
             }
             if (! empty($validated['page']) && (int) $validated['page'] > 1) {
                 $redirectParams['page'] = (int) $validated['page'];

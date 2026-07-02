@@ -61,6 +61,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/suppliers', [SupplierController::class, 'index'])->middleware('ability:suppliers.view')->name('suppliers.index');
     Route::get('/suppliers/create', [SupplierController::class, 'create'])->middleware('ability:purchases.manage')->name('suppliers.create');
     Route::post('/suppliers', [SupplierController::class, 'store'])->middleware('ability:purchases.manage')->name('suppliers.store');
+    Route::post('/suppliers/quick-store', [PurchaseController::class, 'quickSupplierStore'])->middleware('ability:purchases.manage')->name('suppliers.quick-store');
     Route::get('/suppliers/{supplier}', [SupplierController::class, 'show'])->middleware('ability:suppliers.view')->name('suppliers.show');
     Route::get('/suppliers/{supplier}/edit', [SupplierController::class, 'edit'])->middleware('ability:purchases.manage')->name('suppliers.edit');
     Route::put('/suppliers/{supplier}', [SupplierController::class, 'update'])->middleware('ability:purchases.manage')->name('suppliers.update');

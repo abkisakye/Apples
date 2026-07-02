@@ -135,9 +135,13 @@
                                         </a>
                                 @endif
                                 @if ($access->can('stock.manage'))
-                                        <a href="{{ route('stock.counts.create', ['store_id' => $filters['store_id'], 'q' => $row->product_name]) }}" class="row-action-link accent">
+                                        <a href="{{ route('stock.counts.create', ['store_id' => $filters['store_id'], 'product_id' => $row->product_id, 'q' => $row->product_name]) }}" class="row-action-link accent">
                                             <span>Physical Count</span>
                                             <span class="meta">Count</span>
+                                        </a>
+                                        <a href="{{ route('stock.transfers.create', ['product_id' => $row->product_id, 'return_to' => url()->full()]) }}" class="row-action-link">
+                                            <span>Transfer Stock</span>
+                                            <span class="meta">Move</span>
                                         </a>
                                         <a href="{{ route('stock.adjustments.create', ['product_id' => $row->product_id, 'return_to' => url()->full()]) }}" class="row-action-link">
                                             <span>Stock Adjustment</span>
@@ -146,7 +150,7 @@
                                 @endif
                                 @if ($access->can('purchases.manage'))
                                         <a href="{{ route('purchases.create', ['product_id' => $row->product_id, 'return_to' => url()->full()]) }}" class="row-action-link primary">
-                                            <span>Add Stock</span>
+                                            <span>Record Purchase</span>
                                             <span class="meta">Buy</span>
                                         </a>
                                 @endif
