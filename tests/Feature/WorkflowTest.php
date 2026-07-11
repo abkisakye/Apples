@@ -2885,6 +2885,8 @@ class WorkflowTest extends TestCase
 
     public function test_management_centre_loads_with_grouped_existing_shortcuts(): void
     {
+        config(['business.developer_phone' => '']);
+
         $this->get('/management-centre')
             ->assertOk()
             ->assertSee('Management Centre')
@@ -2909,12 +2911,12 @@ class WorkflowTest extends TestCase
 
     public function test_developer_credit_shows_phone_only_when_configured(): void
     {
-        config(['business.developer_phone' => '+256 700 000 000']);
+        config(['business.developer_phone' => '+256 703/773-086 770']);
 
         $this->get('/management-centre')
             ->assertOk()
             ->assertSee('Designed & Developed by Kisakye Allan | Rolans Software Solutions')
-            ->assertSee('Tel: +256 700 000 000');
+            ->assertSee('Tel: +256 703/773-086 770');
     }
 
     public function test_management_centre_requires_dashboard_access_and_hides_unauthorized_setup_links(): void
