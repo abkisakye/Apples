@@ -87,41 +87,50 @@
         .brand {
             position: relative;
             display: grid;
-            grid-template-columns: 42px minmax(0, 1fr);
-            gap: 10px;
+            grid-template-columns: 38px minmax(0, 1fr);
+            gap: 11px;
             align-items: center;
-            padding: 12px;
-            margin-bottom: 10px;
+            min-height: 70px;
+            padding: 11px 10px;
+            margin-bottom: 16px;
             border-radius: 16px;
             background:
                 linear-gradient(135deg, rgba(212, 175, 55, .22), rgba(255,255,255,.05)),
                 rgba(255,255,255,.04);
             border: 1px solid rgba(255,255,255,.10);
-            overflow: hidden;
+            overflow: visible;
+            flex: 0 0 auto;
         }
         .brand-logo {
             display: block;
-            width: 42px;
-            height: 42px;
+            width: 36px;
+            height: 36px;
+            max-width: 36px;
+            max-height: 36px;
             object-fit: contain;
+            object-position: center;
             filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .16));
         }
         .brand-copy {
             min-width: 0;
+            overflow: visible;
         }
         .brand h1 {
             margin: 0;
-            font-size: 1.18rem;
-            line-height: 1.08;
+            font-size: 1.04rem;
+            line-height: 1.15;
             letter-spacing: .02em;
             color: var(--accent);
             text-shadow: 0 2px 10px rgba(0, 0, 0, .16);
+            white-space: normal;
+            overflow-wrap: break-word;
         }
         .brand p {
-            margin: 5px 0 0;
+            margin: 4px 0 0;
             color: #eef5ef;
             line-height: 1.4;
-            font-size: .8rem;
+            font-size: .78rem;
+            overflow-wrap: break-word;
         }
         .role-preview {
             margin-bottom: 14px;
@@ -911,18 +920,23 @@
                 font-size: 1.08rem;
             }
             .brand {
-                grid-template-columns: 38px minmax(0, 1fr);
+                grid-template-columns: 36px minmax(0, 1fr);
                 gap: 9px;
+                min-height: 66px;
+                padding: 10px;
+                margin-bottom: 14px;
             }
             .brand-logo {
-                width: 38px;
-                height: 38px;
+                width: 34px;
+                height: 34px;
+                max-width: 34px;
+                max-height: 34px;
             }
             .brand h1 {
-                font-size: 1.08rem;
+                font-size: .98rem;
             }
             .brand p {
-                font-size: .76rem;
+                font-size: .74rem;
             }
             .page-head h2 {
                 font-size: 1.18rem;
