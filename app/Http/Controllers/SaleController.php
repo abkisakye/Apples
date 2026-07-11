@@ -130,7 +130,7 @@ class SaleController extends Controller
                 ->get(['id', 'name', 'is_walk_in', 'location', 'opening_balance']),
             'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'productUnits' => ProductUnit::query()
-                ->with('product:id,name,code')
+                ->with('product.category:id,name')
                 ->where('is_active', true)
                 ->whereHas('product', fn ($query) => $query->where('is_active', true))
                 ->orderBy('product_id')

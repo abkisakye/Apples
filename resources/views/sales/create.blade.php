@@ -19,6 +19,7 @@
             'label' => trim($unit->product->name.' - '.$unit->unit_name),
             'product_name' => $unit->product->name,
             'unit_name' => $unit->unit_name,
+            'category_name' => $unit->product->category?->name,
             'price' => (float) $unit->selling_price,
             'barcode' => $unit->barcode,
             'code' => $unit->product->code,
@@ -26,6 +27,7 @@
             'image_url' => null,
             'search' => strtolower(trim(implode(' ', array_filter([
                 $unit->product->name,
+                $unit->product->category?->name,
                 $unit->unit_name,
                 $unit->product->code,
                 $unit->barcode,
@@ -225,13 +227,15 @@
             position: absolute;
             top: calc(100% + 6px);
             left: 0;
-            right: 0;
-            z-index: 7000;
+            right: auto;
+            z-index: 12050;
             display: none;
-            gap: 4px;
+            gap: 3px;
+            width: min(900px, calc(100vw - 330px));
+            min-width: min(650px, calc(100vw - 32px));
             max-height: min(430px, calc(100vh - 220px));
-            overflow-y: auto;
-            padding: 7px;
+            overflow: auto;
+            padding: 5px;
             border: 1px solid color-mix(in srgb, var(--brand) 38%, var(--line) 62%);
             border-radius: 13px;
             background: rgba(255, 255, 255, .99);
@@ -240,25 +244,62 @@
         .sale-floating-results.is-open {
             display: grid;
         }
+        .sale-search-results-table {
+            display: grid;
+            gap: 0;
+            min-width: 720px;
+            border: 1px solid color-mix(in srgb, var(--line) 86%, var(--brand) 14%);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .sale-search-results-head,
         .sale-search-result {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 8px;
+            grid-template-columns: minmax(260px, 1.6fr) minmax(110px, .7fr) minmax(132px, .75fr) minmax(86px, .48fr) minmax(110px, .55fr);
+            gap: 0;
             align-items: center;
             width: 100%;
-            min-height: 58px;
-            padding: 8px 9px;
-            border: 1px solid transparent;
-            border-radius: 10px;
+        }
+        .sale-search-results-head {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            min-height: 26px;
+            background: color-mix(in srgb, var(--brand) 8%, white 92%);
+            color: var(--muted);
+            font-size: .6rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+        .sale-search-results-head span,
+        .sale-result-cell {
+            min-width: 0;
+            padding: 4px 6px;
+            border-right: 1px solid color-mix(in srgb, var(--line) 88%, var(--brand) 12%);
+        }
+        .sale-search-results-head span:last-child,
+        .sale-result-cell:last-child {
+            border-right: 0;
+        }
+        .sale-search-result {
+            min-height: 38px;
+            padding: 0;
+            border: 0;
+            border-bottom: 1px solid color-mix(in srgb, var(--line) 88%, var(--brand) 12%);
+            border-radius: 0;
             background: #fff;
             color: var(--ink);
             cursor: pointer;
             text-align: left;
         }
+        .sale-search-result:last-child {
+            border-bottom: 0;
+        }
         .sale-search-result:hover,
         .sale-search-result.is-active {
-            border-color: color-mix(in srgb, var(--brand) 42%, var(--line) 58%);
             background: color-mix(in srgb, var(--brand) 8%, white 92%);
+            box-shadow: inset 4px 0 0 var(--accent);
         }
         .sale-search-result-main {
             min-width: 0;
@@ -266,13 +307,12 @@
             gap: 4px;
         }
         .sale-search-result-name {
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            font-size: .82rem;
-            line-height: 1.2;
+            display: block;
+            font-size: .76rem;
+            line-height: 1.16;
             font-weight: 850;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
         .sale-search-result-meta {
             display: flex;
@@ -288,17 +328,28 @@
             gap: 5px;
             white-space: nowrap;
         }
+        .sale-result-muted {
+            color: var(--muted);
+            font-size: .66rem;
+            line-height: 1.18;
+            overflow-wrap: anywhere;
+        }
         .product-unit-chip,
         .readiness-chip {
             display: inline-flex;
             align-items: center;
-            min-height: 22px;
-            padding: 0 7px;
+            min-height: 19px;
+            padding: 0 6px;
             border-radius: 999px;
             background: rgba(6, 104, 56, .09);
             color: var(--brand);
-            font-size: .66rem;
+            font-size: .61rem;
             font-weight: 850;
+        }
+        .sale-search-result .sale-product-price {
+            min-height: 22px;
+            padding: 0 6px;
+            font-size: .66rem;
         }
         .readiness-chip {
             background: rgba(15, 23, 42, .06);
@@ -964,6 +1015,8 @@
             align-content: start;
             min-height: 0;
             overflow: visible;
+            position: relative;
+            z-index: 12040;
         }
         .sale-bill-shell {
             display: contents;
@@ -987,8 +1040,7 @@
             position: relative;
             z-index: 10;
         }
-        .sale-checkout-panel,
-        .sale-lane {
+        .sale-checkout-panel {
             position: relative;
             z-index: 1;
         }
@@ -1006,7 +1058,7 @@
         .sale-search-panel {
             position: sticky;
             top: 0;
-            z-index: 80;
+            z-index: 12045;
             border-color: color-mix(in srgb, var(--brand) 30%, var(--line) 70%);
         }
         .sale-workspace .panel.sale-search-panel {
@@ -1578,17 +1630,20 @@
                 position: fixed;
                 left: 10px;
                 right: 10px;
+                width: auto;
+                min-width: 0;
                 top: 118px;
                 max-height: min(60vh, 430px);
                 z-index: 12002;
             }
             .sale-search-result {
-                grid-template-columns: minmax(0, 1fr);
+                grid-template-columns: minmax(240px, 1.5fr) 118px 132px 84px 110px;
             }
-            .sale-search-result-side {
-                justify-items: start;
-                grid-auto-flow: column;
-                justify-content: start;
+            .sale-search-results-head {
+                grid-template-columns: minmax(240px, 1.5fr) 118px 132px 84px 110px;
+            }
+            .sale-search-results-table {
+                min-width: 684px;
             }
             .sale-badges {
                 justify-content: start;
@@ -2337,22 +2392,31 @@
                 }
 
                 searchResults.innerHTML = results.length
-                    ? results.map((item, index) => `
-                        <button type="button" class="sale-search-result" data-add-unit="${item.id}" data-result-index="${index}" role="option" aria-selected="${index === highlightedResultIndex ? 'true' : 'false'}">
-                            <span class="sale-search-result-main">
-                                <strong class="sale-search-result-name">${escapeHtml(item.product_name || item.label)}</strong>
-                                <span class="sale-search-result-meta">
-                                    <span>${escapeHtml(productCodeLabel(item))}</span>
-                                    ${item.barcode && item.barcode !== item.code ? `<span>${escapeHtml(item.barcode)}</span>` : ''}
-                                    <span class="readiness-chip">${escapeHtml(item.part_number || 'Ready')}</span>
+                    ? `
+                        <div class="sale-search-results-table" role="presentation">
+                            <div class="sale-search-results-head" aria-hidden="true">
+                                <span>Product / Pack</span>
+                                <span>Category</span>
+                                <span>Code / Barcode</span>
+                                <span>Unit</span>
+                                <span>Price</span>
+                            </div>
+                            ${results.map((item, index) => `
+                            <button type="button" class="sale-search-result" data-add-unit="${item.id}" data-result-index="${index}" role="option" aria-selected="${index === highlightedResultIndex ? 'true' : 'false'}" title="${escapeHtml(item.label)}">
+                                <span class="sale-result-cell sale-search-result-main">
+                                    <strong class="sale-search-result-name">${escapeHtml(item.label)}</strong>
                                 </span>
-                            </span>
-                            <span class="sale-search-result-side">
-                                <span class="product-unit-chip">${escapeHtml(item.unit_name || 'Unit')}</span>
-                                <div class="sale-product-price">${money(item.price)}</div>
-                            </span>
-                        </button>
-                    `).join('')
+                                <span class="sale-result-cell sale-result-muted">${escapeHtml(item.category_name || 'Uncategorized')}</span>
+                                <span class="sale-result-cell sale-result-muted">
+                                    ${escapeHtml(productCodeLabel(item))}
+                                    ${item.barcode && item.barcode !== item.code ? `<br>${escapeHtml(item.barcode)}` : ''}
+                                </span>
+                                <span class="sale-result-cell"><span class="product-unit-chip">${escapeHtml(item.unit_name || 'Unit')}</span></span>
+                                <span class="sale-result-cell"><span class="sale-product-price">${money(item.price)}</span></span>
+                            </button>
+                            `).join('')}
+                        </div>
+                    `
                     : `<div class="bill-empty" style="grid-column: 1 / -1;">No products.</div>`;
 
                 if (searchResultsOpen) {
