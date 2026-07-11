@@ -3380,13 +3380,14 @@ class WorkflowTest extends TestCase
         PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
         PaymentMode::create(['name' => 'Card', 'is_active' => true]);
         PaymentMode::create(['name' => 'Credit', 'is_active' => true]);
-        $product = Product::create(['name' => 'GONJA CRISPS', 'is_active' => true]);
+        $product = Product::create(['name' => 'GONJA CRISPS EXTRA LONG WHOLESALE PACK', 'code' => 'GONJA-001', 'is_active' => true]);
         ProductUnit::create([
             'product_id' => $product->id,
             'unit_name' => 'box',
             'conversion_factor' => 24,
             'selling_price' => 114000,
             'cost_price' => 90000,
+            'barcode' => '6001234567890',
             'is_active' => true,
         ]);
 
@@ -3400,7 +3401,27 @@ class WorkflowTest extends TestCase
             ->assertSee('Scan / barcode / code')
             ->assertSee('Cart')
             ->assertSee('Clear All')
-            ->assertSee('GONJA CRISPS - box')
+            ->assertSee('Search products')
+            ->assertSee('id="product-search-results"', false)
+            ->assertSee('class="sale-floating-results"', false)
+            ->assertSee('role="listbox"', false)
+            ->assertSee('Quick Pick')
+            ->assertSee('id="quick-pick-results"', false)
+            ->assertSee('GONJA CRISPS EXTRA LONG WHOLESALE PACK - box')
+            ->assertSee('GONJA-001')
+            ->assertSee('6001234567890')
+            ->assertSee('"unit_name":"box"', false)
+            ->assertSee('"price":114000', false)
+            ->assertSee('sale-search-result-name', false)
+            ->assertSee('product-unit-chip', false)
+            ->assertSee('sale-search-result-side', false)
+            ->assertSee("event.key === 'ArrowDown'", false)
+            ->assertSee("event.key === 'ArrowUp'", false)
+            ->assertSee("event.key === 'Enter'", false)
+            ->assertSee("event.key === 'Escape'", false)
+            ->assertSee("document.addEventListener('click'", false)
+            ->assertSee('data-add-unit', false)
+            ->assertSee('quickPickResults?.addEventListener', false)
             ->assertSee('data-pos-area="checkout-keypad"', false)
             ->assertSeeInOrder([
                 '<section class="panel sale-checkout-panel">',
@@ -3410,7 +3431,21 @@ class WorkflowTest extends TestCase
                 'Checkout',
             ], false)
             ->assertSee('bill-table-head', false)
+            ->assertSee('bill-table', false)
+            ->assertSee('--cart-grid-columns: minmax(280px, 1fr) 170px 140px 140px 88px', false)
+            ->assertSee('grid-template-columns: var(--cart-grid-columns)', false)
+            ->assertSee('role="table"', false)
+            ->assertSee('aria-label="Cart items"', false)
+            ->assertSee('grid-template-rows: auto minmax(0, 1fr) auto', false)
+            ->assertSee('max-height: calc(100vh - 300px)', false)
+            ->assertSee('overscroll-behavior: contain', false)
             ->assertSee('Product / Pack')
+            ->assertSee('Qty')
+            ->assertSee('Price')
+            ->assertSee('Total')
+            ->assertSee('Remove')
+            ->assertSee('No products added yet.')
+            ->assertSee('bill-cell', false)
             ->assertSee('data-qty-minus', false)
             ->assertSee('data-qty-input', false)
             ->assertSee('data-qty-plus', false)
@@ -3419,6 +3454,9 @@ class WorkflowTest extends TestCase
             ->assertSee('data-remove-index', false)
             ->assertSee('title="Remove item"', false)
             ->assertSee('>Remove</button>', false)
+            ->assertSee('cart.unshift', false)
+            ->assertSee('cart.splice(existingIndex, 1)', false)
+            ->assertSee('cartList.scrollTop = 0', false)
             ->assertSee('<strong>${item.label}</strong>', false);
     }
 

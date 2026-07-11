@@ -136,6 +136,10 @@
             grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
             gap: 8px;
         }
+        .product-search-wrap {
+            position: relative;
+            min-width: 0;
+        }
         .sale-input {
             width: 100%;
             min-height: 42px;
@@ -217,6 +221,96 @@
             color: var(--muted);
             font-size: .76rem;
         }
+        .sale-floating-results {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            z-index: 7000;
+            display: none;
+            gap: 4px;
+            max-height: min(430px, calc(100vh - 220px));
+            overflow-y: auto;
+            padding: 7px;
+            border: 1px solid color-mix(in srgb, var(--brand) 38%, var(--line) 62%);
+            border-radius: 13px;
+            background: rgba(255, 255, 255, .99);
+            box-shadow: 0 18px 42px rgba(15, 23, 42, .18);
+        }
+        .sale-floating-results.is-open {
+            display: grid;
+        }
+        .sale-search-result {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: center;
+            width: 100%;
+            min-height: 58px;
+            padding: 8px 9px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            background: #fff;
+            color: var(--ink);
+            cursor: pointer;
+            text-align: left;
+        }
+        .sale-search-result:hover,
+        .sale-search-result.is-active {
+            border-color: color-mix(in srgb, var(--brand) 42%, var(--line) 58%);
+            background: color-mix(in srgb, var(--brand) 8%, white 92%);
+        }
+        .sale-search-result-main {
+            min-width: 0;
+            display: grid;
+            gap: 4px;
+        }
+        .sale-search-result-name {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            font-size: .82rem;
+            line-height: 1.2;
+            font-weight: 850;
+        }
+        .sale-search-result-meta {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            color: var(--muted);
+            font-size: .68rem;
+            line-height: 1.25;
+        }
+        .sale-search-result-side {
+            display: grid;
+            justify-items: end;
+            gap: 5px;
+            white-space: nowrap;
+        }
+        .product-unit-chip,
+        .readiness-chip {
+            display: inline-flex;
+            align-items: center;
+            min-height: 22px;
+            padding: 0 7px;
+            border-radius: 999px;
+            background: rgba(6, 104, 56, .09);
+            color: var(--brand);
+            font-size: .66rem;
+            font-weight: 850;
+        }
+        .readiness-chip {
+            background: rgba(15, 23, 42, .06);
+            color: var(--muted);
+        }
+        .sale-quick-pick-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 5px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
         .sale-product-card {
             display: flex;
             align-items: center;
@@ -263,9 +357,11 @@
             font-size: .79rem;
             line-height: 1.2;
             font-weight: 800;
-            white-space: nowrap;
+            white-space: normal;
             overflow: hidden;
-            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
         }
         .sale-product-meta {
             color: var(--muted);
@@ -452,44 +548,88 @@
         .sale-cart-wrap {
             display: grid;
             gap: 6px;
+            min-height: 0;
         }
         .bill-list {
-            display: grid;
-            gap: 4px;
+            display: block;
             max-height: 248px;
-            overflow-y: auto;
+            overflow: auto;
             padding-right: 2px;
+            align-self: start;
+            min-height: 0;
+        }
+        .bill-table {
+            --cart-grid-columns: minmax(280px, 1fr) 170px 140px 140px 88px;
+            display: grid;
+            gap: 0;
+            min-width: 820px;
+            align-content: start;
+            border: 1px solid color-mix(in srgb, var(--line) 84%, var(--brand) 16%);
+            border-radius: 10px;
+            overflow: hidden;
+            background: #fff;
         }
         .bill-table-head {
             display: grid;
-            grid-template-columns: minmax(180px, 1fr) minmax(142px, .7fr) minmax(104px, .48fr) minmax(108px, .5fr) 68px;
-            gap: 6px;
+            grid-template-columns: var(--cart-grid-columns);
+            gap: 0;
             align-items: center;
-            padding: 0 8px 3px;
+            min-height: 30px;
+            padding: 0;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: color-mix(in srgb, var(--brand) 7%, white 93%);
+            border-bottom: 1px solid color-mix(in srgb, var(--line) 84%, var(--brand) 16%);
             color: var(--muted);
             font-size: .64rem;
             font-weight: 900;
             text-transform: uppercase;
             letter-spacing: .05em;
         }
+        .bill-table-head span,
+        .bill-row-title,
+        .bill-cell {
+            min-width: 0;
+            padding: 4px 7px;
+            border-right: 1px solid color-mix(in srgb, var(--line) 88%, var(--brand) 12%);
+        }
+        .bill-cell {
+            align-self: stretch;
+            display: grid;
+            align-content: center;
+            overflow: hidden;
+        }
+        .bill-table-head span:last-child,
+        .bill-row > .bill-remove {
+            border-right: 0;
+        }
         .bill-empty {
-            padding: 16px 12px;
-            border-radius: 16px;
+            padding: 10px 12px;
+            border-radius: 10px;
             border: 1px dashed color-mix(in srgb, var(--line-strong) 76%, var(--brand) 24%);
             background: rgba(248, 250, 248, 0.98);
-            text-align: center;
+            text-align: left;
             color: var(--muted);
             font-size: .8rem;
         }
         .bill-row {
             display: grid;
-            grid-template-columns: minmax(180px, 1fr) minmax(142px, .7fr) minmax(104px, .48fr) minmax(108px, .5fr) 68px;
-            gap: 6px;
+            grid-template-columns: var(--cart-grid-columns);
+            gap: 0;
             align-items: center;
-            padding: 5px 8px;
-            border-radius: 10px;
-            border: 1px solid color-mix(in srgb, var(--line) 84%, var(--brand) 16%);
+            min-height: 38px;
+            padding: 0;
+            border-radius: 0;
+            border: 0;
+            border-bottom: 1px solid color-mix(in srgb, var(--line) 88%, var(--brand) 12%);
             background: #fff;
+        }
+        .bill-row:last-child {
+            border-bottom: 0;
+        }
+        .bill-row:nth-child(even) {
+            background: rgba(248, 250, 248, .74);
         }
         .bill-row-top {
             display: contents;
@@ -499,6 +639,8 @@
             gap: 2px;
             min-width: 0;
             grid-column: 1;
+            align-self: stretch;
+            align-content: center;
         }
         .bill-row-grid > div:nth-child(1) {
             grid-column: 2;
@@ -525,11 +667,13 @@
             text-overflow: ellipsis;
         }
         .bill-remove {
-            min-width: 64px;
-            height: 30px;
-            border-radius: 8px;
-            border: 1px solid rgba(102, 40, 40, 0.18);
-            background: rgba(102, 40, 40, 0.08);
+            min-width: 0;
+            width: calc(100% - 10px);
+            justify-self: center;
+            height: 28px;
+            border-radius: 7px;
+            border: 1px solid rgba(102, 40, 40, 0.16);
+            background: rgba(102, 40, 40, 0.07);
             color: var(--apple);
             font-size: .72rem;
             font-weight: 900;
@@ -573,9 +717,9 @@
         .bill-row-grid input,
         .sale-payment-grid input {
             width: 100%;
-            min-height: 30px;
-            padding: 5px 8px;
-            border-radius: 9px;
+            min-height: 28px;
+            padding: 4px 7px;
+            border-radius: 7px;
             border: 1px solid color-mix(in srgb, var(--line) 78%, var(--brand) 22%);
             background: #fff;
             color: var(--ink);
@@ -587,9 +731,10 @@
         .bill-line-total {
             display: flex;
             align-items: center;
-            min-height: 30px;
-            padding: 0 8px;
-            border-radius: 9px;
+            justify-content: flex-end;
+            min-height: 28px;
+            padding: 0 7px;
+            border-radius: 7px;
             background: rgba(6, 104, 56, 0.08);
             color: var(--brand);
             font-size: .78rem;
@@ -804,7 +949,7 @@
             font-size: .74rem;
         }
         .sale-workspace {
-            grid-template-columns: minmax(236px, .62fr) minmax(420px, 1.85fr) minmax(292px, 320px);
+            grid-template-columns: minmax(218px, .52fr) minmax(500px, 2.1fr) minmax(292px, 320px);
             grid-template-rows: auto minmax(0, 1fr);
             gap: 6px;
             height: calc(100vh - 150px);
@@ -815,9 +960,10 @@
         .sale-lane {
             grid-column: 1;
             grid-row: 1 / span 2;
-            grid-template-rows: auto minmax(0, 1fr);
+            grid-template-rows: auto auto;
+            align-content: start;
             min-height: 0;
-            overflow: hidden;
+            overflow: visible;
         }
         .sale-bill-shell {
             display: contents;
@@ -860,8 +1006,11 @@
         .sale-search-panel {
             position: sticky;
             top: 0;
-            z-index: 20;
+            z-index: 80;
             border-color: color-mix(in srgb, var(--brand) 30%, var(--line) 70%);
+        }
+        .sale-workspace .panel.sale-search-panel {
+            overflow: visible;
         }
         .sale-search-panel .sale-section-head h3 {
             font-size: 1rem;
@@ -939,11 +1088,10 @@
         }
         .sale-products-panel {
             display: grid;
-            grid-template-rows: auto auto minmax(0, 1fr);
+            grid-template-rows: auto auto minmax(0, auto);
         }
-        .sale-products-panel .sale-product-grid {
+        .sale-products-panel .sale-quick-pick-grid {
             max-height: none;
-            height: 100%;
         }
         .sale-product-card {
             gap: 8px;
@@ -994,7 +1142,9 @@
             grid-column: 2;
             grid-row: 2;
             display: grid;
-            grid-template-rows: auto 1fr auto;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+            min-height: 0;
+            overflow: hidden !important;
         }
         .sale-checkout-panel {
             grid-column: 3;
@@ -1074,22 +1224,28 @@
             font-size: .75rem;
         }
         .bill-list {
-            gap: 3px;
-            max-height: none;
+            height: 100%;
+            max-height: calc(100vh - 300px);
             min-height: 0;
-            overflow-y: auto;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .bill-table {
+            min-width: 820px;
         }
         .bill-empty {
-            padding: 12px 10px;
-            border-radius: 12px;
+            padding: 9px 10px;
+            border-radius: 10px;
             font-size: .76rem;
         }
         .bill-row {
-            grid-template-columns: minmax(0, 1fr) 142px 86px 102px 62px;
             align-items: center;
-            gap: 4px;
-            padding: 4px 6px;
-            border-radius: 9px;
+            min-height: 36px;
+        }
+        .bill-table-head span,
+        .bill-row-title,
+        .bill-cell {
+            padding: 3px 6px;
         }
         .bill-row-top,
         .bill-row-grid {
@@ -1122,9 +1278,9 @@
         .bill-remove {
             grid-column: 5;
             grid-row: 1;
-            min-width: 60px;
+            min-width: 0;
             height: 28px;
-            border-radius: 8px;
+            border-radius: 7px;
         }
         .qty-box {
             grid-template-columns: 28px minmax(0, 1fr) 28px;
@@ -1262,10 +1418,15 @@
             .bill-table-head {
                 display: none;
             }
+            .bill-table {
+                min-width: 0;
+                border-radius: 10px;
+            }
             .bill-row {
                 grid-template-columns: 1fr;
                 gap: 7px;
                 padding: 8px;
+                border-bottom: 1px solid color-mix(in srgb, var(--line) 88%, var(--brand) 12%);
             }
             .bill-row-top {
                 display: flex;
@@ -1277,6 +1438,11 @@
                 display: grid;
                 grid-template-columns: 1fr;
                 gap: 6px;
+            }
+            .bill-row-title,
+            .bill-cell {
+                padding: 0;
+                border-right: 0;
             }
             .bill-row-title,
             .bill-row-grid > div:nth-child(1),
@@ -1420,7 +1586,10 @@
                         <input type="text" id="scan-search" class="sale-input" placeholder="Scan / barcode / code">
                         <div id="scan-status" class="scan-status">Ready</div>
                     </div>
-                    <input type="text" id="product-search" class="sale-input" placeholder="Search products">
+                    <div class="product-search-wrap">
+                        <input type="text" id="product-search" class="sale-input" placeholder="Search products" autocomplete="off" aria-controls="product-search-results" aria-expanded="false">
+                        <div id="product-search-results" class="sale-floating-results" role="listbox" aria-hidden="true"></div>
+                    </div>
                 </div>
 
                 <div class="sale-kpis">
@@ -1446,15 +1615,15 @@
             <section class="panel sale-products-panel">
                 <div class="sale-section-head">
                     <div>
-                        <h3>Products</h3>
+                        <h3>Quick Pick</h3>
                     </div>
                 </div>
                 <div class="sale-results-meta">
-                    <div id="product-results-note">Showing ready items for quick picking.</div>
+                    <div id="product-results-note">Common ready items.</div>
                     <div id="product-results-count"></div>
                 </div>
                 <div style="height: 8px;"></div>
-                <div id="product-search-results" class="sale-product-grid"></div>
+                <div id="quick-pick-results" class="sale-quick-pick-grid"></div>
             </section>
 
         </div>
@@ -1509,7 +1678,7 @@
                 </div>
 
                 <div id="cart-empty" class="bill-empty">
-                    No products.
+                    No products added yet.
                 </div>
                 <div id="cart-list" class="bill-list"></div>
                 <div id="sale-items-hidden"></div>
@@ -1727,6 +1896,7 @@
             const scanStatus = document.getElementById('scan-status');
             const searchInput = document.getElementById('product-search');
             const searchResults = document.getElementById('product-search-results');
+            const quickPickResults = document.getElementById('quick-pick-results');
             const productResultsNote = document.getElementById('product-results-note');
             const productResultsCount = document.getElementById('product-results-count');
             const paymentModeSelect = document.getElementById('payment-mode');
@@ -1802,6 +1972,10 @@
             let customers = allCustomers;
             let customerDropdownOpen = false;
             let activeKeypadInput = null;
+            let searchResultsOpen = false;
+            let highlightedResultIndex = -1;
+            let currentSearchResults = [];
+            let suppressSearchFocusOpen = false;
 
             function money(value) {
                 return `${currency} ${Number(value || 0).toLocaleString()}`;
@@ -1823,6 +1997,15 @@
                 }
 
                 return `<span class="product-token ${extraClass}">${initials(item.product_name || item.label)}</span>`;
+            }
+
+            function escapeHtml(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
             }
 
             function subtotal() {
@@ -1961,34 +2144,22 @@
                 }
             }
 
-            function renderSearchResults() {
-                const needle = String(searchInput.value || '').trim().toLowerCase();
-                const matching = needle.length < 1
-                    ? allUnits
-                    : allUnits.filter((item) => item.search.includes(needle));
-                const displayLimit = needle.length < 1 ? 36 : 120;
-                const results = matching.slice(0, displayLimit);
+            function productCodeLabel(item) {
+                return item.code || item.barcode || item.part_number || 'No code';
+            }
 
-                if (productResultsNote) {
-                    productResultsNote.textContent = needle.length < 1
-                        ? 'Quick pick'
-                        : `Search: ${searchInput.value.trim()}`;
-                }
+            function renderQuickPickResults() {
+                if (!quickPickResults) return;
 
-                if (productResultsCount) {
-                    productResultsCount.textContent = matching.length > displayLimit
-                        ? `Showing ${results.length} of ${matching.length}`
-                        : `${matching.length} match${matching.length === 1 ? '' : 'es'}`;
-                }
-
-                searchResults.innerHTML = results.length
+                const results = allUnits.slice(0, 12);
+                quickPickResults.innerHTML = results.length
                     ? results.map((item) => `
                         <div class="sale-product-card">
                             ${productToken(item)}
                             <div class="product-main">
-                                <strong class="product-name">${item.label}</strong>
+                                <strong class="product-name">${escapeHtml(item.label)}</strong>
                                 <div class="sale-product-meta">
-                                    ${item.code ? `${item.code}<br>` : ''}${item.barcode ? `${item.barcode}<br>` : ''}${item.part_number ? item.part_number : 'Ready'}
+                                    ${escapeHtml(productCodeLabel(item))}<br>${escapeHtml(item.part_number || 'Ready')}
                                 </div>
                             </div>
                             <div class="product-action">
@@ -1997,7 +2168,80 @@
                             </div>
                         </div>
                     `).join('')
+                    : `<div class="bill-empty">No products.</div>`;
+            }
+
+            function setSearchResultsOpen(open) {
+                searchResultsOpen = open;
+                searchResults.classList.toggle('is-open', open);
+                searchResults.setAttribute('aria-hidden', open ? 'false' : 'true');
+                searchInput.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+
+            function setHighlightedSearchResult(index) {
+                if (!currentSearchResults.length) {
+                    highlightedResultIndex = -1;
+                } else {
+                    highlightedResultIndex = Math.max(0, Math.min(index, currentSearchResults.length - 1));
+                }
+
+                searchResults.querySelectorAll('[data-add-unit]').forEach((button) => {
+                    const isActive = Number(button.dataset.resultIndex) === highlightedResultIndex;
+                    button.classList.toggle('is-active', isActive);
+                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+                    if (isActive) {
+                        button.scrollIntoView({ block: 'nearest' });
+                    }
+                });
+            }
+
+            function closeSearchResults() {
+                highlightedResultIndex = -1;
+                setSearchResultsOpen(false);
+                setHighlightedSearchResult(-1);
+            }
+
+            function renderSearchResults() {
+                const needle = String(searchInput.value || '').trim().toLowerCase();
+                const matching = needle.length < 1
+                    ? allUnits
+                    : allUnits.filter((item) => item.search.includes(needle));
+                const displayLimit = needle.length < 1 ? 24 : 100;
+                const results = matching.slice(0, displayLimit);
+                currentSearchResults = results;
+
+                if (productResultsNote) {
+                    productResultsNote.textContent = 'Quick pick';
+                }
+
+                if (productResultsCount) {
+                    productResultsCount.textContent = `${Math.min(allUnits.length, 12)} shown`;
+                }
+
+                searchResults.innerHTML = results.length
+                    ? results.map((item, index) => `
+                        <button type="button" class="sale-search-result" data-add-unit="${item.id}" data-result-index="${index}" role="option" aria-selected="${index === highlightedResultIndex ? 'true' : 'false'}">
+                            <span class="sale-search-result-main">
+                                <strong class="sale-search-result-name">${escapeHtml(item.product_name || item.label)}</strong>
+                                <span class="sale-search-result-meta">
+                                    <span>${escapeHtml(productCodeLabel(item))}</span>
+                                    ${item.barcode && item.barcode !== item.code ? `<span>${escapeHtml(item.barcode)}</span>` : ''}
+                                    <span class="readiness-chip">${escapeHtml(item.part_number || 'Ready')}</span>
+                                </span>
+                            </span>
+                            <span class="sale-search-result-side">
+                                <span class="product-unit-chip">${escapeHtml(item.unit_name || 'Unit')}</span>
+                                <div class="sale-product-price">${money(item.price)}</div>
+                            </span>
+                        </button>
+                    `).join('')
                     : `<div class="bill-empty" style="grid-column: 1 / -1;">No products.</div>`;
+
+                if (searchResultsOpen) {
+                    setSearchResultsOpen(true);
+                    setHighlightedSearchResult(Math.min(Math.max(highlightedResultIndex, 0), currentSearchResults.length - 1));
+                }
             }
 
             function findScanMatch(value) {
@@ -2031,44 +2275,46 @@
             function renderCart() {
                 cartEmpty.style.display = cart.length ? 'none' : 'block';
                 cartList.innerHTML = cart.length ? `
-                    <div class="bill-table-head" aria-hidden="true">
-                        <span>Product / Pack</span>
-                        <span>Qty</span>
-                        <span>Price</span>
-                        <span>Total</span>
-                        <span>Remove</span>
-                    </div>
-                    ${cart.map((item, index) => `
-                    <div class="bill-row">
-                        <div class="bill-row-top">
-                            <div class="bill-row-title">
-                                <div>
-                                    <strong>${item.label}</strong>
-                                    <div class="bill-row-sub">${item.code || item.barcode || 'No code'}</div>
+                    <div class="bill-table" role="table" aria-label="Cart items">
+                        <div class="bill-table-head" role="row">
+                            <span role="columnheader">Product / Pack</span>
+                            <span role="columnheader">Qty</span>
+                            <span role="columnheader">Price</span>
+                            <span role="columnheader">Total</span>
+                            <span role="columnheader">Remove</span>
+                        </div>
+                        ${cart.map((item, index) => `
+                        <div class="bill-row" role="row">
+                            <div class="bill-row-top">
+                                <div class="bill-row-title" role="cell">
+                                    <div>
+                                        <strong>${item.label}</strong>
+                                        <div class="bill-row-sub">${item.code || item.barcode || 'No code'}</div>
+                                    </div>
+                                </div>
+                                <button type="button" class="bill-remove" data-remove-index="${index}" title="Remove item" aria-label="Remove ${item.label}" role="cell">Remove</button>
+                            </div>
+                            <div class="bill-row-grid">
+                                <div class="bill-cell" role="cell">
+                                    <div class="bill-label">Qty</div>
+                                    <div class="qty-box">
+                                        <button type="button" data-qty-minus="${index}">-</button>
+                                        <input type="number" min="1" step="1" value="${item.quantity}" data-qty-input="${index}" data-keypad-input="integer">
+                                        <button type="button" data-qty-plus="${index}">+</button>
+                                    </div>
+                                </div>
+                                <div class="bill-cell" role="cell">
+                                    <div class="bill-label">Price</div>
+                                    <input type="number" min="0" step="0.01" value="${item.price}" data-price-input="${index}" data-keypad-input="decimal" ${canOverridePrices ? '' : 'readonly aria-readonly="true"'}>
+                                </div>
+                                <div class="bill-cell" role="cell">
+                                    <div class="bill-label">Total</div>
+                                    <div class="bill-line-total">${money(Number(item.quantity) * Number(item.price))}</div>
                                 </div>
                             </div>
-                            <button type="button" class="bill-remove" data-remove-index="${index}" title="Remove item" aria-label="Remove ${item.label}">Remove</button>
                         </div>
-                        <div class="bill-row-grid">
-                            <div>
-                                <div class="bill-label">Qty</div>
-                                <div class="qty-box">
-                                    <button type="button" data-qty-minus="${index}">-</button>
-                                    <input type="number" min="1" step="1" value="${item.quantity}" data-qty-input="${index}" data-keypad-input="integer">
-                                    <button type="button" data-qty-plus="${index}">+</button>
-                                </div>
-                            </div>
-                            <div>
-                                <div class="bill-label">Price</div>
-                                <input type="number" min="0" step="0.01" value="${item.price}" data-price-input="${index}" data-keypad-input="decimal" ${canOverridePrices ? '' : 'readonly aria-readonly="true"'}>
-                            </div>
-                            <div>
-                                <div class="bill-label">Total</div>
-                                <div class="bill-line-total">${money(Number(item.quantity) * Number(item.price))}</div>
-                            </div>
-                        </div>
+                        `).join('')}
                     </div>
-                    `).join('')}
                 ` : '';
 
                 hiddenInputs.innerHTML = cart.map((item, index) => `
@@ -2169,22 +2415,27 @@
                 const unit = allUnits.find((item) => Number(item.id) === Number(unitId));
                 if (!unit) return;
 
-                const existing = cart.find((item) => Number(item.id) === Number(unit.id));
-                if (existing) {
+                const existingIndex = cart.findIndex((item) => Number(item.id) === Number(unit.id));
+                if (existingIndex >= 0) {
+                    const existing = cart.splice(existingIndex, 1)[0];
                     existing.quantity = normalizeQuantity(existing.quantity) + 1;
+                    cart.unshift(existing);
                 } else {
-                    cart.push({
+                    cart.unshift({
                         ...unit,
                         quantity: 1,
                     });
                 }
 
                 renderCart();
+                cartList.scrollTop = 0;
                 searchInput.value = '';
                 renderSearchResults();
+                closeSearchResults();
                 if (scanInput && document.activeElement === scanInput) {
                     scanInput.focus();
                 } else {
+                    suppressSearchFocusOpen = true;
                     searchInput.focus();
                 }
             }
@@ -2247,13 +2498,49 @@
                 activeKeypadInput.focus();
             }
 
-            searchInput.addEventListener('input', renderSearchResults);
+            searchInput.addEventListener('focus', () => {
+                if (suppressSearchFocusOpen) {
+                    suppressSearchFocusOpen = false;
+                    return;
+                }
+
+                setSearchResultsOpen(true);
+                renderSearchResults();
+            });
+            searchInput.addEventListener('input', () => {
+                highlightedResultIndex = 0;
+                setSearchResultsOpen(true);
+                renderSearchResults();
+            });
             searchInput.addEventListener('keydown', (event) => {
-                if (event.key !== 'Enter') return;
-                event.preventDefault();
-                const firstButton = searchResults.querySelector('[data-add-unit]');
-                if (firstButton) {
-                    addUnit(firstButton.dataset.addUnit);
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    if (!searchResultsOpen) {
+                        setSearchResultsOpen(true);
+                        renderSearchResults();
+                    }
+                    setHighlightedSearchResult(highlightedResultIndex + 1);
+                    return;
+                }
+
+                if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    setHighlightedSearchResult(highlightedResultIndex - 1);
+                    return;
+                }
+
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeSearchResults();
+                    return;
+                }
+
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    const selected = currentSearchResults[highlightedResultIndex] || currentSearchResults[0];
+                    if (selected) {
+                        addUnit(selected.id);
+                    }
                 }
             });
 
@@ -2287,6 +2574,20 @@
                 const button = event.target.closest('[data-add-unit]');
                 if (!button) return;
                 addUnit(button.dataset.addUnit);
+            });
+
+            quickPickResults?.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-add-unit]');
+                if (!button) return;
+                addUnit(button.dataset.addUnit);
+            });
+
+            document.addEventListener('click', (event) => {
+                if (searchInput.contains(event.target) || searchResults.contains(event.target)) {
+                    return;
+                }
+
+                closeSearchResults();
             });
 
             customerSearch.addEventListener('focus', () => {
@@ -2492,6 +2793,7 @@
                 applyKeypadValue(button.dataset.keypad);
             });
 
+            renderQuickPickResults();
             renderSearchResults();
             renderCustomerResults();
             renderCart();
