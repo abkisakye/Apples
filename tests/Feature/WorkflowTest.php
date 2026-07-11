@@ -103,6 +103,168 @@ class WorkflowTest extends TestCase
             'movement_type' => 'sale',
             'product_unit_id' => $unit->id,
         ]);
+
+        $this->get('/sales')->assertOk()->assertSee($sale->sale_no);
+        $this->assertDatabaseCount('customer_payments', 0);
+    }
+
+    public function test_insufficient_stock_sale_attempt_saves_nothing(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $walkInCustomer = Customer::create(['name' => 'Walk-in Customer', 'is_walk_in' => true, 'is_system' => true, 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'AZAM 2KG', 'is_active' => true]);
+        $carton = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Cartons',
+            'conversion_factor' => 24,
+            'selling_price' => 82000,
+            'cost_price' => 70000,
+            'is_active' => true,
+        ]);
+
+        $response = $this->from('/sales/create')->post('/sales', [
+            'sale_date' => '2026-07-11',
+            'store_id' => $store->id,
+            'sale_type' => 'cash',
+            'customer_id' => $walkInCustomer->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 82000,
+            'items' => [
+                ['product_unit_id' => $carton->id, 'quantity' => 1, 'unit_price' => 82000],
+            ],
+        ]);
+
+        $response
+            ->assertRedirect('/sales/create')
+            ->assertSessionHasErrors('items');
+
+        $this->assertDatabaseCount('sales', 0);
+        $this->assertDatabaseCount('sale_items', 0);
+        $this->assertDatabaseCount('customer_payments', 0);
+        $this->assertDatabaseCount('inventory_transactions', 0);
+        $this->get('/sales')->assertOk()->assertDontSee('UGX 82,000');
+    }
+
+    public function test_mixed_cart_with_one_insufficient_item_rolls_back_whole_sale(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $walkInCustomer = Customer::create(['name' => 'Walk-in Customer', 'is_walk_in' => true, 'is_system' => true, 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        $sugar = Product::create(['name' => 'Sugar', 'is_active' => true]);
+        $sugarUnit = ProductUnit::create([
+            'product_id' => $sugar->id,
+            'unit_name' => 'Pack',
+            'conversion_factor' => 1,
+            'selling_price' => 500,
+            'cost_price' => 350,
+            'is_active' => true,
+        ]);
+        $this->seedStock($store, $sugarUnit, 5, '2026-07-10', 'SEED-SUGAR');
+
+        $flour = Product::create(['name' => 'Flour', 'is_active' => true]);
+        $flourUnit = ProductUnit::create([
+            'product_id' => $flour->id,
+            'unit_name' => 'Bag',
+            'conversion_factor' => 1,
+            'selling_price' => 1000,
+            'cost_price' => 800,
+            'is_active' => true,
+        ]);
+        $this->seedStock($store, $flourUnit, 1, '2026-07-10', 'SEED-FLOUR');
+
+        $inventoryCountBefore = InventoryTransaction::query()->count();
+
+        $response = $this->from('/sales/create')->post('/sales', [
+            'sale_date' => '2026-07-11',
+            'store_id' => $store->id,
+            'sale_type' => 'cash',
+            'customer_id' => $walkInCustomer->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 3000,
+            'items' => [
+                ['product_unit_id' => $sugarUnit->id, 'quantity' => 2, 'unit_price' => 500],
+                ['product_unit_id' => $flourUnit->id, 'quantity' => 2, 'unit_price' => 1000],
+            ],
+        ]);
+
+        $response
+            ->assertRedirect('/sales/create')
+            ->assertSessionHasErrors('items');
+
+        $this->assertDatabaseCount('sales', 0);
+        $this->assertDatabaseCount('sale_items', 0);
+        $this->assertDatabaseCount('customer_payments', 0);
+        $this->assertSame($inventoryCountBefore, InventoryTransaction::query()->count());
+        $this->get('/sales')->assertOk()->assertDontSee('UGX 3,000');
+    }
+
+    public function test_multi_unit_sale_fails_atomically_when_requested_base_stock_is_short(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $walkInCustomer = Customer::create(['name' => 'Walk-in Customer', 'is_walk_in' => true, 'is_system' => true, 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'GONJA CRISPS', 'base_unit_label' => 'piece', 'is_active' => true]);
+        $piece = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Piece',
+            'conversion_factor' => 1,
+            'selling_price' => 1000,
+            'cost_price' => 700,
+            'is_active' => true,
+            'is_base_unit' => true,
+        ]);
+        $carton = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Carton',
+            'conversion_factor' => 24,
+            'selling_price' => 24000,
+            'cost_price' => 16800,
+            'is_active' => true,
+        ]);
+
+        InventoryTransaction::create([
+            'transaction_date' => '2026-07-10',
+            'store_id' => $store->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $piece->id,
+            'reference_type' => 'test_seed',
+            'reference_id' => 1001,
+            'reference_no' => 'SEED-PIECES',
+            'movement_type' => 'purchase',
+            'quantity_in' => 10,
+            'quantity_out' => 0,
+            'base_quantity_in' => 10,
+            'base_quantity_out' => 0,
+            'conversion_factor_snapshot' => 1,
+            'unit_cost' => $piece->cost_price,
+            'unit_price' => $piece->selling_price,
+        ]);
+
+        $inventoryCountBefore = InventoryTransaction::query()->count();
+
+        $response = $this->from('/sales/create')->post('/sales', [
+            'sale_date' => '2026-07-11',
+            'store_id' => $store->id,
+            'sale_type' => 'cash',
+            'customer_id' => $walkInCustomer->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 24000,
+            'items' => [
+                ['product_unit_id' => $carton->id, 'quantity' => 1, 'unit_price' => 24000],
+            ],
+        ]);
+
+        $response
+            ->assertRedirect('/sales/create')
+            ->assertSessionHasErrors('items');
+
+        $this->assertDatabaseCount('sales', 0);
+        $this->assertDatabaseCount('sale_items', 0);
+        $this->assertDatabaseCount('customer_payments', 0);
+        $this->assertSame($inventoryCountBefore, InventoryTransaction::query()->count());
+        $this->get('/sales')->assertOk()->assertDontSee('UGX 24,000');
     }
 
     public function test_cash_sales_index_shows_sales_not_purchase_documents(): void

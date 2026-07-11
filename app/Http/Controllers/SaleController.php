@@ -257,6 +257,39 @@ class SaleController extends Controller
             }
         }
 
+        $preflightItems = $items->map(function (array $item, int $index) use ($productUnits, $conversionService) {
+            /** @var ProductUnit|null $unit */
+            $unit = $productUnits->get((int) $item['product_unit_id']);
+            if (! $unit) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.product_unit_id" => 'One selected product is no longer available.',
+                ]);
+            }
+
+            $quantity = round(max((float) $item['quantity'], 0.001), 3);
+            $conversionService->validatePrecision($quantity, $unit, 'items');
+
+            return [
+                'unit' => $unit,
+                'base_quantity' => $conversionService->toBaseQuantity($quantity, $unit),
+            ];
+        });
+
+        $preflightCorrectionRestockByUnit = [];
+
+        if (! empty($validated['corrected_from_sale_id'])) {
+            $correctionSourceSale = Sale::query()->with('items')->findOrFail($validated['corrected_from_sale_id']);
+            $this->guardCorrectionEligibility($correctionSourceSale);
+            $preflightCorrectionRestockByUnit = $this->baseRestockByProduct($correctionSourceSale);
+        }
+
+        $this->ensureSaleItemsBaseStockAvailable(
+            $preflightItems,
+            $storeId,
+            $stockAvailabilityService,
+            $preflightCorrectionRestockByUnit
+        );
+
         $saleContext = DB::transaction(function () use (
             $validated,
             $items,
@@ -369,11 +402,15 @@ class SaleController extends Controller
             if (! empty($validated['corrected_from_sale_id'])) {
                 $correctionSourceSale = Sale::query()->with('items')->findOrFail($validated['corrected_from_sale_id']);
                 $this->guardCorrectionEligibility($correctionSourceSale);
-                $correctionRestockByUnit = $correctionSourceSale->items
-                    ->groupBy('product_id')
-                    ->map(fn ($group) => round((float) $group->sum(fn ($item) => (float) ($item->base_quantity ?? 0)), 3))
-                    ->all();
+                $correctionRestockByUnit = $this->baseRestockByProduct($correctionSourceSale);
             }
+
+            $this->ensureSaleItemsBaseStockAvailable(
+                $preparedItems,
+                $storeId,
+                $stockAvailabilityService,
+                $correctionRestockByUnit
+            );
 
             $sale = Sale::create([
                 'sale_no' => $documentNumberService->make($saleType === 'credit' ? 'credit_sale' : 'cash_sale', $validated['sale_date']),
@@ -405,16 +442,6 @@ class SaleController extends Controller
             foreach ($preparedItems as $item) {
                 /** @var ProductUnit $unit */
                 $unit = $item['unit'];
-                $availableBaseAdjustment = (float) ($correctionRestockByUnit[$unit->product_id] ?? 0);
-
-                $stockAvailabilityService->ensureBaseAvailable(
-                    $storeId,
-                    $unit,
-                    $item['base_quantity'],
-                    'items',
-                    "{$unit->product?->name} - {$unit->unit_name} does not have enough base stock at the selected store.",
-                    $availableBaseAdjustment
-                );
 
                 $allocatedDiscount = $discountAmount > 0
                     ? round(($item['line_total'] / max($subtotal, 0.01)) * $discountAmount, 2)
@@ -536,6 +563,36 @@ class SaleController extends Controller
         return redirect()
             ->route('sales.show', $sale)
             ->with('status', "Sale {$sale->sale_no} voided successfully.");
+    }
+
+    private function ensureSaleItemsBaseStockAvailable(
+        Collection $preparedItems,
+        int $storeId,
+        StockAvailabilityService $stockAvailabilityService,
+        array $availableBaseAdjustments = []
+    ): void {
+        foreach ($preparedItems as $item) {
+            /** @var ProductUnit $unit */
+            $unit = $item['unit'];
+            $availableBaseAdjustment = (float) ($availableBaseAdjustments[$unit->product_id] ?? 0);
+
+            $stockAvailabilityService->ensureBaseAvailable(
+                $storeId,
+                $unit,
+                (float) $item['base_quantity'],
+                'items',
+                "{$unit->product?->name} - {$unit->unit_name} does not have enough base stock at the selected store.",
+                $availableBaseAdjustment
+            );
+        }
+    }
+
+    private function baseRestockByProduct(Sale $sale): array
+    {
+        return $sale->items
+            ->groupBy('product_id')
+            ->map(fn ($group) => round((float) $group->sum(fn ($item) => (float) ($item->base_quantity ?? 0)), 3))
+            ->all();
     }
 
     private function guardCorrectionEligibility(Sale $sale): void
