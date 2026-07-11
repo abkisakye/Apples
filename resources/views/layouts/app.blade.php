@@ -58,6 +58,8 @@
             max-width: 100%;
         }
         .sidebar {
+            display: flex;
+            flex-direction: column;
             background:
                 radial-gradient(circle at top right, rgba(212, 175, 55, .18), transparent 22%),
                 linear-gradient(180deg, #066838 0%, #04512c 100%);
@@ -195,6 +197,29 @@
             margin-top: 14px;
             padding-top: 12px;
             border-top: 1px solid rgba(255,255,255,.08);
+        }
+        .sidebar-credit {
+            margin-top: auto;
+            padding: 14px 8px 2px;
+            color: rgba(244, 255, 239, .72);
+            font-size: .72rem;
+            line-height: 1.45;
+            border-top: 1px solid rgba(255,255,255,.08);
+        }
+        .sidebar-credit strong {
+            display: block;
+            color: rgba(255,255,255,.86);
+            font-size: .74rem;
+            font-weight: 700;
+        }
+        .print-credit {
+            margin-top: 16px;
+            padding-top: 10px;
+            border-top: 1px dashed var(--line);
+            color: var(--muted);
+            font-size: .72rem;
+            line-height: 1.45;
+            text-align: center;
         }
         .workspace {
             min-width: 0;
@@ -910,6 +935,9 @@
                 padding: 14px 12px;
                 width: min(88vw, 280px);
             }
+            .sidebar-credit {
+                font-size: .7rem;
+            }
             .nav {
                 grid-template-columns: 1fr;
             }
@@ -1069,6 +1097,7 @@
                     <button type="submit" style="width:100%;">Sign Out</button>
                 </form>
             </div>
+            @include('partials.developer_credit', ['variant' => 'sidebar'])
         </aside>
 
         <div class="workspace">

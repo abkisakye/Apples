@@ -257,6 +257,17 @@ body {
     page-break-inside: avoid;
     break-inside: avoid;
 }
+.print-credit {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px dashed #d8c991;
+    color: #666666;
+    font-size: 10px;
+    line-height: 1.4;
+    text-align: center;
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
 .signature-row {
     width: 100%;
     border-collapse: separate;

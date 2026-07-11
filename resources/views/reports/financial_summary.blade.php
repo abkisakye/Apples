@@ -80,4 +80,6 @@
             <p class="list-note">Green shows sales activity and orange shows expense pressure. The figure on the right is the daily difference.</p>
         </div>
     </section>
+
+    @include('partials.developer_credit')
 @endsection

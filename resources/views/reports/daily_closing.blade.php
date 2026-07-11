@@ -145,4 +145,6 @@
             </div>
         </div>
     </section>
+
+    @include('partials.developer_credit')
 @endsection

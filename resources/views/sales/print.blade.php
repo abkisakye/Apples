@@ -483,6 +483,7 @@
                     ? config('business.receipt_footer', 'Thank you for shopping with Apples Of Gold.')
                     : config('business.invoice_footer', 'Please settle outstanding balances by the due date shown.') }}
             </div>
+            @include('partials.developer_credit')
         </div>
     @else
 
@@ -606,6 +607,7 @@
                 ? config('business.receipt_footer', 'Thank you for your business.')
                 : config('business.invoice_footer', 'Please settle outstanding balances by the due date shown on this invoice.') }}
         </div>
+        @include('partials.developer_credit')
     </div>
     @endif
 </body>

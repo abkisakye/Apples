@@ -190,5 +190,7 @@
             <span>Grand Total</span>
             <span class="money">{{ $currency }} {{ number_format($grandTotal, 0) }}</span>
         </div>
+
+        @include('partials.developer_credit')
     </section>
 @endsection
