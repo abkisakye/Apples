@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use App\Models\BusinessSetting;
 use App\Models\CashShift;
 use App\Models\CapitalSource;
+use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
@@ -17,6 +18,7 @@ use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\Purchase;
 use App\Models\Sale;
+use App\Models\SaleItem;
 use App\Models\Store;
 use App\Models\Supplier;
 use App\Models\User;
@@ -2721,6 +2723,159 @@ class WorkflowTest extends TestCase
         $this->get('/reports/payment-methods')->assertOk()->assertSee('Payment Method Breakdown');
         $this->get('/reports/cashier-performance')->assertOk()->assertSee('Cashier Performance');
         $this->get('/reports/daily-closing')->assertOk()->assertSee('Daily Closing Report');
+        $this->get('/reports/daily-sales-summary')->assertOk()->assertSee('Summary Cash Sales/Income by Shop Report');
+    }
+
+    public function test_daily_sales_summary_groups_items_and_totals(): void
+    {
+        $store = Store::create(['name' => 'Main Shop', 'is_active' => true]);
+        $otherStore = Store::create(['name' => 'Branch Shop', 'is_active' => true]);
+        $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $mobile = PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
+        $product = Product::create(['name' => 'DETTOL FRESH SOAP 90G', 'is_active' => true]);
+        $box = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Boxes',
+            'selling_price' => 298000,
+            'cost_price' => 250000,
+            'is_active' => true,
+        ]);
+        $piece = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Pieces',
+            'selling_price' => 3500,
+            'cost_price' => 2500,
+            'is_active' => true,
+            'allow_fractional_quantity' => true,
+            'quantity_precision' => 2,
+        ]);
+
+        $sale = Sale::create([
+            'sale_no' => 'RCPT-SUMMARY-1',
+            'sale_date' => '2026-05-01',
+            'store_id' => $store->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $cash->id,
+            'subtotal' => 894875,
+            'total_amount' => 894875,
+            'amount_paid' => 894875,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $box->id,
+            'quantity' => 2,
+            'unit_price' => 298000,
+            'line_total' => 596000,
+        ]);
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $box->id,
+            'quantity' => 1,
+            'unit_price' => 298000,
+            'line_total' => 298000,
+        ]);
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $piece->id,
+            'quantity' => 0.25,
+            'unit_price' => 3500,
+            'line_total' => 875,
+        ]);
+
+        $outsideDateSale = Sale::create([
+            'sale_no' => 'RCPT-SUMMARY-OLD',
+            'sale_date' => '2026-04-30',
+            'store_id' => $store->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $cash->id,
+            'subtotal' => 111,
+            'total_amount' => 111,
+            'amount_paid' => 111,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+        SaleItem::create([
+            'sale_id' => $outsideDateSale->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $piece->id,
+            'quantity' => 1,
+            'unit_price' => 111,
+            'line_total' => 111,
+        ]);
+
+        $voidSale = Sale::create([
+            'sale_no' => 'RCPT-SUMMARY-VOID',
+            'sale_date' => '2026-05-01',
+            'store_id' => $store->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $cash->id,
+            'subtotal' => 999,
+            'total_amount' => 999,
+            'amount_paid' => 999,
+            'balance_due' => 0,
+            'status' => 'void',
+        ]);
+        SaleItem::create([
+            'sale_id' => $voidSale->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $piece->id,
+            'quantity' => 1,
+            'unit_price' => 999,
+            'line_total' => 999,
+        ]);
+
+        $branchSale = Sale::create([
+            'sale_no' => 'RCPT-SUMMARY-BRANCH',
+            'sale_date' => '2026-05-01',
+            'store_id' => $otherStore->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $mobile->id,
+            'subtotal' => 1234,
+            'total_amount' => 1234,
+            'amount_paid' => 1234,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+        SaleItem::create([
+            'sale_id' => $branchSale->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $piece->id,
+            'quantity' => 1,
+            'unit_price' => 1234,
+            'line_total' => 1234,
+        ]);
+
+        $this->get('/reports/daily-sales-summary?date_from=2026-05-01&date_to=2026-05-01&store_id='.$store->id)
+            ->assertOk()
+            ->assertSee('APPLES OF GOLD WHOLESALERS')
+            ->assertSee('Summary Cash Sales/Income by Shop Report')
+            ->assertSee('SHOP: Main Shop')
+            ->assertSee('Cash Sale')
+            ->assertSee('Total Cash Sale')
+            ->assertSee('DETTOL FRESH SOAP 90G - Boxes')
+            ->assertSee('DETTOL FRESH SOAP 90G - Pieces')
+            ->assertSee('3')
+            ->assertSee('0.25')
+            ->assertSee('UGX 298,000')
+            ->assertSee('UGX 894,000')
+            ->assertSee('UGX 3,500')
+            ->assertSee('UGX 875')
+            ->assertSee('Grand Total')
+            ->assertSee('UGX 894,875')
+            ->assertDontSee('UGX 111')
+            ->assertDontSee('UGX 999')
+            ->assertDontSee('SHOP: Branch Shop')
+            ->assertDontSee('UGX 1,234');
+
+        $excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        $this->get('/reports/daily-sales-summary/export?date_from=2026-05-01&date_to=2026-05-01')
+            ->assertOk()
+            ->assertHeader('content-type', $excelMime);
     }
 
     public function test_management_centre_loads_with_grouped_existing_shortcuts(): void
@@ -2739,6 +2894,7 @@ class WorkflowTest extends TestCase
             ->assertSee(route('sales.create', [], false), false)
             ->assertSee(route('purchases.create', [], false), false)
             ->assertSee(route('stock.balances', [], false), false)
+            ->assertSee(route('reports.daily-sales-summary', [], false), false)
             ->assertSee(route('reports.financial-summary', [], false), false)
             ->assertSee(route('products.create', [], false), false);
     }
@@ -3385,7 +3541,8 @@ class WorkflowTest extends TestCase
         PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
         PaymentMode::create(['name' => 'Card', 'is_active' => true]);
         PaymentMode::create(['name' => 'Credit', 'is_active' => true]);
-        $product = Product::create(['name' => 'GONJA CRISPS EXTRA LONG WHOLESALE PACK', 'code' => 'GONJA-001', 'is_active' => true]);
+        $category = Category::create(['name' => 'BATHING SOAP']);
+        $product = Product::create(['name' => 'GONJA CRISPS EXTRA LONG WHOLESALE PACK', 'code' => 'GONJA-001', 'category_id' => $category->id, 'is_active' => true]);
         ProductUnit::create([
             'product_id' => $product->id,
             'unit_name' => 'box',
@@ -3410,16 +3567,33 @@ class WorkflowTest extends TestCase
             ->assertSee('id="product-search-results"', false)
             ->assertSee('class="sale-floating-results"', false)
             ->assertSee('role="listbox"', false)
+            ->assertSee('z-index: 12050', false)
+            ->assertSee('z-index: 12040', false)
+            ->assertSee('z-index: 12045', false)
+            ->assertSee('min-height: 38px', false)
+            ->assertSee('padding: 4px 6px', false)
+            ->assertSee('min-width: min(650px, calc(100vw - 32px))', false)
+            ->assertSee('width: min(900px, calc(100vw - 330px))', false)
             ->assertSee('max-width: 100%', false)
             ->assertSee('overflow-x: clip', false)
             ->assertSee('Quick Pick')
             ->assertSee('id="quick-pick-results"', false)
             ->assertSee('GONJA CRISPS EXTRA LONG WHOLESALE PACK - box')
+            ->assertSee('Product / Pack')
+            ->assertSee('Category')
+            ->assertSee('Code / Barcode')
+            ->assertSee('Unit')
+            ->assertSee('Price')
             ->assertSee('GONJA-001')
             ->assertSee('6001234567890')
+            ->assertSee('BATHING SOAP')
+            ->assertSee('"category_name":"BATHING SOAP"', false)
             ->assertSee('"unit_name":"box"', false)
             ->assertSee('"price":114000', false)
+            ->assertSee('sale-search-results-table', false)
+            ->assertSee('sale-search-results-head', false)
             ->assertSee('sale-search-result-name', false)
+            ->assertSee('sale-result-cell', false)
             ->assertSee('product-unit-chip', false)
             ->assertSee('sale-search-result-side', false)
             ->assertSee("event.key === 'ArrowDown'", false)
@@ -3470,7 +3644,8 @@ class WorkflowTest extends TestCase
             ->assertSee('cart.unshift', false)
             ->assertSee('cart.splice(existingIndex, 1)', false)
             ->assertSee('cartList.scrollTop = 0', false)
-            ->assertSee('<strong>${item.label}</strong>', false);
+            ->assertSee('<strong>${item.label}</strong>', false)
+            ->assertDontSee('<span class="readiness-chip">${escapeHtml(item.part_number || \'Ready\')}</span>', false);
     }
 
     public function test_permissions_matrix_can_be_updated_from_one_page(): void

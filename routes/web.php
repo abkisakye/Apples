@@ -114,6 +114,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/reports/payment-methods', [ReportController::class, 'paymentMethods'])->middleware('ability:reports.view')->name('reports.payment-methods');
     Route::get('/reports/cashier-performance', [ReportController::class, 'cashierPerformance'])->middleware('ability:reports.view')->name('reports.cashier-performance');
     Route::get('/reports/daily-closing', [ReportController::class, 'dailyClosing'])->middleware('ability:reports.view')->name('reports.daily-closing');
+    Route::get('/reports/daily-sales-summary', [ReportController::class, 'dailySalesSummary'])->middleware('ability:reports.view')->name('reports.daily-sales-summary');
+    Route::get('/reports/daily-sales-summary/export', [ReportController::class, 'dailySalesSummaryExport'])->middleware('ability:reports.view')->name('reports.daily-sales-summary.export');
     Route::get('/expenses', [ExpenseController::class, 'index'])->middleware('ability:expenses.view')->name('expenses.index');
     Route::get('/expenses/create', [ExpenseController::class, 'create'])->middleware('ability:expenses.manage')->name('expenses.create');
     Route::post('/expenses', [ExpenseController::class, 'store'])->middleware('ability:expenses.manage')->name('expenses.store');

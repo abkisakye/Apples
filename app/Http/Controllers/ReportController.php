@@ -277,6 +277,67 @@ class ReportController extends Controller
         ]);
     }
 
+    public function dailySalesSummary(Request $request): View
+    {
+        $data = $this->dailySalesSummaryData($request);
+
+        return view('reports.daily_sales_summary', $data);
+    }
+
+    public function dailySalesSummaryExport(Request $request, ExcelExportService $excelExportService): BinaryFileResponse
+    {
+        $data = $this->dailySalesSummaryData($request);
+        $rows = collect();
+
+        foreach ($data['shopGroups'] as $shopGroup) {
+            foreach ($shopGroup['saleGroups'] as $saleGroup) {
+                foreach ($saleGroup['rows'] as $index => $row) {
+                    $rows->push([
+                        $shopGroup['store_name'],
+                        $saleGroup['label'],
+                        $index + 1,
+                        $row->item_label,
+                        (float) $row->quantity,
+                        round((float) $row->average_rate, 2),
+                        round((float) $row->total_amount, 2),
+                    ]);
+                }
+
+                $rows->push([
+                    $shopGroup['store_name'],
+                    'Total '.$saleGroup['label'],
+                    '',
+                    '',
+                    '',
+                    '',
+                    round((float) $saleGroup['total'], 2),
+                ]);
+            }
+
+            $rows->push([
+                'Total '.$shopGroup['store_name'],
+                '',
+                '',
+                '',
+                '',
+                '',
+                round((float) $shopGroup['total'], 2),
+            ]);
+        }
+
+        $rows->push(['Grand Total', '', '', '', '', '', round((float) $data['grandTotal'], 2)]);
+
+        return $excelExportService->download('daily-sales-summary.xlsx', [
+            'Shop',
+            'Sale Group',
+            'S/N',
+            'Item',
+            'Qty',
+            'Av. rate',
+            'Total Amount',
+        ], $rows);
+    }
+
     public function customerAging(): View
     {
         $today = now()->startOfDay();
@@ -407,6 +468,118 @@ class ReportController extends Controller
         }
 
         return array_map(fn ($value) => round($value, 2), $buckets);
+    }
+
+    private function dailySalesSummaryData(Request $request): array
+    {
+        [$fromDate, $toDate] = $this->resolveDateRange($request, 'today');
+
+        $storeId = (int) $request->integer('store_id');
+        $paymentModeId = (int) $request->integer('payment_mode_id');
+        $saleType = trim((string) $request->string('sale_type'));
+        $status = trim((string) $request->string('status', 'posted')) ?: 'posted';
+
+        $query = SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('stores', 'stores.id', '=', 'sales.store_id')
+            ->leftJoin('payment_modes', 'payment_modes.id', '=', 'sales.payment_mode_id')
+            ->join('products', 'products.id', '=', 'sale_items.product_id')
+            ->join('product_units', 'product_units.id', '=', 'sale_items.product_unit_id')
+            ->whereDate('sales.sale_date', '>=', $fromDate)
+            ->whereDate('sales.sale_date', '<=', $toDate)
+            ->whereNotIn('sales.status', ['void', 'voided', 'cancelled', 'canceled'])
+            ->when($status !== 'all', fn ($inner) => $inner->where('sales.status', $status))
+            ->when($storeId > 0, fn ($inner) => $inner->where('sales.store_id', $storeId))
+            ->when($paymentModeId > 0, fn ($inner) => $inner->where('sales.payment_mode_id', $paymentModeId))
+            ->when($saleType !== '' && $saleType !== 'all', fn ($inner) => $inner->where('sales.sale_type', $saleType))
+            ->selectRaw('
+                sales.store_id,
+                stores.name as store_name,
+                sales.payment_mode_id,
+                COALESCE(payment_modes.name, "") as payment_mode_name,
+                sales.sale_type,
+                sale_items.product_id,
+                sale_items.product_unit_id,
+                products.name as product_name,
+                product_units.unit_name,
+                sale_items.unit_price,
+                COALESCE(SUM(sale_items.quantity), 0) as quantity,
+                COALESCE(SUM(sale_items.line_total), 0) as total_amount
+            ')
+            ->groupBy(
+                'sales.store_id',
+                'stores.name',
+                'sales.payment_mode_id',
+                'payment_modes.name',
+                'sales.sale_type',
+                'sale_items.product_id',
+                'sale_items.product_unit_id',
+                'products.name',
+                'product_units.unit_name',
+                'sale_items.unit_price'
+            )
+            ->orderBy('stores.name')
+            ->orderBy('payment_modes.name')
+            ->orderBy('sales.sale_type')
+            ->orderBy('products.name')
+            ->orderBy('product_units.unit_name');
+
+        $rows = $query->get()->map(function ($row) {
+            $quantity = (float) $row->quantity;
+            $totalAmount = (float) $row->total_amount;
+            $row->item_label = trim($row->product_name.' - '.$row->unit_name);
+            $row->sale_group_label = $this->saleGroupLabel((string) $row->sale_type, (string) $row->payment_mode_name);
+            $row->average_rate = $quantity != 0.0 ? round($totalAmount / $quantity, 2) : 0.0;
+
+            return $row;
+        });
+
+        $shopGroups = $rows
+            ->groupBy('store_id')
+            ->map(function (Collection $storeRows) {
+                $saleGroups = $storeRows
+                    ->groupBy('sale_group_label')
+                    ->map(fn (Collection $groupRows, string $label) => [
+                        'label' => $label,
+                        'rows' => $groupRows->values(),
+                        'total' => (float) $groupRows->sum('total_amount'),
+                    ])
+                    ->values();
+
+                return [
+                    'store_id' => (int) $storeRows->first()->store_id,
+                    'store_name' => $storeRows->first()->store_name,
+                    'saleGroups' => $saleGroups,
+                    'total' => (float) $storeRows->sum('total_amount'),
+                ];
+            })
+            ->values();
+
+        return [
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
+            'filters' => [
+                'store_id' => $storeId,
+                'payment_mode_id' => $paymentModeId,
+                'sale_type' => $saleType,
+                'status' => $status,
+            ],
+            'stores' => DB::table('stores')->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'paymentModes' => DB::table('payment_modes')->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'shopGroups' => $shopGroups,
+            'grandTotal' => (float) $rows->sum('total_amount'),
+        ];
+    }
+
+    private function saleGroupLabel(string $saleType, string $paymentModeName): string
+    {
+        if ($saleType === 'credit') {
+            return 'Credit Sale';
+        }
+
+        $mode = trim($paymentModeName);
+
+        return $mode !== '' ? $mode.' Sale' : ucfirst($saleType ?: 'cash').' Sale';
     }
 
     private function resolveDateRange(Request $request, string $defaultPeriod = 'month'): array

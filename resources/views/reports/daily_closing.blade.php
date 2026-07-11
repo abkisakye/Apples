@@ -10,6 +10,7 @@
             <p>Use this page at the end of the day to review sales, discounts, returns, collections, expenses, and shift cash reconciliation.</p>
         </div>
         <div class="actions">
+            <a href="{{ route('reports.daily-sales-summary', ['date_from' => $date, 'date_to' => $date]) }}" class="button-link">Daily Sales Summary</a>
             <a href="{{ route('reports.financial-summary') }}" class="button-link">Financial Summary</a>
             <a href="{{ route('reports.payment-methods', ['from' => $date, 'to' => $date]) }}" class="button-link">Payment Methods</a>
             <a href="{{ route('cash-shifts.index', ['period' => 'today']) }}" class="button-link">Cash Shifts</a>

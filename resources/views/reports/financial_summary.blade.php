@@ -9,6 +9,7 @@
             <p>This report shows sales, discounts, cost of goods sold, expenses, and profit for the selected period.</p>
         </div>
         <div class="actions">
+            <a href="{{ route('reports.daily-sales-summary', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Daily Sales Summary</a>
             <a href="{{ route('reports.daily-closing') }}" class="button-link">Daily Closing</a>
             <a href="{{ route('reports.payment-methods') }}" class="button-link">Payment Methods</a>
             <a href="{{ route('reports.cashier-performance') }}" class="button-link">Cashier Performance</a>
