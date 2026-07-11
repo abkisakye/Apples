@@ -34,6 +34,10 @@
         }
         * { box-sizing: border-box; }
         html { scroll-behavior: smooth; }
+        html, body {
+            max-width: 100%;
+            overflow-x: clip;
+        }
         body {
             margin: 0;
             font-family: "Trebuchet MS", "Segoe UI", sans-serif;
@@ -51,6 +55,7 @@
             display: grid;
             grid-template-columns: 252px minmax(0, 1fr);
             min-height: 100vh;
+            max-width: 100%;
         }
         .sidebar {
             background:
@@ -79,7 +84,11 @@
         }
         .brand {
             position: relative;
-            padding: 12px 12px 16px;
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr);
+            gap: 10px;
+            align-items: center;
+            padding: 12px;
             margin-bottom: 10px;
             border-radius: 16px;
             background:
@@ -88,47 +97,29 @@
             border: 1px solid rgba(255,255,255,.10);
             overflow: hidden;
         }
-        .brand::before {
-            content: "";
-            position: absolute;
-            top: 14px;
-            right: 16px;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 30% 30%, #f5dc83 0%, var(--accent) 48%, #9b7a1e 100%);
-            box-shadow: 0 10px 22px rgba(212, 175, 55, .24);
-        }
-        .brand::after {
-            content: "";
-            position: absolute;
-            top: 10px;
-            right: 11px;
-            width: 10px;
-            height: 7px;
-            border-radius: 10px 10px 2px 10px;
-            background: #8ab857;
-            transform: rotate(-28deg);
-        }
         .brand-logo {
             display: block;
-            max-width: 148px;
-            max-height: 50px;
-            margin-bottom: 10px;
+            width: 42px;
+            height: 42px;
             object-fit: contain;
+            filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .16));
+        }
+        .brand-copy {
+            min-width: 0;
         }
         .brand h1 {
             margin: 0;
-            font-size: 1.28rem;
+            font-size: 1.18rem;
+            line-height: 1.08;
             letter-spacing: .02em;
             color: var(--accent);
             text-shadow: 0 2px 10px rgba(0, 0, 0, .16);
         }
         .brand p {
-            margin: 6px 0 0;
+            margin: 5px 0 0;
             color: #eef5ef;
             line-height: 1.4;
-            font-size: .86rem;
+            font-size: .8rem;
         }
         .role-preview {
             margin-bottom: 14px;
@@ -208,6 +199,7 @@
         .workspace {
             min-width: 0;
             padding: 12px 14px 16px;
+            max-width: 100%;
         }
         .topbar {
             display: flex;
@@ -316,6 +308,8 @@
         .page {
             max-width: 1260px;
             margin: 0 auto;
+            min-width: 0;
+            width: 100%;
         }
         main {
             min-width: 0;
@@ -346,6 +340,7 @@
             margin-bottom: 12px;
         }
         .card, .panel {
+            min-width: 0;
             background: var(--panel);
             border: 1px solid var(--line);
             border-radius: 16px;
@@ -373,6 +368,7 @@
             display: grid;
             grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
             gap: 12px;
+            min-width: 0;
         }
         .filters {
             display: flex;
@@ -385,7 +381,7 @@
             border-radius: 12px;
             padding: 8px 10px;
             background: white;
-            min-width: 160px;
+            min-width: min(160px, 100%);
             font-size: .9rem;
         }
         .filters button {
@@ -413,7 +409,9 @@
         .button-link {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
+            min-height: 38px;
             padding: 7px 11px;
             border-radius: 12px;
             border: 1px solid var(--line);
@@ -430,6 +428,9 @@
         .table-wrap {
             overflow-x: auto;
             overflow-y: visible;
+            max-width: 100%;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-x: contain;
         }
         table {
             width: 100%;
@@ -747,6 +748,9 @@
             color: var(--ink);
             font-size: .88rem;
         }
+        img, svg, canvas, video {
+            max-width: 100%;
+        }
         .form-field textarea { resize: vertical; }
         @media (max-width: 1280px) {
             .shell {
@@ -789,17 +793,24 @@
                 flex-direction: column;
                 align-items: stretch;
             }
+            .topbar {
+                gap: 10px;
+            }
             .topbar-meta {
                 justify-content: flex-start;
             }
             .topbar-tools {
                 justify-content: stretch;
             }
+            .topbar-tools > * {
+                min-width: 0;
+            }
             .topbar-form {
                 width: 100%;
             }
             .page-head {
                 align-items: stretch;
+                gap: 10px;
             }
             .page-head h2 {
                 font-size: 1.34rem;
@@ -809,6 +820,15 @@
             }
             .filters {
                 flex-direction: column;
+            }
+            .filters input,
+            .filters select,
+            .filters button {
+                width: 100%;
+                min-height: 42px;
+            }
+            .form-grid {
+                grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
             }
             .actions {
                 width: 100%;
@@ -852,6 +872,40 @@
             }
         }
         @media (max-width: 680px) {
+            .workspace {
+                padding: 8px;
+            }
+            .topbar {
+                padding: 9px;
+                border-radius: 13px;
+            }
+            .topbar-title {
+                gap: 8px;
+            }
+            .topbar-title h2 {
+                font-size: 1.08rem;
+            }
+            .brand {
+                grid-template-columns: 38px minmax(0, 1fr);
+                gap: 9px;
+            }
+            .brand-logo {
+                width: 38px;
+                height: 38px;
+            }
+            .brand h1 {
+                font-size: 1.08rem;
+            }
+            .brand p {
+                font-size: .76rem;
+            }
+            .page-head h2 {
+                font-size: 1.18rem;
+            }
+            .page-head p,
+            .list-note {
+                font-size: .84rem;
+            }
             .sidebar {
                 padding: 14px 12px;
                 width: min(88vw, 280px);
@@ -861,6 +915,15 @@
             }
             .cards {
                 grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .card,
+            .panel {
+                border-radius: 13px;
+            }
+            .card,
+            .panel {
+                padding: 10px;
             }
             .topbar-chip {
                 width: 100%;
@@ -868,6 +931,23 @@
             }
             table {
                 min-width: 500px;
+            }
+            .table-mobile-friendly table {
+                min-width: 560px;
+            }
+            .button-link,
+            button,
+            .action-chip,
+            .row-action-link {
+                min-height: 42px;
+            }
+            .form-field input,
+            .form-field select,
+            .form-field textarea,
+            table select,
+            table input {
+                min-height: 42px;
+                font-size: 16px;
             }
         }
     </style>
@@ -946,11 +1026,11 @@
         <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
         <aside class="sidebar" id="app-sidebar">
             <div class="brand">
-                @if (config('business.logo_url'))
-                    <img src="{{ config('business.logo_url') }}" alt="{{ config('business.name', 'Apples Of Gold') }} logo" class="brand-logo">
-                @endif
-                <h1>{{ config('business.name', 'Apples Of Gold') }}</h1>
-                <p>{{ config('business.tagline', 'Business Management System') }}</p>
+                <img src="{{ config('business.logo_url') ?: asset('brand/apples-icon.png') }}" alt="{{ config('business.name', 'Apples Of Gold') }} logo" class="brand-logo">
+                <div class="brand-copy">
+                    <h1>{{ config('business.name', 'Apples Of Gold') }}</h1>
+                    <p>{{ config('business.tagline', 'Business Management System') }}</p>
+                </div>
             </div>
             @if (app()->environment('local') && $access->hasRole('admin'))
                 <form method="post" action="{{ route('access.preview-role') }}" class="role-preview">

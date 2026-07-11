@@ -125,6 +125,23 @@
             .management-links {
                 grid-template-columns: 1fr;
             }
+
+            .management-hero {
+                padding: 12px;
+            }
+
+            .management-hero h2 {
+                font-size: 1.24rem;
+            }
+
+            .management-quick-actions .button-link,
+            .management-link {
+                width: 100%;
+            }
+
+            .management-link {
+                min-height: 0;
+            }
         }
     </style>
 

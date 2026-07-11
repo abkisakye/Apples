@@ -2734,6 +2734,8 @@ class WorkflowTest extends TestCase
             ->assertSee('Accounts')
             ->assertSee('Reports')
             ->assertSee('Setup')
+            ->assertSee('@media (max-width: 720px)', false)
+            ->assertSee('.management-quick-actions .button-link', false)
             ->assertSee(route('sales.create', [], false), false)
             ->assertSee(route('purchases.create', [], false), false)
             ->assertSee(route('stock.balances', [], false), false)
@@ -3282,7 +3284,10 @@ class WorkflowTest extends TestCase
 
         $this->get('/sales/create')
             ->assertOk()
-            ->assertSee('Client Demo Stores');
+            ->assertSee('Client Demo Stores')
+            ->assertSee('class="brand-logo"', false)
+            ->assertSee('brand/apples-icon.png', false)
+            ->assertSee('class="brand-copy"', false);
 
         $store = Store::create(['name' => 'Demo Store', 'is_active' => true]);
         $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
@@ -3405,6 +3410,8 @@ class WorkflowTest extends TestCase
             ->assertSee('id="product-search-results"', false)
             ->assertSee('class="sale-floating-results"', false)
             ->assertSee('role="listbox"', false)
+            ->assertSee('max-width: 100%', false)
+            ->assertSee('overflow-x: clip', false)
             ->assertSee('Quick Pick')
             ->assertSee('id="quick-pick-results"', false)
             ->assertSee('GONJA CRISPS EXTRA LONG WHOLESALE PACK - box')
@@ -3439,6 +3446,12 @@ class WorkflowTest extends TestCase
             ->assertSee('grid-template-rows: auto minmax(0, 1fr) auto', false)
             ->assertSee('max-height: calc(100vh - 300px)', false)
             ->assertSee('overscroll-behavior: contain', false)
+            ->assertSee('@media (max-width: 1320px) and (min-width: 1181px)', false)
+            ->assertSee('@media (max-width: 1180px) and (min-width: 901px)', false)
+            ->assertSee('@media (max-width: 900px)', false)
+            ->assertSee('order: 1', false)
+            ->assertSee('order: 2', false)
+            ->assertSee('top: 118px', false)
             ->assertSee('Product / Pack')
             ->assertSee('Qty')
             ->assertSee('Price')
