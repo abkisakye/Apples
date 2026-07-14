@@ -309,6 +309,158 @@ class WorkflowTest extends TestCase
             ->assertDontSee('STOCK-PURCHASE-TEST');
     }
 
+    public function test_listing_pages_have_live_search_and_keep_server_side_filtering(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $matchCustomer = Customer::create(['name' => 'Live Search Customer', 'phone' => '0700000001', 'is_active' => true]);
+        $otherCustomer = Customer::create(['name' => 'Quiet Customer', 'phone' => '0700000002', 'is_active' => true]);
+        $matchSupplier = Supplier::create(['name' => 'Live Search Supplier', 'phone' => '0710000001', 'is_active' => true]);
+        $otherSupplier = Supplier::create(['name' => 'Quiet Supplier', 'phone' => '0710000002', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        $matchPurchase = Purchase::create([
+            'purchase_no' => 'PO-LIVE-SEARCH',
+            'purchase_date' => '2026-07-10',
+            'store_id' => $store->id,
+            'supplier_id' => $matchSupplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 1000,
+            'total_amount' => 1000,
+            'amount_paid' => 1000,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+        Purchase::create([
+            'purchase_no' => 'PO-QUIET',
+            'purchase_date' => '2026-07-10',
+            'store_id' => $store->id,
+            'supplier_id' => $otherSupplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 2000,
+            'total_amount' => 2000,
+            'amount_paid' => 2000,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+
+        $matchSale = Sale::create([
+            'sale_no' => 'RCPT-LIVE-SEARCH',
+            'sale_date' => '2026-07-11',
+            'store_id' => $store->id,
+            'customer_id' => $matchCustomer->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 1500,
+            'total_amount' => 1500,
+            'amount_paid' => 1500,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+        Sale::create([
+            'sale_no' => 'RCPT-QUIET',
+            'sale_date' => '2026-07-11',
+            'store_id' => $store->id,
+            'customer_id' => $otherCustomer->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 2500,
+            'total_amount' => 2500,
+            'amount_paid' => 2500,
+            'balance_due' => 0,
+            'status' => 'posted',
+        ]);
+
+        \App\Models\CustomerPayment::create([
+            'payment_no' => 'CP-LIVE-SEARCH',
+            'payment_date' => '2026-07-11',
+            'customer_id' => $matchCustomer->id,
+            'sale_id' => $matchSale->id,
+            'store_id' => $store->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount' => 500,
+            'status' => 'posted',
+        ]);
+        \App\Models\CustomerPayment::create([
+            'payment_no' => 'CP-QUIET',
+            'payment_date' => '2026-07-11',
+            'customer_id' => $otherCustomer->id,
+            'store_id' => $store->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount' => 600,
+            'status' => 'posted',
+        ]);
+
+        $stockProduct = Product::create(['name' => 'Live Stock Rice', 'code' => 'LIVE-RICE', 'is_active' => true]);
+        $stockUnit = ProductUnit::create([
+            'product_id' => $stockProduct->id,
+            'unit_name' => 'Kg',
+            'conversion_factor' => 1,
+            'selling_price' => 4000,
+            'cost_price' => 3000,
+            'is_active' => true,
+        ]);
+        $otherStockProduct = Product::create(['name' => 'Quiet Stock Beans', 'code' => 'QUIET-BEANS', 'is_active' => true]);
+        $otherStockUnit = ProductUnit::create([
+            'product_id' => $otherStockProduct->id,
+            'unit_name' => 'Kg',
+            'conversion_factor' => 1,
+            'selling_price' => 5000,
+            'cost_price' => 3500,
+            'is_active' => true,
+        ]);
+        $this->seedStock($store, $stockUnit, 10, '2026-07-10', 'SEED-LIVE-RICE');
+        $this->seedStock($store, $otherStockUnit, 10, '2026-07-10', 'SEED-QUIET-BEANS');
+
+        $this->get('/purchases?q=LIVE')
+            ->assertOk()
+            ->assertSee('data-live-search-form', false)
+            ->assertSee('data-live-search-input', false)
+            ->assertSee($matchPurchase->purchase_no)
+            ->assertDontSee('PO-QUIET');
+
+        $this->get('/customers?q=Live')
+            ->assertOk()
+            ->assertSee('data-live-search-form', false)
+            ->assertSee('data-live-search-input', false)
+            ->assertSee($matchCustomer->name)
+            ->assertDontSee($otherCustomer->name);
+
+        $this->get('/customer-payments?q=CP-LIVE')
+            ->assertOk()
+            ->assertSee('data-live-search-form', false)
+            ->assertSee('data-live-search-input', false)
+            ->assertSee('CP-LIVE-SEARCH')
+            ->assertDontSee('CP-QUIET');
+
+        $this->get('/suppliers?q=Live')
+            ->assertOk()
+            ->assertSee('data-live-search-form', false)
+            ->assertSee('data-live-search-input', false)
+            ->assertSee($matchSupplier->name)
+            ->assertDontSee($otherSupplier->name);
+
+        $this->get('/stock/balances?q=LIVE-RICE')
+            ->assertOk()
+            ->assertSee('data-live-search-form', false)
+            ->assertSee('data-live-search-input', false)
+            ->assertSee('Live Stock Rice')
+            ->assertDontSee('Quiet Stock Beans');
+
+        $this->get('/sales?q=RCPT-LIVE')
+            ->assertOk()
+            ->assertSee('data-live-search-form', false)
+            ->assertSee('data-live-search-input', false)
+            ->assertSee('RCPT-LIVE-SEARCH')
+            ->assertDontSee('RCPT-QUIET');
+
+        $this->get('/sales')
+            ->assertOk()
+            ->assertSee('form.requestSubmit()', false)
+            ->assertSee('data-live-search-delay="450"', false);
+    }
+
     public function test_customer_payment_reduces_credit_sale_balance(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
@@ -3828,6 +3980,109 @@ class WorkflowTest extends TestCase
             ->assertSee('cartList.scrollTop = 0', false)
             ->assertSee('<strong>${item.label}</strong>', false)
             ->assertDontSee('<span class="readiness-chip">${escapeHtml(item.part_number || \'Ready\')}</span>', false);
+    }
+
+    public function test_pos_search_shows_base_stock_and_sells_pieces_after_carton_purchase(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $this->app['auth']->user()->update(['default_store_id' => $store->id]);
+        $walkInCustomer = Customer::create(['name' => 'Walk-in Customer', 'is_walk_in' => true, 'is_system' => true, 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Soap Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'DETTOL ACTIVE SOAP 90G', 'code' => 'IMP000013', 'is_active' => true]);
+        $carton = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Cartons',
+            'conversion_factor' => 24,
+            'selling_price' => 298000,
+            'cost_price' => 240000,
+            'is_active' => true,
+        ]);
+        $piece = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Pieces',
+            'conversion_factor' => 1,
+            'selling_price' => 3500,
+            'cost_price' => 2500,
+            'is_active' => true,
+            'is_base_unit' => true,
+        ]);
+
+        $purchaseResponse = $this->post('/purchases', [
+            'purchase_date' => '2026-07-11',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 2400000,
+            'items' => [
+                ['product_unit_id' => $carton->id, 'quantity' => 10, 'unit_cost' => 240000],
+            ],
+        ]);
+
+        $purchase = Purchase::query()->firstOrFail();
+        $purchaseResponse->assertRedirect('/purchases/'.$purchase->id);
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'purchase',
+            'product_unit_id' => $carton->id,
+            'quantity_in' => 10,
+            'base_quantity_in' => 240,
+            'conversion_factor_snapshot' => 24,
+        ]);
+
+        $this->get('/sales/create')
+            ->assertOk()
+            ->assertSee('DETTOL ACTIVE SOAP 90G - Pieces')
+            ->assertSee('"unit_name":"Pieces"', false)
+            ->assertSee('"base_stock_label":"240 Pieces"', false)
+            ->assertSee('"units_available_label":"Cartons, Pieces"', false)
+            ->assertSee('Available base stock:', false)
+            ->assertSee('Units available:', false)
+            ->assertSee('data-add-unit', false);
+
+        $saleResponse = $this->post('/sales', [
+            'sale_date' => '2026-07-11',
+            'store_id' => $store->id,
+            'sale_type' => 'cash',
+            'customer_id' => $walkInCustomer->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 17500,
+            'items' => [
+                ['product_unit_id' => $piece->id, 'quantity' => 5, 'unit_price' => 3500],
+            ],
+        ]);
+
+        $sale = Sale::query()->firstOrFail();
+        $saleResponse->assertRedirect('/sales/'.$sale->id);
+        $this->assertDatabaseHas('sale_items', [
+            'sale_id' => $sale->id,
+            'product_unit_id' => $piece->id,
+            'quantity' => 5,
+            'base_quantity' => 5,
+        ]);
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'sale',
+            'product_unit_id' => $piece->id,
+            'quantity_out' => 5,
+            'base_quantity_out' => 5,
+        ]);
+
+        $failedSaleResponse = $this->from('/sales/create')->post('/sales', [
+            'sale_date' => '2026-07-11',
+            'store_id' => $store->id,
+            'sale_type' => 'cash',
+            'customer_id' => $walkInCustomer->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 1050000,
+            'items' => [
+                ['product_unit_id' => $piece->id, 'quantity' => 300, 'unit_price' => 3500],
+            ],
+        ]);
+
+        $failedSaleResponse
+            ->assertRedirect('/sales/create')
+            ->assertSessionHasErrors('items');
+        $this->assertDatabaseCount('sales', 1);
     }
 
     public function test_permissions_matrix_can_be_updated_from_one_page(): void

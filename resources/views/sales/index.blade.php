@@ -73,8 +73,8 @@
         <div class="card"><div class="label">Outstanding</div><div class="value money">{{ $currency }} {{ number_format((float) $salesCollection->sum('balance_due'), 0) }}</div></div>
     </section>
 
-    <form class="filters desk-filters" method="get">
-        <input type="text" name="q" value="{{ $search }}" placeholder="Search sale number or customer">
+    <form class="filters desk-filters" method="get" data-live-search-form data-live-search-delay="450">
+        <input type="text" name="q" value="{{ $search }}" placeholder="Search sale number or customer" data-live-search-input>
         <select name="type">
             <option value="">All types</option>
             <option value="cash" @selected($type === 'cash')>Cash</option>

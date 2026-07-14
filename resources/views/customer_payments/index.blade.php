@@ -51,8 +51,8 @@
     </div>
 
     <section class="panel desk-panel">
-        <form method="get" class="filters desk-filters">
-            <input type="search" name="q" value="{{ $search }}" placeholder="Search payment no, customer, sale no, or reference">
+        <form method="get" class="filters desk-filters" data-live-search-form data-live-search-delay="450">
+            <input type="search" name="q" value="{{ $search }}" placeholder="Search payment no, customer, sale no, or reference" data-live-search-input>
             <select name="customer_id">
                 <option value="">All customers</option>
                 @foreach ($customers as $customer)

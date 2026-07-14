@@ -26,8 +26,8 @@
         <div class="card"><div class="label">Opening Balance</div><div class="value money">{{ $currency }} {{ number_format((float) $customerSummary['opening_balance'], 0) }}</div></div>
     </section>
 
-    <form class="filters" method="get">
-        <input type="text" name="q" value="{{ $search }}" placeholder="Search name, phone, or location">
+    <form class="filters" method="get" data-live-search-form data-live-search-delay="450">
+        <input type="text" name="q" value="{{ $search }}" placeholder="Search name, phone, or location" data-live-search-input>
         <select name="type">
             <option value="">All account types</option>
             <option value="regular" @selected($accountType === 'regular')>Named customers</option>

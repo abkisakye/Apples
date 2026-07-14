@@ -14,26 +14,47 @@
                 $customer->location,
             ])))),
         ]);
-        $unitsPayload = $productUnits->map(fn ($unit) => [
-            'id' => $unit->id,
-            'label' => trim($unit->product->name.' - '.$unit->unit_name),
-            'product_name' => $unit->product->name,
-            'unit_name' => $unit->unit_name,
-            'category_name' => $unit->product->category?->name,
-            'price' => (float) $unit->selling_price,
-            'barcode' => $unit->barcode,
-            'code' => $unit->product->code,
-            'part_number' => $unit->part_number,
-            'image_url' => null,
-            'search' => strtolower(trim(implode(' ', array_filter([
-                $unit->product->name,
-                $unit->product->category?->name,
-                $unit->unit_name,
-                $unit->product->code,
-                $unit->barcode,
-                $unit->part_number,
-            ])))),
-        ]);
+        $formatBaseQty = function ($quantity) {
+            $formatted = number_format((float) $quantity, 3, '.', '');
+
+            return rtrim(rtrim($formatted, '0'), '.') ?: '0';
+        };
+        $unitsPayload = $productUnits->map(function ($unit) use ($productUnits, $unitsByProduct, $baseStockByProduct, $formatBaseQty) {
+            $productUnitsForBase = $productUnits->where('product_id', $unit->product_id);
+            $baseUnit = $unit->product->base_unit_label
+                ?: $productUnitsForBase->firstWhere('is_base_unit', true)?->unit_name
+                ?: $productUnitsForBase->first(fn ($candidate) => (float) ($candidate->conversion_factor ?? 0) === 1.0)?->unit_name
+                ?: 'base units';
+            $availableBaseStock = (float) ($baseStockByProduct[(int) $unit->product_id] ?? 0);
+            $baseStockLabel = $formatBaseQty($availableBaseStock).' '.$baseUnit;
+            $unitsAvailable = collect($unitsByProduct[(int) $unit->product_id] ?? [])->filter()->implode(', ');
+
+            return [
+                'id' => $unit->id,
+                'label' => trim($unit->product->name.' - '.$unit->unit_name),
+                'product_name' => $unit->product->name,
+                'unit_name' => $unit->unit_name,
+                'category_name' => $unit->product->category?->name,
+                'price' => (float) $unit->selling_price,
+                'barcode' => $unit->barcode,
+                'code' => $unit->product->code,
+                'part_number' => $unit->part_number,
+                'base_stock_label' => $baseStockLabel,
+                'available_base_stock' => $availableBaseStock,
+                'base_unit_label' => $baseUnit,
+                'units_available_label' => $unitsAvailable,
+                'image_url' => null,
+                'search' => strtolower(trim(implode(' ', array_filter([
+                    $unit->product->name,
+                    $unit->product->category?->name,
+                    $unit->unit_name,
+                    $unit->product->code,
+                    $unit->barcode,
+                    $unit->part_number,
+                    $unitsAvailable,
+                ])))),
+            ];
+        });
         $paymentShortcutLabels = [
             'cash' => 'CASH',
             'mobile' => 'MOBILE MONEY',
@@ -2331,7 +2352,9 @@
                             <div class="product-main">
                                 <strong class="product-name">${escapeHtml(item.label)}</strong>
                                 <div class="sale-product-meta">
-                                    ${escapeHtml(productCodeLabel(item))}<br>${escapeHtml(item.part_number || 'Ready')}
+                                    ${escapeHtml(productCodeLabel(item))}
+                                    <br>Available base stock: ${escapeHtml(item.base_stock_label || '0 base units')}
+                                    ${item.units_available_label ? `<br>Units available: ${escapeHtml(item.units_available_label)}` : ''}
                                 </div>
                             </div>
                             <div class="product-action">
@@ -2405,6 +2428,8 @@
                             <button type="button" class="sale-search-result" data-add-unit="${item.id}" data-result-index="${index}" role="option" aria-selected="${index === highlightedResultIndex ? 'true' : 'false'}" title="${escapeHtml(item.label)}">
                                 <span class="sale-result-cell sale-search-result-main">
                                     <strong class="sale-search-result-name">${escapeHtml(item.label)}</strong>
+                                    <span class="sale-search-result-meta">Available base stock: ${escapeHtml(item.base_stock_label || '0 base units')}</span>
+                                    ${item.units_available_label ? `<span class="sale-search-result-meta">Units available: ${escapeHtml(item.units_available_label)}</span>` : ''}
                                 </span>
                                 <span class="sale-result-cell sale-result-muted">${escapeHtml(item.category_name || 'Uncategorized')}</span>
                                 <span class="sale-result-cell sale-result-muted">

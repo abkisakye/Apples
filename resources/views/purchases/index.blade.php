@@ -26,8 +26,8 @@
     </section>
 
     <section class="panel">
-        <form method="get" class="filters">
-            <input type="text" name="q" value="{{ $search }}" placeholder="Search purchase no or supplier">
+        <form method="get" class="filters" data-live-search-form data-live-search-delay="450">
+            <input type="text" name="q" value="{{ $search }}" placeholder="Search purchase no or supplier" data-live-search-input>
             <select name="type">
                 <option value="">All purchase types</option>
                 <option value="cash" @selected($type === 'cash')>Cash purchases</option>

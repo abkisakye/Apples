@@ -59,8 +59,8 @@
     </section>
 
     <section class="panel">
-        <form method="get" class="filters">
-            <input type="text" name="q" value="{{ $filters['q'] }}" placeholder="Search product, code, or unit">
+        <form method="get" class="filters" data-live-search-form data-live-search-delay="450">
+            <input type="text" name="q" value="{{ $filters['q'] }}" placeholder="Search product, code, or unit" data-live-search-input>
             <select name="store_id">
                 <option value="">All stores</option>
                 @foreach ($stores as $store)

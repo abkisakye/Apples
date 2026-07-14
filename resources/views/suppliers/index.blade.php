@@ -25,8 +25,8 @@
         <div class="card"><div class="label">Opening Balance</div><div class="value money">{{ $currency }} {{ number_format((float) $supplierSummary['opening_balance'], 0) }}</div></div>
     </section>
 
-    <form class="filters" method="get">
-        <input type="text" name="q" value="{{ $search }}" placeholder="Search supplier, phone, email, or country">
+    <form class="filters" method="get" data-live-search-form data-live-search-delay="450">
+        <input type="text" name="q" value="{{ $search }}" placeholder="Search supplier, phone, email, or country" data-live-search-input>
         <select name="status">
             <option value="">All statuses</option>
             <option value="active" @selected($statusFilter === 'active')>Active</option>

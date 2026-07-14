@@ -1282,6 +1282,30 @@
                 });
             }
 
+            document.querySelectorAll('[data-live-search-form]').forEach((form) => {
+                const input = form.querySelector('[data-live-search-input]');
+                if (!input) {
+                    return;
+                }
+
+                const delay = Number.parseInt(form.dataset.liveSearchDelay || input.dataset.liveSearchDelay || '450', 10);
+                let timer = null;
+                let previousValue = input.value || '';
+
+                input.addEventListener('input', () => {
+                    window.clearTimeout(timer);
+                    timer = window.setTimeout(() => {
+                        if ((input.value || '') === previousValue) {
+                            return;
+                        }
+
+                        previousValue = input.value || '';
+                        form.querySelectorAll('input[name="page"]').forEach((pageInput) => pageInput.remove());
+                        form.requestSubmit();
+                    }, Number.isFinite(delay) ? delay : 450);
+                });
+            });
+
             document.addEventListener('keydown', (event) => {
                 if (event.key !== 'Escape') {
                     return;

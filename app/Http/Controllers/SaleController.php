@@ -59,7 +59,7 @@ class SaleController extends Controller
         return view('sales.index', compact('sales', 'search', 'type', 'pageTitle', 'dateFrom', 'dateTo'));
     }
 
-    public function create(Request $request): View
+    public function create(Request $request, StockAvailabilityService $stockAvailabilityService): View
     {
         $currentStore = auth()->user()?->defaultStore;
         $correctSaleId = $request->integer('correct_sale_id');
@@ -119,8 +119,25 @@ class SaleController extends Controller
             }
         }
 
+        $displayStore = $currentStore ?? Store::query()->orderBy('name')->first(['id', 'name']);
+        $productUnits = ProductUnit::query()
+            ->with('product.category:id,name')
+            ->where('is_active', true)
+            ->whereHas('product', fn ($query) => $query->where('is_active', true))
+            ->orderBy('product_id')
+            ->orderBy('unit_name')
+            ->get(['id', 'product_id', 'unit_name', 'selling_price', 'cost_price', 'barcode', 'part_number', 'conversion_factor', 'is_base_unit']);
+
+        $unitsByProduct = $productUnits
+            ->groupBy('product_id')
+            ->map(fn ($units) => $units->pluck('unit_name')->filter()->unique()->values()->all());
+
+        $baseStockByProduct = $displayStore?->id
+            ? $stockAvailabilityService->availableBaseQuantities($displayStore->id, $productUnits->pluck('product_id'))
+            : collect();
+
         return view('sales.create', [
-            'currentStore' => $currentStore ?? Store::query()->orderBy('name')->first(['id', 'name']),
+            'currentStore' => $displayStore,
             'customers' => Customer::query()
                 ->where('is_active', true)
                 ->withSum(['sales as outstanding_credit' => fn ($query) => $query->posted()->where('sale_type', 'credit')], 'balance_due')
@@ -129,13 +146,9 @@ class SaleController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'is_walk_in', 'location', 'opening_balance']),
             'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'productUnits' => ProductUnit::query()
-                ->with('product.category:id,name')
-                ->where('is_active', true)
-                ->whereHas('product', fn ($query) => $query->where('is_active', true))
-                ->orderBy('product_id')
-                ->orderBy('unit_name')
-                ->get(['id', 'product_id', 'unit_name', 'selling_price', 'cost_price', 'barcode', 'part_number']),
+            'productUnits' => $productUnits,
+            'unitsByProduct' => $unitsByProduct,
+            'baseStockByProduct' => $baseStockByProduct,
             'sourceSale' => $sourceSale,
             'exchangeReturn' => $exchangeReturn,
             'prefillSale' => $prefill,
