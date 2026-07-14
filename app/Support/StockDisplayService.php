@@ -202,7 +202,12 @@ class StockDisplayService
                 $query->where(function ($inner) use ($search) {
                     $inner->where('name', 'like', "%{$search}%")
                         ->orWhere('code', 'like', "%{$search}%")
-                        ->orWhereHas('units', fn ($unitQuery) => $unitQuery->where('unit_name', 'like', "%{$search}%"));
+                        ->orWhere('base_unit_label', 'like', "%{$search}%")
+                        ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('units', fn ($unitQuery) => $unitQuery
+                            ->where('unit_name', 'like', "%{$search}%")
+                            ->orWhere('barcode', 'like', "%{$search}%")
+                            ->orWhere('part_number', 'like', "%{$search}%"));
                 });
             })
             ->when($categoryId > 0, fn ($query) => $query->where('category_id', $categoryId))
