@@ -2353,8 +2353,8 @@
                                 <strong class="product-name">${escapeHtml(item.label)}</strong>
                                 <div class="sale-product-meta">
                                     ${escapeHtml(productCodeLabel(item))}
-                                    <br>Available base stock: ${escapeHtml(item.base_stock_label || '0 base units')}
-                                    ${item.units_available_label ? `<br>Units available: ${escapeHtml(item.units_available_label)}` : ''}
+                                    <br>Available: ${escapeHtml(item.base_stock_label || '0 base units')}
+                                    ${item.units_available_label ? `<br>Units: ${escapeHtml(item.units_available_label)}` : ''}
                                 </div>
                             </div>
                             <div class="product-action">
@@ -2428,8 +2428,8 @@
                             <button type="button" class="sale-search-result" data-add-unit="${item.id}" data-result-index="${index}" role="option" aria-selected="${index === highlightedResultIndex ? 'true' : 'false'}" title="${escapeHtml(item.label)}">
                                 <span class="sale-result-cell sale-search-result-main">
                                     <strong class="sale-search-result-name">${escapeHtml(item.label)}</strong>
-                                    <span class="sale-search-result-meta">Available base stock: ${escapeHtml(item.base_stock_label || '0 base units')}</span>
-                                    ${item.units_available_label ? `<span class="sale-search-result-meta">Units available: ${escapeHtml(item.units_available_label)}</span>` : ''}
+                                    <span class="sale-search-result-meta">Available: ${escapeHtml(item.base_stock_label || '0 base units')}</span>
+                                    ${item.units_available_label ? `<span class="sale-search-result-meta">Units: ${escapeHtml(item.units_available_label)}</span>` : ''}
                                 </span>
                                 <span class="sale-result-cell sale-result-muted">${escapeHtml(item.category_name || 'Uncategorized')}</span>
                                 <span class="sale-result-cell sale-result-muted">
@@ -2495,7 +2495,8 @@
                                 <div class="bill-row-title" role="cell">
                                     <div>
                                         <strong>${item.label}</strong>
-                                        <div class="bill-row-sub">${item.code || item.barcode || 'No code'}</div>
+                                        <div class="bill-row-sub">${escapeHtml(item.code || item.barcode || 'No code')}</div>
+                                        <div class="bill-row-sub">Available: ${escapeHtml(item.base_stock_label || '0 base units')}${item.units_available_label ? ` | Units: ${escapeHtml(item.units_available_label)}` : ''}</div>
                                     </div>
                                 </div>
                                 <button type="button" class="bill-remove" data-remove-index="${index}" title="Remove item" aria-label="Remove ${item.label}" role="cell">Remove</button>

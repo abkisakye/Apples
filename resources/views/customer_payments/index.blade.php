@@ -50,9 +50,9 @@
         </div>
     </div>
 
-    <section class="panel desk-panel">
-        <form method="get" class="filters desk-filters" data-live-search-form data-live-search-delay="450">
-            <input type="search" name="q" value="{{ $search }}" placeholder="Search payment no, customer, sale no, or reference" data-live-search-input>
+    <section class="panel desk-panel" data-table-live-filter data-table-live-input="#customer-payments-visible-filter">
+        <form method="get" class="filters desk-filters">
+            <input type="search" id="customer-payments-visible-filter" name="q" value="{{ $search }}" placeholder="Filter visible rows" title="Typing filters rows currently on this page. Press Filter to search all records." data-table-live-input>
             <select name="customer_id">
                 <option value="">All customers</option>
                 @foreach ($customers as $customer)
@@ -83,7 +83,7 @@
                 </thead>
                 <tbody>
                     @forelse ($payments as $payment)
-                        <tr>
+                        <tr data-table-live-row>
                             <td>
                                 <div class="cell-stack">
                                     <div class="table-title"><a href="{{ route('customer-payments.show', $payment) }}"><strong>{{ $payment->payment_no }}</strong></a></div>
@@ -154,6 +154,9 @@
                             <td colspan="5" class="muted">No customer payments match this view yet.</td>
                         </tr>
                     @endforelse
+                    <tr data-table-live-empty hidden>
+                        <td colspan="5" class="muted">No matching records found.</td>
+                    </tr>
                 </tbody>
             </table>
         </div>

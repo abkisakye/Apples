@@ -26,8 +26,8 @@
         <div class="card"><div class="label">Opening Balance</div><div class="value money">{{ $currency }} {{ number_format((float) $customerSummary['opening_balance'], 0) }}</div></div>
     </section>
 
-    <form class="filters" method="get" data-live-search-form data-live-search-delay="450">
-        <input type="text" name="q" value="{{ $search }}" placeholder="Search name, phone, or location" data-live-search-input>
+    <form class="filters" method="get">
+        <input type="text" id="customers-visible-filter" name="q" value="{{ $search }}" placeholder="Filter visible rows" title="Typing filters rows currently on this page. Press Filter to search all records." data-table-live-input>
         <select name="type">
             <option value="">All account types</option>
             <option value="regular" @selected($accountType === 'regular')>Named customers</option>
@@ -42,7 +42,7 @@
         <button type="submit">Filter</button>
     </form>
 
-    <div class="panel">
+    <div class="panel" data-table-live-filter data-table-live-input="#customers-visible-filter">
         <p class="list-note">Open a customer profile to review account health quickly, then jump to statement, payment, or a fresh sale from one place.</p>
         <div class="table-wrap table-mobile-friendly">
         <table>
@@ -58,7 +58,7 @@
             <tbody>
                 @forelse ($customers as $customer)
                     @php($currentBalance = round((float) $customer->opening_balance + (float) ($customer->credit_sales_total ?? 0) - (float) ($customer->payments_total ?? 0) - (float) ($customer->returns_total ?? 0), 2))
-                    <tr>
+                    <tr data-table-live-row>
                         <td>
                             <div class="cell-stack">
                                 <div class="table-title">
@@ -168,6 +168,9 @@
                         <td colspan="5" class="muted">No customers match this view yet.</td>
                     </tr>
                 @endforelse
+                <tr data-table-live-empty hidden>
+                    <td colspan="5" class="muted">No matching records found.</td>
+                </tr>
             </tbody>
         </table>
         </div>

@@ -309,7 +309,7 @@ class WorkflowTest extends TestCase
             ->assertDontSee('STOCK-PURCHASE-TEST');
     }
 
-    public function test_listing_pages_have_live_search_and_keep_server_side_filtering(): void
+    public function test_listing_pages_have_live_table_filter_and_keep_server_side_filtering(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
         $matchCustomer = Customer::create(['name' => 'Live Search Customer', 'phone' => '0700000001', 'is_active' => true]);
@@ -415,50 +415,63 @@ class WorkflowTest extends TestCase
 
         $this->get('/purchases?q=LIVE')
             ->assertOk()
-            ->assertSee('data-live-search-form', false)
-            ->assertSee('data-live-search-input', false)
+            ->assertSee('data-table-live-filter', false)
+            ->assertSee('data-table-live-input', false)
+            ->assertSee('data-table-live-row', false)
+            ->assertSee('data-table-live-empty', false)
+            ->assertSee('Filter visible rows')
             ->assertSee($matchPurchase->purchase_no)
             ->assertDontSee('PO-QUIET');
 
         $this->get('/customers?q=Live')
             ->assertOk()
-            ->assertSee('data-live-search-form', false)
-            ->assertSee('data-live-search-input', false)
+            ->assertSee('data-table-live-filter', false)
+            ->assertSee('data-table-live-input', false)
+            ->assertSee('data-table-live-row', false)
+            ->assertSee('data-table-live-empty', false)
             ->assertSee($matchCustomer->name)
             ->assertDontSee($otherCustomer->name);
 
         $this->get('/customer-payments?q=CP-LIVE')
             ->assertOk()
-            ->assertSee('data-live-search-form', false)
-            ->assertSee('data-live-search-input', false)
+            ->assertSee('data-table-live-filter', false)
+            ->assertSee('data-table-live-input', false)
+            ->assertSee('data-table-live-row', false)
+            ->assertSee('data-table-live-empty', false)
             ->assertSee('CP-LIVE-SEARCH')
             ->assertDontSee('CP-QUIET');
 
         $this->get('/suppliers?q=Live')
             ->assertOk()
-            ->assertSee('data-live-search-form', false)
-            ->assertSee('data-live-search-input', false)
+            ->assertSee('data-table-live-filter', false)
+            ->assertSee('data-table-live-input', false)
+            ->assertSee('data-table-live-row', false)
+            ->assertSee('data-table-live-empty', false)
             ->assertSee($matchSupplier->name)
             ->assertDontSee($otherSupplier->name);
 
         $this->get('/stock/balances?q=LIVE-RICE')
             ->assertOk()
-            ->assertSee('data-live-search-form', false)
-            ->assertSee('data-live-search-input', false)
+            ->assertSee('data-table-live-filter', false)
+            ->assertSee('data-table-live-input', false)
+            ->assertSee('data-table-live-row', false)
+            ->assertSee('data-table-live-empty', false)
             ->assertSee('Live Stock Rice')
             ->assertDontSee('Quiet Stock Beans');
 
         $this->get('/sales?q=RCPT-LIVE')
             ->assertOk()
-            ->assertSee('data-live-search-form', false)
-            ->assertSee('data-live-search-input', false)
+            ->assertSee('data-table-live-filter', false)
+            ->assertSee('data-table-live-input', false)
+            ->assertSee('data-table-live-row', false)
+            ->assertSee('data-table-live-empty', false)
             ->assertSee('RCPT-LIVE-SEARCH')
             ->assertDontSee('RCPT-QUIET');
 
         $this->get('/sales')
             ->assertOk()
-            ->assertSee('form.requestSubmit()', false)
-            ->assertSee('data-live-search-delay="450"', false);
+            ->assertSee('data-table-live-filter', false)
+            ->assertSee('No matching records found.');
     }
 
     public function test_customer_payment_reduces_credit_sale_balance(): void
@@ -1221,6 +1234,123 @@ class WorkflowTest extends TestCase
             'unit_name' => 'Carton',
             'is_pos_unit' => true,
         ]);
+    }
+
+    public function test_products_index_uses_server_backed_search_across_pagination(): void
+    {
+        $africaCategory = Category::create(['name' => 'Africa Foods', 'is_active' => true]);
+        $generalCategory = Category::create(['name' => 'General Foods', 'is_active' => true]);
+        $africaSupplier = Supplier::create(['name' => 'Africa Imports', 'is_active' => true]);
+        $generalSupplier = Supplier::create(['name' => 'General Supplier', 'is_active' => true]);
+
+        for ($index = 1; $index <= 25; $index++) {
+            Product::create([
+                'name' => sprintf('AAA Filler Product %02d', $index),
+                'code' => sprintf('FILL-%02d', $index),
+                'category_id' => $generalCategory->id,
+                'supplier_id' => $generalSupplier->id,
+                'is_active' => true,
+            ]);
+        }
+
+        $nameMatch = Product::create([
+            'name' => 'ZZZ Africa Maize Flour',
+            'code' => 'MAIZE-ZZZ',
+            'category_id' => $generalCategory->id,
+            'supplier_id' => $generalSupplier->id,
+            'is_active' => true,
+        ]);
+        $codeMatch = Product::create([
+            'name' => 'Hidden Code Product',
+            'code' => 'AFR-CODE-001',
+            'category_id' => $generalCategory->id,
+            'supplier_id' => $generalSupplier->id,
+            'is_active' => true,
+        ]);
+        $categoryMatch = Product::create([
+            'name' => 'AAB Hidden Millet Flour',
+            'code' => 'HIDDEN-MILLET',
+            'category_id' => $africaCategory->id,
+            'supplier_id' => $generalSupplier->id,
+            'is_active' => true,
+        ]);
+        $supplierMatch = Product::create([
+            'name' => 'AAC Source Matooke Flour',
+            'code' => 'SOURCE-MAT',
+            'category_id' => $generalCategory->id,
+            'supplier_id' => $africaSupplier->id,
+            'is_active' => true,
+        ]);
+        Product::create([
+            'name' => 'Africa Dormant Item',
+            'code' => 'AFR-DORMANT',
+            'category_id' => $africaCategory->id,
+            'supplier_id' => $africaSupplier->id,
+            'is_active' => false,
+        ]);
+
+        for ($index = 1; $index <= 22; $index++) {
+            Product::create([
+                'name' => sprintf('Africa Bulk Item %02d', $index),
+                'code' => sprintf('AFR-BULK-%02d', $index),
+                'category_id' => $africaCategory->id,
+                'supplier_id' => $africaSupplier->id,
+                'is_active' => true,
+            ]);
+        }
+
+        $this->get('/products')
+            ->assertOk()
+            ->assertSee('data-products-live-search-form', false)
+            ->assertSee('data-products-live-search-input', false)
+            ->assertSee('data-products-live-search-results', false)
+            ->assertSee('Searches all products, not only visible rows.')
+            ->assertSee('AAA Filler Product 01')
+            ->assertDontSee($nameMatch->name);
+
+        $this->get('/products?q=AFRICA')
+            ->assertOk()
+            ->assertSee($categoryMatch->name)
+            ->assertSee($supplierMatch->name)
+            ->assertDontSee('AAA Filler Product 01')
+            ->assertSee('q=AFRICA', false)
+            ->assertSee('page=2', false);
+
+        $this->get('/products?q=AFRICA&page=2')
+            ->assertOk()
+            ->assertSee($nameMatch->name);
+
+        $this->get('/products?q=AFR-CODE-001')
+            ->assertOk()
+            ->assertSee($codeMatch->name)
+            ->assertDontSee($nameMatch->name);
+
+        $this->get('/products?q=AFRICA&category='.$africaCategory->id)
+            ->assertOk()
+            ->assertSee($categoryMatch->name)
+            ->assertDontSee($nameMatch->name);
+
+        $this->get('/products?q=AFRICA&supplier_id='.$africaSupplier->id)
+            ->assertOk()
+            ->assertSee($supplierMatch->name)
+            ->assertDontSee($nameMatch->name);
+
+        $this->get('/products?q=AFRICA&status=inactive')
+            ->assertOk()
+            ->assertSee('Africa Dormant Item')
+            ->assertDontSee($nameMatch->name);
+
+        $this->withHeader('X-Requested-With', 'XMLHttpRequest')
+            ->get('/products?q=AFRICA')
+            ->assertOk()
+            ->assertSee($categoryMatch->name)
+            ->assertDontSee('data-products-live-search-form', false);
+
+        $this->withHeader('X-Requested-With', 'XMLHttpRequest')
+            ->get('/products?q=AFRICA&page=2')
+            ->assertOk()
+            ->assertSee($nameMatch->name)
+            ->assertDontSee('data-products-live-search-form', false);
     }
 
     public function test_customer_and_supplier_payment_detail_pages_load(): void
@@ -4036,8 +4166,8 @@ class WorkflowTest extends TestCase
             ->assertSee('"unit_name":"Pieces"', false)
             ->assertSee('"base_stock_label":"240 Pieces"', false)
             ->assertSee('"units_available_label":"Cartons, Pieces"', false)
-            ->assertSee('Available base stock:', false)
-            ->assertSee('Units available:', false)
+            ->assertSee('Available:', false)
+            ->assertSee('Units:', false)
             ->assertSee('data-add-unit', false);
 
         $saleResponse = $this->post('/sales', [

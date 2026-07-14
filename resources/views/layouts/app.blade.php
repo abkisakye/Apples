@@ -1282,28 +1282,43 @@
                 });
             }
 
-            document.querySelectorAll('[data-live-search-form]').forEach((form) => {
-                const input = form.querySelector('[data-live-search-input]');
+            document.querySelectorAll('[data-table-live-filter]').forEach((container) => {
+                const inputSelector = container.dataset.tableLiveInput || '';
+                const input = inputSelector
+                    ? document.querySelector(inputSelector)
+                    : container.querySelector('[data-table-live-input]');
                 if (!input) {
                     return;
                 }
 
-                const delay = Number.parseInt(form.dataset.liveSearchDelay || input.dataset.liveSearchDelay || '450', 10);
-                let timer = null;
-                let previousValue = input.value || '';
+                const rows = Array.from(container.querySelectorAll('[data-table-live-row]'));
+                const empty = container.querySelector('[data-table-live-empty]');
+                if (!rows.length) {
+                    return;
+                }
 
-                input.addEventListener('input', () => {
-                    window.clearTimeout(timer);
-                    timer = window.setTimeout(() => {
-                        if ((input.value || '') === previousValue) {
-                            return;
+                const normalize = (value) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                const filterRows = () => {
+                    const needle = normalize(input.value);
+                    let visibleRows = 0;
+
+                    rows.forEach((row) => {
+                        const haystack = normalize(row.dataset.searchText || row.textContent);
+                        const matched = !needle || haystack.includes(needle);
+
+                        row.hidden = !matched;
+                        if (matched) {
+                            visibleRows += 1;
                         }
+                    });
 
-                        previousValue = input.value || '';
-                        form.querySelectorAll('input[name="page"]').forEach((pageInput) => pageInput.remove());
-                        form.requestSubmit();
-                    }, Number.isFinite(delay) ? delay : 450);
-                });
+                    if (empty) {
+                        empty.hidden = visibleRows > 0;
+                    }
+                };
+
+                input.addEventListener('input', filterRows);
+                filterRows();
             });
 
             document.addEventListener('keydown', (event) => {

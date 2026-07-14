@@ -73,8 +73,8 @@
         <div class="card"><div class="label">Outstanding</div><div class="value money">{{ $currency }} {{ number_format((float) $salesCollection->sum('balance_due'), 0) }}</div></div>
     </section>
 
-    <form class="filters desk-filters" method="get" data-live-search-form data-live-search-delay="450">
-        <input type="text" name="q" value="{{ $search }}" placeholder="Search sale number or customer" data-live-search-input>
+    <form class="filters desk-filters" method="get">
+        <input type="text" id="sales-visible-filter" name="q" value="{{ $search }}" placeholder="Filter visible rows" title="Typing filters rows currently on this page. Press Filter to search all records." data-table-live-input>
         <select name="type">
             <option value="">All types</option>
             <option value="cash" @selected($type === 'cash')>Cash</option>
@@ -83,7 +83,7 @@
         <button type="submit">Filter</button>
     </form>
 
-    <div class="panel desk-panel">
+    <div class="panel desk-panel" data-table-live-filter data-table-live-input="#sales-visible-filter">
         <p class="list-note">This list shows sales receipts and invoices only. Stock purchases are managed from the Purchases page.</p>
         <div class="table-wrap table-mobile-friendly">
         <table>
@@ -98,7 +98,7 @@
             </thead>
             <tbody>
                 @forelse ($sales as $sale)
-                    <tr>
+                    <tr data-table-live-row>
                         <td>
                             <div class="cell-stack">
                                 <div class="table-title"><a href="{{ route('sales.show', $sale) }}">{{ $sale->sale_no }}</a></div>
@@ -172,6 +172,9 @@
                         <td colspan="5" class="muted">No sales match this view yet.</td>
                     </tr>
                 @endforelse
+                <tr data-table-live-empty hidden>
+                    <td colspan="5" class="muted">No matching records found.</td>
+                </tr>
             </tbody>
         </table>
         </div>

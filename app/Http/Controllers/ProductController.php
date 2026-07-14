@@ -28,7 +28,7 @@ class ProductController extends Controller
 
     public function index(Request $request): View
     {
-        $search = trim((string) $request->string('q'));
+        $search = trim((string) ($request->query('q', $request->query('search', ''))));
         $categoryId = $request->integer('category');
         $supplierId = $request->integer('supplier_id');
         $status = trim((string) $request->string('status'));
@@ -36,13 +36,7 @@ class ProductController extends Controller
         $productsQuery = Product::query()
             ->with(['category:id,name', 'supplier:id,name'])
             ->withCount('units')
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($inner) use ($search) {
-                    $inner->where('name', 'like', "%{$search}%")
-                        ->orWhere('code', 'like', "%{$search}%")
-                        ->orWhere('item_group', 'like', "%{$search}%");
-                });
-            })
+            ->when($search !== '', fn ($query) => $this->applyProductSearch($query, $search))
             ->when($categoryId > 0, fn ($query) => $query->where('category_id', $categoryId))
             ->when($supplierId > 0, fn ($query) => $query->where('supplier_id', $supplierId))
             ->when($status === 'active', fn ($query) => $query->where('is_active', true))
@@ -56,19 +50,13 @@ class ProductController extends Controller
         $categories = Category::query()->orderBy('name')->get(['id', 'name']);
         $suppliers = Supplier::query()->orderBy('name')->get(['id', 'name']);
         $summaryBase = Product::query()
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($inner) use ($search) {
-                    $inner->where('name', 'like', "%{$search}%")
-                        ->orWhere('code', 'like', "%{$search}%")
-                        ->orWhere('item_group', 'like', "%{$search}%");
-                });
-            })
+            ->when($search !== '', fn ($query) => $this->applyProductSearch($query, $search))
             ->when($categoryId > 0, fn ($query) => $query->where('category_id', $categoryId))
             ->when($supplierId > 0, fn ($query) => $query->where('supplier_id', $supplierId))
             ->when($status === 'active', fn ($query) => $query->where('is_active', true))
             ->when($status === 'inactive', fn ($query) => $query->where('is_active', false));
 
-        return view('products.index', [
+        $viewData = [
             'products' => $products,
             'productSummary' => [
                 'total' => (clone $summaryBase)->count(),
@@ -82,7 +70,24 @@ class ProductController extends Controller
             'categoryId' => $categoryId,
             'supplierId' => $supplierId,
             'statusFilter' => $status,
-        ]);
+        ];
+
+        if ($request->ajax()) {
+            return view('products.partials.index_results', $viewData);
+        }
+
+        return view('products.index', $viewData);
+    }
+
+    private function applyProductSearch($query, string $search)
+    {
+        return $query->where(function ($inner) use ($search) {
+            $inner->where('name', 'like', "%{$search}%")
+                ->orWhere('code', 'like', "%{$search}%")
+                ->orWhere('item_group', 'like', "%{$search}%")
+                ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery->where('name', 'like', "%{$search}%"))
+                ->orWhereHas('supplier', fn ($supplierQuery) => $supplierQuery->where('name', 'like', "%{$search}%"));
+        });
     }
 
     public function store(Request $request, AuditLogService $auditLogService): RedirectResponse

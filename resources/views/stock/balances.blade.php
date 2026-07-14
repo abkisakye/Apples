@@ -58,9 +58,9 @@
         <div class="card"><div class="label">Negative / Zero</div><div class="value">{{ number_format($rows->filter(fn ($row) => (float) $row->base_balance <= 0)->count()) }}</div></div>
     </section>
 
-    <section class="panel">
-        <form method="get" class="filters" data-live-search-form data-live-search-delay="450">
-            <input type="text" name="q" value="{{ $filters['q'] }}" placeholder="Search product, code, or unit" data-live-search-input>
+    <section class="panel" data-table-live-filter data-table-live-input="#stock-balances-visible-filter">
+        <form method="get" class="filters">
+            <input type="text" id="stock-balances-visible-filter" name="q" value="{{ $filters['q'] }}" placeholder="Filter visible rows" title="Typing filters rows currently on this page. Press Filter to search all records." data-table-live-input>
             <select name="store_id">
                 <option value="">All stores</option>
                 @foreach ($stores as $store)
@@ -88,7 +88,7 @@
             </thead>
             <tbody>
                 @foreach ($rows as $row)
-                    <tr>
+                    <tr data-table-live-row>
                         <td>
                             <div class="stock-unit-title">
                                 <a href="{{ route('stock.product-history', $row->product_id) }}" class="stock-product-link">{{ $row->product_name }}</a>
@@ -159,6 +159,9 @@
                         </td>
                     </tr>
                 @endforeach
+                <tr data-table-live-empty hidden>
+                    <td colspan="4" class="muted">No matching records found.</td>
+                </tr>
             </tbody>
         </table>
         </div>

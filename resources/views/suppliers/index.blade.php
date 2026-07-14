@@ -25,8 +25,8 @@
         <div class="card"><div class="label">Opening Balance</div><div class="value money">{{ $currency }} {{ number_format((float) $supplierSummary['opening_balance'], 0) }}</div></div>
     </section>
 
-    <form class="filters" method="get" data-live-search-form data-live-search-delay="450">
-        <input type="text" name="q" value="{{ $search }}" placeholder="Search supplier, phone, email, or country" data-live-search-input>
+    <form class="filters" method="get">
+        <input type="text" id="suppliers-visible-filter" name="q" value="{{ $search }}" placeholder="Filter visible rows" title="Typing filters rows currently on this page. Press Filter to search all records." data-table-live-input>
         <select name="status">
             <option value="">All statuses</option>
             <option value="active" @selected($statusFilter === 'active')>Active</option>
@@ -35,7 +35,7 @@
         <button type="submit">Filter</button>
     </form>
 
-    <div class="panel">
+    <div class="panel" data-table-live-filter data-table-live-input="#suppliers-visible-filter">
         <p class="list-note">Open a supplier profile to review balances, statement lines, recent payments, and purchases from one place.</p>
         <div class="table-wrap">
             <table>
@@ -55,7 +55,7 @@
                 <tbody>
                     @foreach ($suppliers as $supplier)
                         @php($currentBalance = round((float) $supplier->opening_balance + (float) ($supplier->purchases_total ?? 0) - (float) ($supplier->payments_total ?? 0) - (float) ($supplier->returns_total ?? 0), 2))
-                        <tr>
+                        <tr data-table-live-row>
                             <td>
                                 <div class="table-title">
                                     @if (! $supplier->is_system)
@@ -140,6 +140,9 @@
                             </td>
                         </tr>
                     @endforeach
+                    <tr data-table-live-empty hidden>
+                        <td colspan="9" class="muted">No matching records found.</td>
+                    </tr>
                 </tbody>
             </table>
         </div>

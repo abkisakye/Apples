@@ -25,9 +25,9 @@
         <div class="card"><div class="label">Outstanding</div><div class="value money">{{ number_format($purchaseCollection->sum('balance_due'), 0) }}</div></div>
     </section>
 
-    <section class="panel">
-        <form method="get" class="filters" data-live-search-form data-live-search-delay="450">
-            <input type="text" name="q" value="{{ $search }}" placeholder="Search purchase no or supplier" data-live-search-input>
+    <section class="panel" data-table-live-filter data-table-live-input="#purchases-visible-filter">
+        <form method="get" class="filters">
+            <input type="text" id="purchases-visible-filter" name="q" value="{{ $search }}" placeholder="Filter visible rows" title="Typing filters rows currently on this page. Press Filter to search all records." data-table-live-input>
             <select name="type">
                 <option value="">All purchase types</option>
                 <option value="cash" @selected($type === 'cash')>Cash purchases</option>
@@ -56,7 +56,7 @@
             </thead>
             <tbody>
                 @forelse ($purchases as $purchase)
-                    <tr>
+                    <tr data-table-live-row>
                         <td>
                             <div class="cell-stack">
                                 <div class="table-title"><a href="{{ route('purchases.show', $purchase) }}">{{ $purchase->purchase_no }}</a></div>
@@ -127,6 +127,9 @@
                         <td colspan="5" class="muted">No purchases match this view yet.</td>
                     </tr>
                 @endforelse
+                <tr data-table-live-empty hidden>
+                    <td colspan="5" class="muted">No matching records found.</td>
+                </tr>
             </tbody>
         </table>
         </div>
