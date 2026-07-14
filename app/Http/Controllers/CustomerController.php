@@ -27,7 +27,7 @@ class CustomerController extends Controller
 
     public function index(Request $request): View
     {
-        $search = trim((string) $request->string('q'));
+        $search = trim((string) ($request->query('q', $request->query('search', ''))));
         $accountType = trim((string) $request->string('type'));
         $status = trim((string) $request->string('status'));
 
@@ -41,6 +41,8 @@ class CustomerController extends Controller
                 $query->where(function ($inner) use ($search) {
                     $inner->where('name', 'like', "%{$search}%")
                         ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('customer_type', 'like', "%{$search}%")
                         ->orWhere('location', 'like', "%{$search}%")
                         ->orWhere('address', 'like', "%{$search}%");
                 });
@@ -62,6 +64,8 @@ class CustomerController extends Controller
                 $query->where(function ($inner) use ($search) {
                     $inner->where('name', 'like', "%{$search}%")
                         ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('customer_type', 'like', "%{$search}%")
                         ->orWhere('location', 'like', "%{$search}%")
                         ->orWhere('address', 'like', "%{$search}%");
                 });
@@ -72,7 +76,7 @@ class CustomerController extends Controller
             ->when($status === 'active', fn ($query) => $query->where('is_active', true))
             ->when($status === 'inactive', fn ($query) => $query->where('is_active', false));
 
-        return view('customers.index', [
+        $viewData = [
             'customers' => $customers,
             'search' => $search,
             'accountType' => $accountType,
@@ -84,7 +88,13 @@ class CustomerController extends Controller
                 'credit_accounts' => (clone $summaryBase)->where('credit_limit', '>', 0)->count(),
                 'opening_balance' => (float) (clone $summaryBase)->sum('opening_balance'),
             ],
-        ]);
+        ];
+
+        if ($request->ajax()) {
+            return view('customers.partials.index_results', $viewData);
+        }
+
+        return view('customers.index', $viewData);
     }
 
     public function store(Request $request, AuditLogService $auditLogService): RedirectResponse

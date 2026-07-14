@@ -1216,38 +1216,46 @@
                 }
             });
 
-            const menus = Array.from(document.querySelectorAll('.row-actions-menu'));
-            if (menus.length) {
-                function positionRowActionsMenu(menu) {
-                    if (!menu.open) {
-                        return;
-                    }
+            let menus = [];
 
-                    const toggle = menu.querySelector('.row-actions-toggle');
-                    const dropdown = menu.querySelector('.row-actions-dropdown');
-                    if (!toggle || !dropdown) {
-                        return;
-                    }
-
-                    const toggleRect = toggle.getBoundingClientRect();
-                    const dropdownRect = dropdown.getBoundingClientRect();
-                    const viewportPadding = 12;
-                    const dropdownWidth = dropdownRect.width || 190;
-                    const dropdownHeight = dropdownRect.height || 0;
-                    let left = toggleRect.right - dropdownWidth;
-                    let top = toggleRect.bottom + 8;
-
-                    left = Math.max(viewportPadding, Math.min(left, window.innerWidth - dropdownWidth - viewportPadding));
-
-                    if (dropdownHeight && top + dropdownHeight > window.innerHeight - viewportPadding) {
-                        top = Math.max(viewportPadding, toggleRect.top - dropdownHeight - 8);
-                    }
-
-                    menu.style.setProperty('--row-actions-left', `${left}px`);
-                    menu.style.setProperty('--row-actions-top', `${top}px`);
+            function positionRowActionsMenu(menu) {
+                if (!menu.open) {
+                    return;
                 }
 
-                menus.forEach((menu) => {
+                const toggle = menu.querySelector('.row-actions-toggle');
+                const dropdown = menu.querySelector('.row-actions-dropdown');
+                if (!toggle || !dropdown) {
+                    return;
+                }
+
+                const toggleRect = toggle.getBoundingClientRect();
+                const dropdownRect = dropdown.getBoundingClientRect();
+                const viewportPadding = 12;
+                const dropdownWidth = dropdownRect.width || 190;
+                const dropdownHeight = dropdownRect.height || 0;
+                let left = toggleRect.right - dropdownWidth;
+                let top = toggleRect.bottom + 8;
+
+                left = Math.max(viewportPadding, Math.min(left, window.innerWidth - dropdownWidth - viewportPadding));
+
+                if (dropdownHeight && top + dropdownHeight > window.innerHeight - viewportPadding) {
+                    top = Math.max(viewportPadding, toggleRect.top - dropdownHeight - 8);
+                }
+
+                menu.style.setProperty('--row-actions-left', `${left}px`);
+                menu.style.setProperty('--row-actions-top', `${top}px`);
+            }
+
+            function registerRowActionMenus(scope = document) {
+                scope.querySelectorAll('.row-actions-menu').forEach((menu) => {
+                    if (menu.dataset.rowActionsReady === 'true') {
+                        return;
+                    }
+
+                    menu.dataset.rowActionsReady = 'true';
+                    menus.push(menu);
+
                     menu.addEventListener('toggle', () => {
                         if (!menu.open) {
                             menu.style.removeProperty('--row-actions-left');
@@ -1264,61 +1272,115 @@
                         requestAnimationFrame(() => positionRowActionsMenu(menu));
                     });
                 });
-
-                document.addEventListener('click', (event) => {
-                    if (event.target.closest('.row-actions-menu')) {
-                        return;
-                    }
-
-                    menus.forEach((menu) => menu.removeAttribute('open'));
-                });
-
-                window.addEventListener('scroll', () => {
-                    menus.forEach(positionRowActionsMenu);
-                }, true);
-
-                window.addEventListener('resize', () => {
-                    menus.forEach(positionRowActionsMenu);
-                });
             }
 
-            document.querySelectorAll('[data-table-live-filter]').forEach((container) => {
-                const inputSelector = container.dataset.tableLiveInput || '';
-                const input = inputSelector
-                    ? document.querySelector(inputSelector)
-                    : container.querySelector('[data-table-live-input]');
-                if (!input) {
+            registerRowActionMenus();
+
+            document.addEventListener('click', (event) => {
+                if (event.target.closest('.row-actions-menu')) {
                     return;
                 }
 
-                const rows = Array.from(container.querySelectorAll('[data-table-live-row]'));
-                const empty = container.querySelector('[data-table-live-empty]');
-                if (!rows.length) {
+                menus.forEach((menu) => menu.removeAttribute('open'));
+            });
+
+            window.addEventListener('scroll', () => {
+                menus.forEach(positionRowActionsMenu);
+            }, true);
+
+            window.addEventListener('resize', () => {
+                menus.forEach(positionRowActionsMenu);
+            });
+
+            document.querySelectorAll('[data-server-live-search-form]').forEach((form) => {
+                const input = form.querySelector('[data-server-live-search-input]');
+                const resultsSelector = form.dataset.serverLiveSearchResults || '';
+                const results = resultsSelector ? document.querySelector(resultsSelector) : null;
+                if (!input || !results || !window.fetch) {
                     return;
                 }
 
-                const normalize = (value) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
-                const filterRows = () => {
-                    const needle = normalize(input.value);
-                    let visibleRows = 0;
+                const delay = Number.parseInt(form.dataset.serverLiveSearchDelay || '450', 10);
+                let timer = null;
+                let activeController = null;
 
-                    rows.forEach((row) => {
-                        const haystack = normalize(row.dataset.searchText || row.textContent);
-                        const matched = !needle || haystack.includes(needle);
+                const buildUrl = (pageUrl = null) => {
+                    const formData = new FormData(form);
+                    const url = pageUrl ? new URL(pageUrl, window.location.origin) : new URL(form.action || window.location.href, window.location.origin);
 
-                        row.hidden = !matched;
-                        if (matched) {
-                            visibleRows += 1;
+                    if (!pageUrl) {
+                        url.search = '';
+                    }
+
+                    formData.forEach((value, key) => {
+                        const normalizedValue = String(value || '').trim();
+                        url.searchParams.delete(key);
+                        if (normalizedValue !== '') {
+                            url.searchParams.set(key, normalizedValue);
                         }
                     });
 
-                    if (empty) {
-                        empty.hidden = visibleRows > 0;
+                    if (!pageUrl) {
+                        url.searchParams.delete('page');
+                    }
+
+                    return url;
+                };
+
+                const refreshResults = async (pageUrl = null) => {
+                    const url = buildUrl(pageUrl);
+
+                    if (activeController) {
+                        activeController.abort();
+                    }
+
+                    activeController = new AbortController();
+                    results.setAttribute('aria-busy', 'true');
+
+                    try {
+                        const response = await fetch(url.toString(), {
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'text/html',
+                            },
+                            signal: activeController.signal,
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Could not refresh records.');
+                        }
+
+                        results.innerHTML = await response.text();
+                        window.history.replaceState({}, '', url.toString());
+                        registerRowActionMenus(results);
+                    } catch (error) {
+                        if (error.name !== 'AbortError') {
+                            form.submit();
+                        }
+                    } finally {
+                        results.setAttribute('aria-busy', 'false');
                     }
                 };
 
-                input.addEventListener('input', filterRows);
-                filterRows();
+                input.addEventListener('input', () => {
+                    window.clearTimeout(timer);
+                    timer = window.setTimeout(() => refreshResults(), Number.isFinite(delay) ? delay : 450);
+                });
+
+                form.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    refreshResults();
+                });
+
+                results.addEventListener('click', (event) => {
+                    const link = event.target.closest('.pagination a');
+                    if (!link) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    refreshResults(link.href);
+                });
             });
 
             document.addEventListener('keydown', (event) => {

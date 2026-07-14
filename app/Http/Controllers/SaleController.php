@@ -29,7 +29,7 @@ class SaleController extends Controller
 {
     public function index(Request $request): View
     {
-        $search = trim((string) $request->string('q'));
+        $search = trim((string) ($request->query('q', $request->query('search', ''))));
         $type = trim((string) $request->string('type'));
         $type = in_array($type, ['cash', 'credit'], true) ? $type : '';
         $dateFrom = $request->date('date_from')?->toDateString();
@@ -41,12 +41,20 @@ class SaleController extends Controller
         };
 
         $sales = Sale::query()
-            ->with(['customer:id,name', 'store:id,name'])
+            ->with(['customer:id,name,phone', 'store:id,name', 'paymentMode:id,name', 'createdBy:id,name'])
             ->whereIn('sale_type', ['cash', 'credit'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($searchQuery) use ($search) {
                     $searchQuery->where('sale_no', 'like', "%{$search}%")
-                        ->orWhereHas('customer', fn ($customer) => $customer->where('name', 'like', "%{$search}%"));
+                        ->orWhere('sale_type', 'like', "%{$search}%")
+                        ->orWhere('status', 'like', "%{$search}%")
+                        ->orWhere('sale_date', 'like', "%{$search}%")
+                        ->orWhereHas('customer', fn ($customer) => $customer
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('phone', 'like', "%{$search}%"))
+                        ->orWhereHas('store', fn ($store) => $store->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('paymentMode', fn ($paymentMode) => $paymentMode->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('createdBy', fn ($user) => $user->where('name', 'like', "%{$search}%"));
                 });
             })
             ->when($type !== '', fn ($query) => $query->where('sale_type', $type))
@@ -55,6 +63,10 @@ class SaleController extends Controller
             ->latest('id')
             ->paginate(20)
             ->withQueryString();
+
+        if ($request->ajax()) {
+            return view('sales.partials.index_results', compact('sales', 'search', 'type', 'pageTitle', 'dateFrom', 'dateTo'));
+        }
 
         return view('sales.index', compact('sales', 'search', 'type', 'pageTitle', 'dateFrom', 'dateTo'));
     }

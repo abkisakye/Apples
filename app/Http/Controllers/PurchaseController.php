@@ -25,17 +25,28 @@ class PurchaseController extends Controller
 {
     public function index(Request $request): View
     {
-        $search = trim((string) $request->string('q'));
+        $search = trim((string) ($request->query('q', $request->query('search', ''))));
         $type = trim((string) $request->string('type'));
         $balance = trim((string) $request->string('balance'));
         $dateFrom = $request->date('date_from')?->toDateString();
         $dateTo = $request->date('date_to')?->toDateString();
 
         $purchases = Purchase::query()
-            ->with(['supplier:id,name', 'store:id,name'])
+            ->with(['supplier:id,name,phone,email', 'store:id,name', 'paymentMode:id,name'])
             ->when($search !== '', function ($query) use ($search) {
-                $query->where('purchase_no', 'like', "%{$search}%")
-                    ->orWhereHas('supplier', fn ($supplier) => $supplier->where('name', 'like', "%{$search}%"));
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery->where('purchase_no', 'like', "%{$search}%")
+                        ->orWhere('supplier_invoice_no', 'like', "%{$search}%")
+                        ->orWhere('purchase_type', 'like', "%{$search}%")
+                        ->orWhere('status', 'like', "%{$search}%")
+                        ->orWhere('purchase_date', 'like', "%{$search}%")
+                        ->orWhereHas('supplier', fn ($supplier) => $supplier
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('phone', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%"))
+                        ->orWhereHas('store', fn ($store) => $store->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('paymentMode', fn ($paymentMode) => $paymentMode->where('name', 'like', "%{$search}%"));
+                });
             })
             ->when(in_array($type, ['cash', 'credit'], true), fn ($query) => $query->where('purchase_type', $type))
             ->when($balance === 'outstanding', fn ($query) => $query->posted()->where('balance_due', '>', 0))
@@ -44,6 +55,10 @@ class PurchaseController extends Controller
             ->latest('id')
             ->paginate(20)
             ->withQueryString();
+
+        if ($request->ajax()) {
+            return view('purchases.partials.index_results', compact('purchases', 'search', 'type', 'balance', 'dateFrom', 'dateTo'));
+        }
 
         return view('purchases.index', compact('purchases', 'search', 'type', 'balance', 'dateFrom', 'dateTo'));
     }

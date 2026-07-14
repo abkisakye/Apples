@@ -309,7 +309,7 @@ class WorkflowTest extends TestCase
             ->assertDontSee('STOCK-PURCHASE-TEST');
     }
 
-    public function test_listing_pages_have_live_table_filter_and_keep_server_side_filtering(): void
+    public function test_listing_pages_have_server_backed_live_search_and_keep_server_side_filtering(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
         $matchCustomer = Customer::create(['name' => 'Live Search Customer', 'phone' => '0700000001', 'is_active' => true]);
@@ -415,63 +415,79 @@ class WorkflowTest extends TestCase
 
         $this->get('/purchases?q=LIVE')
             ->assertOk()
-            ->assertSee('data-table-live-filter', false)
-            ->assertSee('data-table-live-input', false)
-            ->assertSee('data-table-live-row', false)
-            ->assertSee('data-table-live-empty', false)
-            ->assertSee('Filter visible rows')
+            ->assertSee('data-server-live-search-form', false)
+            ->assertSee('data-server-live-search-input', false)
+            ->assertSee('data-server-live-search-results="#purchases-results"', false)
+            ->assertSee('Searches all purchases, not only visible rows.')
             ->assertSee($matchPurchase->purchase_no)
             ->assertDontSee('PO-QUIET');
 
         $this->get('/customers?q=Live')
             ->assertOk()
-            ->assertSee('data-table-live-filter', false)
-            ->assertSee('data-table-live-input', false)
-            ->assertSee('data-table-live-row', false)
-            ->assertSee('data-table-live-empty', false)
+            ->assertSee('data-server-live-search-form', false)
+            ->assertSee('data-server-live-search-input', false)
+            ->assertSee('data-server-live-search-results="#customers-results"', false)
+            ->assertSee('Searches all customers, not only visible rows.')
             ->assertSee($matchCustomer->name)
             ->assertDontSee($otherCustomer->name);
 
         $this->get('/customer-payments?q=CP-LIVE')
             ->assertOk()
-            ->assertSee('data-table-live-filter', false)
-            ->assertSee('data-table-live-input', false)
-            ->assertSee('data-table-live-row', false)
-            ->assertSee('data-table-live-empty', false)
+            ->assertSee('data-server-live-search-form', false)
+            ->assertSee('data-server-live-search-input', false)
+            ->assertSee('data-server-live-search-results="#customer-payments-results"', false)
+            ->assertSee('Searches all customer payments, not only visible rows.')
             ->assertSee('CP-LIVE-SEARCH')
             ->assertDontSee('CP-QUIET');
 
         $this->get('/suppliers?q=Live')
             ->assertOk()
-            ->assertSee('data-table-live-filter', false)
-            ->assertSee('data-table-live-input', false)
-            ->assertSee('data-table-live-row', false)
-            ->assertSee('data-table-live-empty', false)
+            ->assertSee('data-server-live-search-form', false)
+            ->assertSee('data-server-live-search-input', false)
+            ->assertSee('data-server-live-search-results="#suppliers-results"', false)
+            ->assertSee('Searches all suppliers, not only visible rows.')
             ->assertSee($matchSupplier->name)
             ->assertDontSee($otherSupplier->name);
 
         $this->get('/stock/balances?q=LIVE-RICE')
             ->assertOk()
-            ->assertSee('data-table-live-filter', false)
-            ->assertSee('data-table-live-input', false)
-            ->assertSee('data-table-live-row', false)
-            ->assertSee('data-table-live-empty', false)
+            ->assertSee('data-server-live-search-form', false)
+            ->assertSee('data-server-live-search-input', false)
+            ->assertSee('data-server-live-search-results="#stock-balances-results"', false)
+            ->assertSee('Searches all stock rows, not only visible rows.')
             ->assertSee('Live Stock Rice')
             ->assertDontSee('Quiet Stock Beans');
 
         $this->get('/sales?q=RCPT-LIVE')
             ->assertOk()
-            ->assertSee('data-table-live-filter', false)
-            ->assertSee('data-table-live-input', false)
-            ->assertSee('data-table-live-row', false)
-            ->assertSee('data-table-live-empty', false)
+            ->assertSee('data-server-live-search-form', false)
+            ->assertSee('data-server-live-search-input', false)
+            ->assertSee('data-server-live-search-results="#sales-results"', false)
+            ->assertSee('Searches all sales records, not only visible rows.')
             ->assertSee('RCPT-LIVE-SEARCH')
             ->assertDontSee('RCPT-QUIET');
 
         $this->get('/sales')
             ->assertOk()
-            ->assertSee('data-table-live-filter', false)
-            ->assertSee('No matching records found.');
+            ->assertDontSee('Filter visible rows');
+
+        $ajaxCases = [
+            ['/purchases?q=LIVE', $matchPurchase->purchase_no, 'PO-QUIET'],
+            ['/customers?q=Live', $matchCustomer->name, $otherCustomer->name],
+            ['/customer-payments?q=CP-LIVE', 'CP-LIVE-SEARCH', 'CP-QUIET'],
+            ['/suppliers?q=Live', $matchSupplier->name, $otherSupplier->name],
+            ['/stock/balances?q=LIVE-RICE', 'Live Stock Rice', 'Quiet Stock Beans'],
+            ['/sales?q=RCPT-LIVE', 'RCPT-LIVE-SEARCH', 'RCPT-QUIET'],
+        ];
+
+        foreach ($ajaxCases as [$url, $visible, $hidden]) {
+            $this->withHeader('X-Requested-With', 'XMLHttpRequest')
+                ->get($url)
+                ->assertOk()
+                ->assertSee($visible)
+                ->assertDontSee($hidden)
+                ->assertDontSee('data-server-live-search-form', false);
+        }
     }
 
     public function test_customer_payment_reduces_credit_sale_balance(): void
@@ -1301,9 +1317,9 @@ class WorkflowTest extends TestCase
 
         $this->get('/products')
             ->assertOk()
-            ->assertSee('data-products-live-search-form', false)
-            ->assertSee('data-products-live-search-input', false)
-            ->assertSee('data-products-live-search-results', false)
+            ->assertSee('data-server-live-search-form', false)
+            ->assertSee('data-server-live-search-input', false)
+            ->assertSee('data-server-live-search-results="#products-results"', false)
             ->assertSee('Searches all products, not only visible rows.')
             ->assertSee('AAA Filler Product 01')
             ->assertDontSee($nameMatch->name);
@@ -1344,13 +1360,13 @@ class WorkflowTest extends TestCase
             ->get('/products?q=AFRICA')
             ->assertOk()
             ->assertSee($categoryMatch->name)
-            ->assertDontSee('data-products-live-search-form', false);
+            ->assertDontSee('data-server-live-search-form', false);
 
         $this->withHeader('X-Requested-With', 'XMLHttpRequest')
             ->get('/products?q=AFRICA&page=2')
             ->assertOk()
             ->assertSee($nameMatch->name)
-            ->assertDontSee('data-products-live-search-form', false);
+            ->assertDontSee('data-server-live-search-form', false);
     }
 
     public function test_customer_and_supplier_payment_detail_pages_load(): void

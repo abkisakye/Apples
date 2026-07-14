@@ -22,37 +22,52 @@ class CustomerPaymentController extends Controller
 {
     public function index(Request $request): View
     {
-        $search = trim((string) $request->string('q'));
+        $search = trim((string) ($request->query('q', $request->query('search', ''))));
         $customerId = $request->integer('customer_id');
         $period = trim((string) $request->string('period'));
         [$fromDate, $toDate] = $this->periodRange($period, $request);
 
-        return view('customer_payments.index', [
+        $customers = Customer::query()
+            ->where('is_system', false)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $payments = CustomerPayment::query()
+            ->with(['customer:id,name,location,phone', 'sale:id,sale_no', 'store:id,name', 'paymentMode:id,name'])
+            ->when($customerId > 0, fn ($query) => $query->where('customer_id', $customerId))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($inner) use ($search) {
+                    $inner->where('payment_no', 'like', "%{$search}%")
+                        ->orWhere('reference_no', 'like', "%{$search}%")
+                        ->orWhere('cheque_number', 'like', "%{$search}%")
+                        ->orWhere('payment_date', 'like', "%{$search}%")
+                        ->orWhereHas('customer', fn ($customerQuery) => $customerQuery
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('phone', 'like', "%{$search}%"))
+                        ->orWhereHas('sale', fn ($saleQuery) => $saleQuery->where('sale_no', 'like', "%{$search}%"))
+                        ->orWhereHas('store', fn ($storeQuery) => $storeQuery->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('paymentMode', fn ($paymentModeQuery) => $paymentModeQuery->where('name', 'like', "%{$search}%"));
+                });
+            })
+            ->when($fromDate && $toDate, fn ($query) => $query->whereDate('payment_date', '>=', $fromDate)->whereDate('payment_date', '<=', $toDate))
+            ->latest('payment_date')
+            ->latest('id')
+            ->paginate(20)
+            ->withQueryString();
+
+        $viewData = [
             'search' => $search,
             'customerId' => $customerId,
             'period' => $period,
-            'customers' => Customer::query()
-                ->where('is_system', false)
-                ->orderBy('name')
-                ->get(['id', 'name']),
-            'payments' => CustomerPayment::query()
-                ->with(['customer:id,name,location', 'sale:id,sale_no', 'store:id,name', 'paymentMode:id,name'])
-                ->when($customerId > 0, fn ($query) => $query->where('customer_id', $customerId))
-                ->when($search !== '', function ($query) use ($search) {
-                    $query->where(function ($inner) use ($search) {
-                        $inner->where('payment_no', 'like', "%{$search}%")
-                            ->orWhere('reference_no', 'like', "%{$search}%")
-                            ->orWhere('cheque_number', 'like', "%{$search}%")
-                            ->orWhereHas('customer', fn ($customerQuery) => $customerQuery->where('name', 'like', "%{$search}%"))
-                            ->orWhereHas('sale', fn ($saleQuery) => $saleQuery->where('sale_no', 'like', "%{$search}%"));
-                    });
-                })
-                ->when($fromDate && $toDate, fn ($query) => $query->whereDate('payment_date', '>=', $fromDate)->whereDate('payment_date', '<=', $toDate))
-                ->latest('payment_date')
-                ->latest('id')
-                ->paginate(20)
-                ->withQueryString(),
-        ]);
+            'customers' => $customers,
+            'payments' => $payments,
+        ];
+
+        if ($request->ajax()) {
+            return view('customer_payments.partials.index_results', $viewData);
+        }
+
+        return view('customer_payments.index', $viewData);
     }
 
     public function create(Request $request): View

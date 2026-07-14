@@ -1,7 +1,6 @@
 @extends('layouts.app', ['title' => 'Customer Payments'])
 
 @section('content')
-    @php($currency = config('business.currency', 'UGX'))
     <style>
         .desk-filters {
             display: grid;
@@ -50,9 +49,8 @@
         </div>
     </div>
 
-    <section class="panel desk-panel" data-table-live-filter data-table-live-input="#customer-payments-visible-filter">
-        <form method="get" class="filters desk-filters">
-            <input type="search" id="customer-payments-visible-filter" name="q" value="{{ $search }}" placeholder="Filter visible rows" title="Typing filters rows currently on this page. Press Filter to search all records." data-table-live-input>
+    <form method="get" class="filters desk-filters" data-server-live-search-form data-server-live-search-results="#customer-payments-results" data-server-live-search-delay="450">
+            <input type="search" name="q" value="{{ $search }}" placeholder="Search customer payments" autocomplete="off" data-server-live-search-input>
             <select name="customer_id">
                 <option value="">All customers</option>
                 @foreach ($customers as $customer)
@@ -68,101 +66,10 @@
             @if ($search !== '' || $customerId > 0 || $period !== '')
                 <a href="{{ route('customer-payments.index') }}" class="button-link">Clear</a>
             @endif
-        </form>
+    </form>
+    <p class="list-note">Searches all customer payments, not only visible rows.</p>
 
-        <div class="table-wrap table-mobile-friendly">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Payment</th>
-                        <th>Customer</th>
-                        <th>Sale</th>
-                        <th>Amount</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($payments as $payment)
-                        <tr data-table-live-row>
-                            <td>
-                                <div class="cell-stack">
-                                    <div class="table-title"><a href="{{ route('customer-payments.show', $payment) }}"><strong>{{ $payment->payment_no }}</strong></a></div>
-                                    <div class="table-meta">{{ optional($payment->payment_date)->format('d M Y') ?: '-' }}</div>
-                                    <div class="table-meta">{{ $payment->paymentMode?->name ?? 'Payment mode not set' }}</div>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="cell-stack">
-                                    <div class="table-title">{{ $payment->customer?->name ?? '-' }}</div>
-                                    <div class="table-meta">{{ $payment->customer?->location ?: 'No location' }}</div>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="cell-stack">
-                                    @if ($payment->sale)
-                                        <div class="table-title"><a href="{{ route('sales.show', $payment->sale) }}">{{ $payment->sale->sale_no }}</a></div>
-                                    @else
-                                        <div class="table-title">No linked sale</div>
-                                    @endif
-                                    <div class="table-meta">{{ $payment->store?->name ?? config('business.name', 'Apples Of Gold') }}</div>
-                                    <div class="table-meta">{{ $payment->reference_no ?: $payment->cheque_number ?: 'No reference' }}</div>
-                                </div>
-                            </td>
-                            <td class="money">
-                                <div class="cell-stack">
-                                    <div>{{ $currency }} {{ number_format((float) $payment->amount, 0) }}</div>
-                                    <div class="status-inline">
-                                        <span class="badge success">Posted</span>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <details class="row-actions-menu">
-                                    <summary class="row-actions-toggle">
-                                        <span class="action-chip">
-                                            <span>Actions</span>
-                                            <span class="caret">&#9662;</span>
-                                        </span>
-                                    </summary>
-                                    <div class="row-actions-dropdown">
-                                        <a href="{{ route('customer-payments.show', $payment) }}" class="row-action-link">
-                                            <span>Open Payment</span>
-                                            <span class="meta">View</span>
-                                        </a>
-                                        <a href="{{ route('customer-payments.print', ['customerPayment' => $payment, 'theme' => 'thermal']) }}" target="_blank" class="row-action-link">
-                                            <span>Thermal Print</span>
-                                            <span class="meta">Print</span>
-                                        </a>
-                                        @if ($payment->sale)
-                                            <a href="{{ route('sales.show', $payment->sale) }}" class="row-action-link">
-                                                <span>Open Sale</span>
-                                                <span class="meta">Sale</span>
-                                            </a>
-                                        @endif
-                                        @if ($payment->customer)
-                                            <a href="{{ route('customers.statement', $payment->customer) }}" class="row-action-link">
-                                                <span>Customer Statement</span>
-                                                <span class="meta">Stmt</span>
-                                            </a>
-                                        @endif
-                                    </div>
-                                </details>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="5" class="muted">No customer payments match this view yet.</td>
-                        </tr>
-                    @endforelse
-                    <tr data-table-live-empty hidden>
-                        <td colspan="5" class="muted">No matching records found.</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="pagination">
-            {{ $payments->links() }}
-        </div>
-    </section>
+    <div id="customer-payments-results" aria-live="polite" aria-busy="false">
+        @include('customer_payments.partials.index_results')
+    </div>
 @endsection

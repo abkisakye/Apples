@@ -25,7 +25,7 @@ class SupplierController extends Controller
 
     public function index(Request $request): View
     {
-        $search = trim((string) $request->string('q'));
+        $search = trim((string) ($request->query('q', $request->query('search', ''))));
         $status = trim((string) $request->string('status'));
 
         $suppliersQuery = Supplier::query()
@@ -43,6 +43,8 @@ class SupplierController extends Controller
                         ->orWhere('phone', 'like', "%{$search}%")
                         ->orWhere('country', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('tin', 'like', "%{$search}%")
+                        ->orWhere('supplier_type', 'like', "%{$search}%")
                         ->orWhere('address', 'like', "%{$search}%");
                 });
             })
@@ -61,13 +63,15 @@ class SupplierController extends Controller
                         ->orWhere('phone', 'like', "%{$search}%")
                         ->orWhere('country', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('tin', 'like', "%{$search}%")
+                        ->orWhere('supplier_type', 'like', "%{$search}%")
                         ->orWhere('address', 'like', "%{$search}%");
                 });
             })
             ->when($status === 'active', fn ($query) => $query->where('is_active', true))
             ->when($status === 'inactive', fn ($query) => $query->where('is_active', false));
 
-        return view('suppliers.index', [
+        $viewData = [
             'suppliers' => $suppliers,
             'search' => $search,
             'statusFilter' => $status,
@@ -78,7 +82,13 @@ class SupplierController extends Controller
                 'with_tin' => (clone $summaryBase)->whereNotNull('tin')->count(),
                 'opening_balance' => (float) (clone $summaryBase)->sum('opening_balance'),
             ],
-        ]);
+        ];
+
+        if ($request->ajax()) {
+            return view('suppliers.partials.index_results', $viewData);
+        }
+
+        return view('suppliers.index', $viewData);
     }
 
     public function store(Request $request, AuditLogService $auditLogService): RedirectResponse

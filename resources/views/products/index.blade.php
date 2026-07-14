@@ -18,8 +18,8 @@
         </div>
     </div>
 
-    <form class="filters" method="get" data-products-live-search-form data-products-live-search-delay="450">
-        <input type="search" name="q" value="{{ $search }}" placeholder="Search all products or code" autocomplete="off" data-products-live-search-input>
+    <form class="filters" method="get" data-server-live-search-form data-server-live-search-results="#products-results" data-server-live-search-delay="450">
+        <input type="search" name="q" value="{{ $search }}" placeholder="Search all products or code" autocomplete="off" data-server-live-search-input>
         <select name="category">
             <option value="">All categories</option>
             @foreach ($categories as $category)
@@ -41,101 +41,7 @@
     </form>
     <p class="list-note">Searches all products, not only visible rows.</p>
 
-    <div id="products-results" data-products-live-search-results aria-live="polite" aria-busy="false">
+    <div id="products-results" aria-live="polite" aria-busy="false">
         @include('products.partials.index_results')
     </div>
-
-    <script>
-        (() => {
-            const form = document.querySelector('[data-products-live-search-form]');
-            const input = form?.querySelector('[data-products-live-search-input]');
-            const results = document.querySelector('[data-products-live-search-results]');
-            if (!form || !input || !results || !window.fetch) {
-                return;
-            }
-
-            const delay = Number.parseInt(form.dataset.productsLiveSearchDelay || '450', 10);
-            let timer = null;
-            let activeController = null;
-
-            function buildUrl(pageUrl = null) {
-                const formData = new FormData(form);
-                const url = pageUrl ? new URL(pageUrl, window.location.origin) : new URL(form.action || window.location.href, window.location.origin);
-
-                if (!pageUrl) {
-                    url.search = '';
-                }
-
-                formData.forEach((value, key) => {
-                    const normalizedValue = String(value || '').trim();
-                    url.searchParams.delete(key);
-                    if (normalizedValue !== '') {
-                        url.searchParams.set(key, normalizedValue);
-                    }
-                });
-
-                if (!pageUrl) {
-                    url.searchParams.delete('page');
-                }
-
-                return url;
-            }
-
-            async function refreshProducts(pageUrl = null, pushUrl = true) {
-                const url = buildUrl(pageUrl);
-
-                if (activeController) {
-                    activeController.abort();
-                }
-
-                activeController = new AbortController();
-                results.setAttribute('aria-busy', 'true');
-
-                try {
-                    const response = await fetch(url.toString(), {
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'text/html',
-                        },
-                        signal: activeController.signal,
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Could not refresh products.');
-                    }
-
-                    results.innerHTML = await response.text();
-                    if (pushUrl) {
-                        window.history.replaceState({}, '', url.toString());
-                    }
-                } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        form.submit();
-                    }
-                } finally {
-                    results.setAttribute('aria-busy', 'false');
-                }
-            }
-
-            input.addEventListener('input', () => {
-                window.clearTimeout(timer);
-                timer = window.setTimeout(() => refreshProducts(), Number.isFinite(delay) ? delay : 450);
-            });
-
-            form.addEventListener('submit', (event) => {
-                event.preventDefault();
-                refreshProducts();
-            });
-
-            results.addEventListener('click', (event) => {
-                const link = event.target.closest('.pagination a');
-                if (!link) {
-                    return;
-                }
-
-                event.preventDefault();
-                refreshProducts(link.href);
-            });
-        })();
-    </script>
 @endsection

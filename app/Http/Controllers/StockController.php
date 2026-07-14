@@ -34,6 +34,10 @@ class StockController extends Controller
         [$stores, $categories, $filters] = $this->stockReferenceData($request);
         $rows = $stockDisplayService->rows($request);
 
+        if ($request->ajax()) {
+            return view('stock.partials.balances_results', compact('rows', 'stores', 'categories', 'filters'));
+        }
+
         return view('stock.balances', compact('rows', 'stores', 'categories', 'filters'));
     }
 
