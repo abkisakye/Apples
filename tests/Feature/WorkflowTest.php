@@ -4047,6 +4047,7 @@ class WorkflowTest extends TestCase
             ->assertSee('id="product-search-results"', false)
             ->assertSee('class="sale-floating-results"', false)
             ->assertSee('role="listbox"', false)
+            ->assertSee('sales\/product-search', false)
             ->assertSee('z-index: 12050', false)
             ->assertSee('z-index: 12040', false)
             ->assertSee('z-index: 12045', false)
@@ -4083,6 +4084,8 @@ class WorkflowTest extends TestCase
             ->assertSee("document.addEventListener('click'", false)
             ->assertSee('data-add-unit', false)
             ->assertSee('quickPickResults?.addEventListener', false)
+            ->assertSee('fetchProductResults', false)
+            ->assertSee('Searching products...', false)
             ->assertSee('data-pos-area="checkout-keypad"', false)
             ->assertSeeInOrder([
                 '<section class="panel sale-checkout-panel">',
@@ -4126,6 +4129,44 @@ class WorkflowTest extends TestCase
             ->assertSee('cartList.scrollTop = 0', false)
             ->assertSee('<strong>${item.label}</strong>', false)
             ->assertDontSee('<span class="readiness-chip">${escapeHtml(item.part_number || \'Ready\')}</span>', false);
+    }
+
+    public function test_sale_create_limits_initial_pos_product_payload_and_uses_server_search(): void
+    {
+        $category = Category::create(['name' => 'FAST POS CATEGORY']);
+
+        foreach (range(1, 30) as $index) {
+            $product = Product::create([
+                'name' => sprintf('POS SPEED PRODUCT %02d', $index),
+                'code' => sprintf('POS-SPEED-%02d', $index),
+                'category_id' => $category->id,
+                'is_active' => true,
+                'base_unit_label' => 'Pieces',
+            ]);
+
+            ProductUnit::create([
+                'product_id' => $product->id,
+                'unit_name' => 'Pieces',
+                'conversion_factor' => 1,
+                'selling_price' => 1000 + $index,
+                'cost_price' => 700,
+                'is_base_unit' => true,
+                'is_active' => true,
+            ]);
+        }
+
+        $this->get('/sales/create')
+            ->assertOk()
+            ->assertSee('POS SPEED PRODUCT 01')
+            ->assertDontSee('POS SPEED PRODUCT 30')
+            ->assertSee('sales\/product-search', false);
+
+        $this->withHeader('X-Requested-With', 'XMLHttpRequest')
+            ->get('/sales/product-search?q=POS-SPEED-30')
+            ->assertOk()
+            ->assertJsonPath('results.0.product_name', 'POS SPEED PRODUCT 30')
+            ->assertJsonPath('results.0.unit_name', 'Pieces')
+            ->assertJsonPath('results.0.base_stock_label', '0 Pieces');
     }
 
     public function test_pos_search_shows_base_stock_and_sells_pieces_after_carton_purchase(): void
@@ -4185,6 +4226,16 @@ class WorkflowTest extends TestCase
             ->assertSee('Available:', false)
             ->assertSee('Units:', false)
             ->assertSee('data-add-unit', false);
+
+        $this->withHeader('X-Requested-With', 'XMLHttpRequest')
+            ->get('/sales/product-search?store_id='.$store->id.'&q=DETTOL')
+            ->assertOk()
+            ->assertJsonFragment([
+                'product_name' => 'DETTOL ACTIVE SOAP 90G',
+                'unit_name' => 'Pieces',
+                'base_stock_label' => '240 Pieces',
+                'units_available_label' => 'Cartons, Pieces',
+            ]);
 
         $saleResponse = $this->post('/sales', [
             'sale_date' => '2026-07-11',

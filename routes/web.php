@@ -129,6 +129,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/cash-shifts/{cashShift}/close', [CashShiftController::class, 'close'])->middleware('ability:cash_shifts.manage')->name('cash-shifts.close');
     Route::get('/sales', [SaleController::class, 'index'])->middleware('ability:sales.view')->name('sales.index');
     Route::get('/sales/create', [SaleController::class, 'create'])->middleware('ability:sales.manage')->name('sales.create');
+    Route::get('/sales/product-search', [SaleController::class, 'productSearch'])->middleware('ability:sales.manage')->name('sales.product-search');
     Route::post('/sales', [SaleController::class, 'store'])->middleware('ability:sales.manage')->name('sales.store');
     Route::get('/sales/{sale}', [SaleController::class, 'show'])->middleware('ability:sales.view')->name('sales.show');
     Route::get('/sales/{sale}/print', [SaleController::class, 'print'])->middleware('ability:sales.view')->name('sales.print');

@@ -14,47 +14,6 @@
                 $customer->location,
             ])))),
         ]);
-        $formatBaseQty = function ($quantity) {
-            $formatted = number_format((float) $quantity, 3, '.', '');
-
-            return rtrim(rtrim($formatted, '0'), '.') ?: '0';
-        };
-        $unitsPayload = $productUnits->map(function ($unit) use ($productUnits, $unitsByProduct, $baseStockByProduct, $formatBaseQty) {
-            $productUnitsForBase = $productUnits->where('product_id', $unit->product_id);
-            $baseUnit = $unit->product->base_unit_label
-                ?: $productUnitsForBase->firstWhere('is_base_unit', true)?->unit_name
-                ?: $productUnitsForBase->first(fn ($candidate) => (float) ($candidate->conversion_factor ?? 0) === 1.0)?->unit_name
-                ?: 'base units';
-            $availableBaseStock = (float) ($baseStockByProduct[(int) $unit->product_id] ?? 0);
-            $baseStockLabel = $formatBaseQty($availableBaseStock).' '.$baseUnit;
-            $unitsAvailable = collect($unitsByProduct[(int) $unit->product_id] ?? [])->filter()->implode(', ');
-
-            return [
-                'id' => $unit->id,
-                'label' => trim($unit->product->name.' - '.$unit->unit_name),
-                'product_name' => $unit->product->name,
-                'unit_name' => $unit->unit_name,
-                'category_name' => $unit->product->category?->name,
-                'price' => (float) $unit->selling_price,
-                'barcode' => $unit->barcode,
-                'code' => $unit->product->code,
-                'part_number' => $unit->part_number,
-                'base_stock_label' => $baseStockLabel,
-                'available_base_stock' => $availableBaseStock,
-                'base_unit_label' => $baseUnit,
-                'units_available_label' => $unitsAvailable,
-                'image_url' => null,
-                'search' => strtolower(trim(implode(' ', array_filter([
-                    $unit->product->name,
-                    $unit->product->category?->name,
-                    $unit->unit_name,
-                    $unit->product->code,
-                    $unit->barcode,
-                    $unit->part_number,
-                    $unitsAvailable,
-                ])))),
-            ];
-        });
         $paymentShortcutLabels = [
             'cash' => 'CASH',
             'mobile' => 'MOBILE MONEY',
@@ -2077,7 +2036,8 @@
     <script>
         (() => {
             const currency = @json($currency);
-            const allUnits = @json($unitsPayload);
+            let allUnits = @json($unitsPayload);
+            const productSearchUrl = @json(route('sales.product-search', ['store_id' => $currentStore?->id]));
             const allCustomers = @json($customersPayload);
             const form = document.getElementById('sale-form');
             if (!form) return;
@@ -2169,6 +2129,8 @@
             let highlightedResultIndex = -1;
             let currentSearchResults = [];
             let suppressSearchFocusOpen = false;
+            let productSearchTimer = null;
+            let activeProductSearchController = null;
 
             function money(value) {
                 return `${currency} ${Number(value || 0).toLocaleString()}`;
@@ -2341,6 +2303,59 @@
                 return item.code || item.barcode || item.part_number || 'No code';
             }
 
+            function cacheProductResults(results) {
+                results.forEach((item) => {
+                    const existingIndex = allUnits.findIndex((unit) => Number(unit.id) === Number(item.id));
+                    if (existingIndex >= 0) {
+                        allUnits[existingIndex] = item;
+                    } else {
+                        allUnits.push(item);
+                    }
+                });
+
+                return results;
+            }
+
+            async function fetchProductResults(needle = '', limit = 40) {
+                const url = new URL(productSearchUrl, window.location.origin);
+                const normalizedNeedle = String(needle || '').trim();
+                if (normalizedNeedle !== '') {
+                    url.searchParams.set('q', normalizedNeedle);
+                }
+                url.searchParams.set('limit', String(limit));
+
+                if (activeProductSearchController) {
+                    activeProductSearchController.abort();
+                }
+
+                activeProductSearchController = new AbortController();
+
+                const response = await fetch(url.toString(), {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    signal: activeProductSearchController.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error('Product search failed.');
+                }
+
+                const payload = await response.json();
+
+                return cacheProductResults(Array.isArray(payload.results) ? payload.results : []);
+            }
+
+            function localProductResults(needle = '', limit = 24) {
+                const normalizedNeedle = String(needle || '').trim().toLowerCase();
+                const matching = normalizedNeedle.length < 1
+                    ? allUnits
+                    : allUnits.filter((item) => item.search.includes(normalizedNeedle));
+
+                return matching.slice(0, limit);
+            }
+
             function renderQuickPickResults() {
                 if (!quickPickResults) return;
 
@@ -2399,19 +2414,17 @@
 
             function renderSearchResults() {
                 const needle = String(searchInput.value || '').trim().toLowerCase();
-                const matching = needle.length < 1
-                    ? allUnits
-                    : allUnits.filter((item) => item.search.includes(needle));
-                const displayLimit = needle.length < 1 ? 24 : 100;
-                const results = matching.slice(0, displayLimit);
+                const results = currentSearchResults.length || needle.length >= 1
+                    ? currentSearchResults
+                    : localProductResults('', 24);
                 currentSearchResults = results;
 
                 if (productResultsNote) {
-                    productResultsNote.textContent = 'Quick pick';
+                    productResultsNote.textContent = needle.length ? 'Search results' : 'Quick pick';
                 }
 
                 if (productResultsCount) {
-                    productResultsCount.textContent = `${Math.min(allUnits.length, 12)} shown`;
+                    productResultsCount.textContent = `${results.length} shown`;
                 }
 
                 searchResults.innerHTML = results.length
@@ -2448,6 +2461,41 @@
                     setSearchResultsOpen(true);
                     setHighlightedSearchResult(Math.min(Math.max(highlightedResultIndex, 0), currentSearchResults.length - 1));
                 }
+            }
+
+            function showProductSearchLoading() {
+                searchResults.innerHTML = `<div class="bill-empty" style="grid-column: 1 / -1;">Searching products...</div>`;
+                setSearchResultsOpen(true);
+            }
+
+            async function refreshProductSearchResults() {
+                const needle = String(searchInput.value || '').trim();
+
+                if (needle.length < 1) {
+                    currentSearchResults = localProductResults('', 24);
+                    renderSearchResults();
+                    setHighlightedSearchResult(0);
+                    return;
+                }
+
+                try {
+                    showProductSearchLoading();
+                    currentSearchResults = await fetchProductResults(needle, 50);
+                    highlightedResultIndex = 0;
+                    renderSearchResults();
+                    setHighlightedSearchResult(0);
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        return;
+                    }
+                    currentSearchResults = localProductResults(needle, 50);
+                    renderSearchResults();
+                }
+            }
+
+            function scheduleProductSearch() {
+                window.clearTimeout(productSearchTimer);
+                productSearchTimer = window.setTimeout(refreshProductSearchResults, 350);
             }
 
             function findScanMatch(value) {
@@ -2637,6 +2685,7 @@
                 renderCart();
                 cartList.scrollTop = 0;
                 searchInput.value = '';
+                currentSearchResults = localProductResults('', 24);
                 renderSearchResults();
                 closeSearchResults();
                 if (scanInput && document.activeElement === scanInput) {
@@ -2712,12 +2761,13 @@
                 }
 
                 setSearchResultsOpen(true);
+                currentSearchResults = localProductResults(searchInput.value, 24);
                 renderSearchResults();
             });
             searchInput.addEventListener('input', () => {
                 highlightedResultIndex = 0;
                 setSearchResultsOpen(true);
-                renderSearchResults();
+                scheduleProductSearch();
             });
             searchInput.addEventListener('keydown', (event) => {
                 if (event.key === 'ArrowDown') {
@@ -2751,16 +2801,25 @@
                 }
             });
 
-            scanInput?.addEventListener('keydown', (event) => {
+            scanInput?.addEventListener('keydown', async (event) => {
                 if (event.key !== 'Enter' && event.key !== 'Tab') return;
                 event.preventDefault();
 
-                const match = findScanMatch(scanInput.value);
+                let match = findScanMatch(scanInput.value);
+
+                if (!match) {
+                    try {
+                        await fetchProductResults(scanInput.value, 20);
+                        match = findScanMatch(scanInput.value);
+                    } catch (error) {
+                        match = null;
+                    }
+                }
 
                 if (!match) {
                     setScanStatus('No match', 'error');
                     searchInput.value = scanInput.value;
-                    renderSearchResults();
+                    await refreshProductSearchResults();
                     searchInput.focus();
                     searchInput.select();
                     return;

@@ -19,6 +19,7 @@ use App\Support\StockAvailabilityService;
 use App\Support\StoreAssignmentService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -41,6 +42,20 @@ class SaleController extends Controller
         };
 
         $sales = Sale::query()
+            ->select([
+                'id',
+                'sale_no',
+                'sale_date',
+                'store_id',
+                'customer_id',
+                'sale_type',
+                'payment_mode_id',
+                'total_amount',
+                'balance_due',
+                'credit_due_date',
+                'status',
+                'created_by',
+            ])
             ->with(['customer:id,name,phone', 'store:id,name', 'paymentMode:id,name', 'createdBy:id,name'])
             ->whereIn('sale_type', ['cash', 'credit'])
             ->when($search !== '', function ($query) use ($search) {
@@ -132,21 +147,15 @@ class SaleController extends Controller
         }
 
         $displayStore = $currentStore ?? Store::query()->orderBy('name')->first(['id', 'name']);
-        $productUnits = ProductUnit::query()
-            ->with('product.category:id,name')
-            ->where('is_active', true)
-            ->whereHas('product', fn ($query) => $query->where('is_active', true))
-            ->orderBy('product_id')
-            ->orderBy('unit_name')
-            ->get(['id', 'product_id', 'unit_name', 'selling_price', 'cost_price', 'barcode', 'part_number', 'conversion_factor', 'is_base_unit']);
-
-        $unitsByProduct = $productUnits
-            ->groupBy('product_id')
-            ->map(fn ($units) => $units->pluck('unit_name')->filter()->unique()->values()->all());
-
-        $baseStockByProduct = $displayStore?->id
-            ? $stockAvailabilityService->availableBaseQuantities($displayStore->id, $productUnits->pluck('product_id'))
-            : collect();
+        $prefillUnitIds = collect($prefill['items'])->pluck('product_unit_id')->filter()->map(fn ($id) => (int) $id);
+        $productUnits = $this->posProductUnits('', 20);
+        if ($prefillUnitIds->isNotEmpty()) {
+            $productUnits = $productUnits
+                ->concat($this->posProductUnitsByIds($prefillUnitIds))
+                ->unique('id')
+                ->values();
+        }
+        $unitsPayload = $this->posProductPayload($productUnits, $displayStore?->id ?? 0, $stockAvailabilityService);
 
         return view('sales.create', [
             'currentStore' => $displayStore,
@@ -159,8 +168,7 @@ class SaleController extends Controller
                 ->get(['id', 'name', 'is_walk_in', 'location', 'opening_balance']),
             'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'productUnits' => $productUnits,
-            'unitsByProduct' => $unitsByProduct,
-            'baseStockByProduct' => $baseStockByProduct,
+            'unitsPayload' => $unitsPayload,
             'sourceSale' => $sourceSale,
             'exchangeReturn' => $exchangeReturn,
             'prefillSale' => $prefill,
@@ -174,6 +182,18 @@ class SaleController extends Controller
             'requiresShift' => $this->requiresCashShift(app(AccessService::class)),
             'requiresApprovalPin' => ! app(AccessService::class)->can('sales.override'),
             'canOverridePrices' => app(AccessService::class)->can('sales.override'),
+        ]);
+    }
+
+    public function productSearch(Request $request, StockAvailabilityService $stockAvailabilityService): JsonResponse
+    {
+        $search = trim((string) $request->query('q', ''));
+        $limit = max(1, min((int) $request->integer('limit', $search === '' ? 20 : 40), 60));
+        $storeId = $request->integer('store_id') ?: (auth()->user()?->default_store_id ?? 0);
+        $productUnits = $this->posProductUnits($search, $limit);
+
+        return response()->json([
+            'results' => $this->posProductPayload($productUnits, (int) $storeId, $stockAvailabilityService)->values(),
         ]);
     }
 
@@ -695,6 +715,133 @@ class SaleController extends Controller
             ));
             $item->setAttribute('base_stock_impact_label', $this->baseStockImpactLabel($item));
         });
+    }
+
+    private function posProductUnits(string $search = '', int $limit = 20): Collection
+    {
+        $search = trim($search);
+
+        return ProductUnit::query()
+            ->select('product_units.*')
+            ->join('products', 'products.id', '=', 'product_units.product_id')
+            ->leftJoin('categories', 'categories.id', '=', 'products.category_id')
+            ->with(['product.category:id,name', 'product.baseProductUnit:id,unit_name'])
+            ->where('product_units.is_active', true)
+            ->where('products.is_active', true)
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($inner) use ($search) {
+                    $inner->where('products.name', 'like', "%{$search}%")
+                        ->orWhere('products.code', 'like', "%{$search}%")
+                        ->orWhere('categories.name', 'like', "%{$search}%")
+                        ->orWhere('product_units.unit_name', 'like', "%{$search}%")
+                        ->orWhere('product_units.barcode', 'like', "%{$search}%")
+                        ->orWhere('product_units.part_number', 'like', "%{$search}%");
+                });
+            })
+            ->orderBy('products.name')
+            ->orderBy('product_units.unit_name')
+            ->limit(max(1, $limit))
+            ->get([
+                'product_units.id',
+                'product_units.product_id',
+                'product_units.unit_name',
+                'product_units.selling_price',
+                'product_units.cost_price',
+                'product_units.barcode',
+                'product_units.part_number',
+                'product_units.conversion_factor',
+                'product_units.is_base_unit',
+            ]);
+    }
+
+    private function posProductUnitsByIds(Collection $unitIds): Collection
+    {
+        $unitIds = $unitIds
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($unitIds->isEmpty()) {
+            return collect();
+        }
+
+        return ProductUnit::query()
+            ->select('product_units.*')
+            ->join('products', 'products.id', '=', 'product_units.product_id')
+            ->with(['product.category:id,name', 'product.baseProductUnit:id,unit_name'])
+            ->whereIn('product_units.id', $unitIds)
+            ->where('product_units.is_active', true)
+            ->where('products.is_active', true)
+            ->orderBy('products.name')
+            ->orderBy('product_units.unit_name')
+            ->get([
+                'product_units.id',
+                'product_units.product_id',
+                'product_units.unit_name',
+                'product_units.selling_price',
+                'product_units.cost_price',
+                'product_units.barcode',
+                'product_units.part_number',
+                'product_units.conversion_factor',
+                'product_units.is_base_unit',
+            ]);
+    }
+
+    private function posProductPayload(Collection $productUnits, int $storeId, StockAvailabilityService $stockAvailabilityService): Collection
+    {
+        $productUnitGroups = ProductUnit::query()
+            ->whereIn('product_id', $productUnits->pluck('product_id')->filter()->unique()->values())
+            ->where('is_active', true)
+            ->orderByDesc('conversion_factor')
+            ->orderBy('unit_name')
+            ->get(['product_id', 'unit_name', 'conversion_factor', 'is_base_unit'])
+            ->groupBy('product_id');
+
+        $unitsByProduct = $productUnitGroups
+            ->map(fn ($units) => $units->pluck('unit_name')->filter()->unique()->values()->all());
+
+        $baseStockByProduct = $storeId > 0
+            ? $stockAvailabilityService->availableBaseQuantities($storeId, $productUnits->pluck('product_id'))
+            : collect();
+
+        return $productUnits->map(function (ProductUnit $unit) use ($productUnitGroups, $unitsByProduct, $baseStockByProduct) {
+            $productUnitsForBase = $productUnitGroups[(int) $unit->product_id] ?? collect();
+            $baseUnit = $unit->product?->base_unit_label
+                ?: $unit->product?->baseProductUnit?->unit_name
+                ?: $productUnitsForBase->firstWhere('is_base_unit', true)?->unit_name
+                ?: $productUnitsForBase->first(fn ($candidate) => (float) ($candidate->conversion_factor ?? 0) === 1.0)?->unit_name
+                ?: 'base units';
+            $availableBaseStock = (float) ($baseStockByProduct[(int) $unit->product_id] ?? 0);
+            $unitsAvailable = collect($unitsByProduct[(int) $unit->product_id] ?? [])->filter()->implode(', ');
+            $label = trim(($unit->product?->name ?? '').' - '.$unit->unit_name);
+
+            return [
+                'id' => $unit->id,
+                'label' => $label,
+                'product_name' => $unit->product?->name,
+                'unit_name' => $unit->unit_name,
+                'category_name' => $unit->product?->category?->name,
+                'price' => (float) $unit->selling_price,
+                'barcode' => $unit->barcode,
+                'code' => $unit->product?->code,
+                'part_number' => $unit->part_number,
+                'base_stock_label' => $this->formatQuantity((float) $availableBaseStock).' '.$baseUnit,
+                'available_base_stock' => $availableBaseStock,
+                'base_unit_label' => $baseUnit,
+                'units_available_label' => $unitsAvailable,
+                'image_url' => null,
+                'search' => strtolower(trim(implode(' ', array_filter([
+                    $unit->product?->name,
+                    $unit->product?->category?->name,
+                    $unit->unit_name,
+                    $unit->product?->code,
+                    $unit->barcode,
+                    $unit->part_number,
+                    $unitsAvailable,
+                ])))),
+            ];
+        })->values();
     }
 
     private function compactItemUnitLabel(string $productName, string $unitName): string
