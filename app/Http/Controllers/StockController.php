@@ -259,14 +259,36 @@ class StockController extends Controller
 
         return view('stock.adjustment', [
             'currentStore' => $currentStore ?? Store::query()->orderBy('name')->first(['id', 'name']),
-            'productUnits' => ProductUnit::query()
-                ->with('product:id,name')
-                ->where('is_active', true)
-                ->orderBy('product_id')
-                ->orderBy('unit_name')
-                ->get(['id', 'product_id', 'unit_name', 'cost_price', 'barcode', 'part_number']),
+            'productUnits' => $this->adjustmentProductUnits(),
             'prefillAdjustment' => $prefill,
             'returnTo' => $this->safeReturnTo($request->input('return_to')),
+            'openingStockMode' => false,
+            'openingStockReference' => null,
+        ]);
+    }
+
+    public function openingStockCreate(Request $request): View
+    {
+        $currentStore = auth()->user()?->defaultStore;
+        $selectedUnit = $this->resolveSelectedUnit(
+            $request->integer('product_unit_id'),
+            $request->integer('product_id')
+        );
+        $prefill = [
+            'adjustment_type' => 'increase',
+            'items' => $selectedUnit ? [[
+                'product_unit_id' => $selectedUnit->id,
+                'quantity' => 1,
+            ]] : [],
+        ];
+
+        return view('stock.adjustment', [
+            'currentStore' => $currentStore ?? Store::query()->orderBy('name')->first(['id', 'name']),
+            'productUnits' => $this->adjustmentProductUnits(),
+            'prefillAdjustment' => $prefill,
+            'returnTo' => $this->safeReturnTo($request->input('return_to')),
+            'openingStockMode' => true,
+            'openingStockReference' => old('opening_reference', $request->query('opening_reference')),
         ]);
     }
 
@@ -476,6 +498,104 @@ class StockController extends Controller
         return redirect()
             ->route('stock.adjustments.show', $referenceNo)
             ->with('status', "Stock adjustment {$referenceNo} posted successfully.")
+            ->with('auto_print_document', true);
+    }
+
+    public function openingStockStore(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService,
+        ProductUnitConversionService $conversionService
+    ): RedirectResponse
+    {
+        $validated = $request->validate([
+            'adjustment_date' => ['required', 'date'],
+            'store_id' => ['required', 'exists:stores,id'],
+            'remarks' => ['nullable', 'string'],
+            'opening_reference' => ['nullable', 'string', 'max:255'],
+            'return_to' => ['nullable', 'string', 'max:2048'],
+            'items' => ['required', 'array'],
+            'items.*.product_unit_id' => ['nullable', 'exists:product_units,id'],
+            'items.*.quantity' => ['nullable', 'numeric', 'gt:0'],
+        ]);
+
+        $items = collect($validated['items'])
+            ->filter(fn (array $item) => ! empty($item['product_unit_id']) && ! empty($item['quantity']))
+            ->values();
+
+        if ($items->isEmpty()) {
+            throw ValidationException::withMessages([
+                'items' => 'Add at least one existing stock item before posting.',
+            ]);
+        }
+
+        $units = ProductUnit::query()
+            ->with('product:id,name')
+            ->whereIn('id', $items->pluck('product_unit_id'))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($items as $index => $item) {
+            $unit = $units->get((int) $item['product_unit_id']);
+            $conversionService->validatePrecision($item['quantity'], $unit, "items.{$index}.quantity");
+        }
+
+        $referenceNo = $documentNumberService->make('stock_adjustment', $validated['adjustment_date']);
+        $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), app(AccessService::class));
+        $remarks = trim((string) ($validated['remarks'] ?? '')) ?: 'Existing stock before system start';
+        $openingReference = trim((string) ($validated['opening_reference'] ?? ''));
+        if ($openingReference !== '') {
+            $remarks .= PHP_EOL.'Reference: '.$openingReference;
+        }
+
+        DB::transaction(function () use ($validated, $items, $units, $referenceNo, $storeId, $remarks, $conversionService) {
+            foreach ($items as $index => $item) {
+                /** @var ProductUnit $unit */
+                $unit = $units->get((int) $item['product_unit_id']);
+                $quantity = round((float) $item['quantity'], 3);
+                $conversionFactor = $conversionService->conversionFactorSnapshot($unit);
+                $baseQuantity = $conversionService->toBaseQuantity($quantity, $unit);
+                $referenceId = abs(crc32($referenceNo.'-opening-'.$index));
+
+                InventoryTransaction::create([
+                    'transaction_date' => $validated['adjustment_date'],
+                    'store_id' => $storeId,
+                    'product_id' => $unit->product_id,
+                    'product_unit_id' => $unit->id,
+                    'reference_type' => 'stock_adjustment',
+                    'reference_id' => $referenceId,
+                    'reference_no' => $referenceNo,
+                    'movement_type' => 'opening_stock',
+                    'quantity_in' => $quantity,
+                    'quantity_out' => 0,
+                    'base_quantity_in' => $baseQuantity,
+                    'base_quantity_out' => 0,
+                    'conversion_factor_snapshot' => $conversionFactor,
+                    'unit_cost' => $unit->cost_price,
+                    'remarks' => $remarks,
+                    'created_by' => auth()->id(),
+                ]);
+            }
+        });
+
+        $auditLogService->record('stock_opening.posted', null, "Opening stock {$referenceNo} posted.", [
+            'reference_no' => $referenceNo,
+            'store_id' => $storeId,
+            'line_count' => $items->count(),
+        ]);
+
+        $returnTo = $this->safeReturnTo($validated['return_to'] ?? null);
+
+        if ($returnTo) {
+            return redirect()
+                ->to($returnTo)
+                ->with('status', "Opening stock entry {$referenceNo} posted successfully.");
+        }
+
+        return redirect()
+            ->route('stock.adjustments.show', $referenceNo)
+            ->with('status', "Opening stock entry {$referenceNo} posted successfully.")
             ->with('auto_print_document', true);
     }
 
@@ -1201,6 +1321,26 @@ class StockController extends Controller
             'movementType' => $rows->first()->movement_type,
             'remarks' => $rows->first()?->remarks,
         ];
+    }
+
+    private function adjustmentProductUnits(): \Illuminate\Support\Collection
+    {
+        return ProductUnit::query()
+            ->with('product:id,name')
+            ->where('is_active', true)
+            ->orderBy('product_id')
+            ->orderBy('unit_name')
+            ->get([
+                'id',
+                'product_id',
+                'unit_name',
+                'cost_price',
+                'barcode',
+                'part_number',
+                'conversion_factor',
+                'allow_fractional_quantity',
+                'quantity_precision',
+            ]);
     }
 
     private function countDocumentData(string $referenceNo): array

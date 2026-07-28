@@ -4673,6 +4673,82 @@ class WorkflowTest extends TestCase
         ]);
     }
 
+    public function test_opening_stock_entry_page_loads_and_is_linked_from_stock_balance(): void
+    {
+        [$store, $unit] = $this->stockAdjustmentFixture();
+
+        $this->get('/stock/balances?store_id='.$store->id)
+            ->assertOk()
+            ->assertSee('Add Existing Stock')
+            ->assertSee(route('stock.opening-stock.create', [], false), false);
+
+        $this->get('/management-centre')
+            ->assertOk()
+            ->assertSee('Add Existing Stock')
+            ->assertSee('Enter old shop stock without creating supplier debt.');
+
+        $this->get('/stock/opening-stock/create?product_id='.$unit->product_id)
+            ->assertOk()
+            ->assertSee('Opening Stock Entry')
+            ->assertSee('Use this when stock already existed in the shop before the system started. It increases stock without creating supplier debt.')
+            ->assertSee('Existing stock before system start')
+            ->assertSee('Adjustment Safety Product')
+            ->assertDontSee('<option value="decrease"', false);
+    }
+
+    public function test_opening_stock_entry_posts_stock_in_without_purchase_or_supplier_debt(): void
+    {
+        $store = Store::query()->firstOrCreate(['name' => 'Apples Of Gold'], ['is_active' => true]);
+        $product = Product::create(['name' => 'Opening Carton Product', 'base_unit_label' => 'Pieces', 'is_active' => true]);
+        $carton = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Carton',
+            'conversion_factor' => 24,
+            'cost_price' => 24000,
+            'selling_price' => 30000,
+            'is_active' => true,
+        ]);
+
+        $this->post('/stock/opening-stock', [
+            'adjustment_date' => '2026-07-28',
+            'store_id' => $store->id,
+            'remarks' => 'Existing stock before system start',
+            'opening_reference' => 'Shelf sheet 1',
+            'items' => [
+                ['product_unit_id' => $carton->id, 'quantity' => 2],
+            ],
+        ])
+            ->assertRedirect('/stock/adjustments/ADJ-20260728-0001')
+            ->assertSessionHas('auto_print_document', true);
+
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'stock_adjustment',
+            'reference_no' => 'ADJ-20260728-0001',
+            'movement_type' => 'opening_stock',
+            'store_id' => $store->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $carton->id,
+            'quantity_in' => 2,
+            'quantity_out' => 0,
+            'base_quantity_in' => 48,
+            'base_quantity_out' => 0,
+            'conversion_factor_snapshot' => 24,
+        ]);
+        $this->assertDatabaseHas('activity_logs', [
+            'event' => 'stock_opening.posted',
+        ]);
+        $this->assertDatabaseCount('purchases', 0);
+        $this->assertDatabaseCount('purchase_items', 0);
+        $this->assertDatabaseCount('supplier_payments', 0);
+        $this->assertSame(0.0, (float) Purchase::query()->sum('balance_due'));
+        $this->assertSame(0.0, (float) Supplier::query()->sum('opening_balance'));
+
+        $this->get('/stock/balances?store_id='.$store->id.'&q=Opening Carton Product')
+            ->assertOk()
+            ->assertSee('Base Stock 48 pieces')
+            ->assertSee('Breakdown: 2 cartons');
+    }
+
     private function stockAdjustmentFixture(): array
     {
         $store = Store::query()->firstOrCreate(['name' => 'Apples Of Gold'], ['is_active' => true]);

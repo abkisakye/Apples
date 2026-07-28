@@ -34,6 +34,7 @@ class ManagementCentreController extends Controller
                 'summary' => 'Daily stock balances, reorder, transfers, adjustments, and stock counts.',
                 'items' => [
                     ['label' => 'Stock Balances', 'route' => 'stock.balances', 'ability' => 'stock.view', 'description' => 'Check current stock quantities and values.'],
+                    ['label' => 'Add Existing Stock', 'route' => 'stock.opening-stock.create', 'ability' => 'stock.manage', 'description' => 'Enter old shop stock without creating supplier debt.'],
                     ['label' => 'Reorder Report', 'route' => 'stock.reorder', 'ability' => 'stock.view', 'description' => 'Find items at or below reorder level.'],
                     ['label' => 'Stock Transfers', 'route' => 'stock.transfers.index', 'ability' => 'stock.view', 'description' => 'Review stock moved between stores.'],
                     ['label' => 'Stock Adjustments', 'route' => 'stock.adjustments.index', 'ability' => 'stock.view', 'description' => 'Review corrections for damaged, missing, or extra stock.'],

@@ -2,6 +2,7 @@
 
 @section('content')
     @php($initialAdjustmentItems = collect(old('items', $prefillAdjustment['items'] ?? [])))
+    @php($openingStockMode = $openingStockMode ?? false)
     @php($unitsPayload = $productUnits->map(fn ($unit) => [
         'id' => $unit->id,
         'label' => trim($unit->product->name.' - '.$unit->unit_name),
@@ -9,6 +10,8 @@
         'unit_name' => $unit->unit_name,
         'barcode' => $unit->barcode,
         'part_number' => $unit->part_number,
+        'allow_fractional_quantity' => (bool) ($unit->allow_fractional_quantity ?? false),
+        'quantity_precision' => (int) ($unit->quantity_precision ?? 0),
         'search' => strtolower(trim(implode(' ', array_filter([$unit->product->name, $unit->unit_name, $unit->barcode, $unit->part_number])))),
     ]))
     <style>
@@ -39,30 +42,37 @@
     </style>
     <div class="page-head">
         <div>
-            <h2>Stock Adjustment</h2>
-            <p>Search items, add them to the adjustment list, choose whether system stock is increasing or decreasing, and post the correction for your current store.</p>
-            <p class="list-note">For existing shop stock that was already paid before system start, use Increase stock with an opening-stock note. This adds stock without creating supplier debt.</p>
+            <h2>{{ $openingStockMode ? 'Opening Stock Entry' : 'Stock Adjustment' }}</h2>
+            @if ($openingStockMode)
+                <p>Use this when stock already existed in the shop before the system started. It increases stock without creating supplier debt.</p>
+            @else
+                <p>Search items, add them to the adjustment list, choose whether system stock is increasing or decreasing, and post the correction for your current store.</p>
+                <p class="list-note">For existing shop stock that was already paid before system start, use Opening Stock Entry. This adds stock without creating supplier debt.</p>
+            @endif
         </div>
         <div class="actions">
             <a href="{{ $returnTo ?: route('stock.balances') }}" class="button-link">Back to Stock</a>
         </div>
     </div>
 
-    <form method="post" action="{{ route('stock.adjustments.store') }}" id="adjustment-form" class="workflow-shell">
+    <form method="post" action="{{ $openingStockMode ? route('stock.opening-stock.store') : route('stock.adjustments.store') }}" id="adjustment-form" class="workflow-shell">
         @csrf
         <input type="hidden" name="store_id" value="{{ $currentStore?->id }}">
         <input type="hidden" name="return_to" value="{{ old('return_to', $returnTo) }}">
+        @if ($openingStockMode)
+            <input type="hidden" name="adjustment_type" value="increase">
+        @endif
         <div class="workflow-stack summary-card">
             <section class="panel">
                 <h3>1. Search And Add Items</h3>
-                <p class="list-note">Search the selling unit, add it once, then enter the units that need correction in the system.</p>
+                <p class="list-note">{{ $openingStockMode ? 'Search the product and unit/pack that already exists in the shop, then enter the physical quantity found.' : 'Search the selling unit, add it once, then enter the units that need correction in the system.' }}</p>
                 <input type="text" id="adjustment-search" class="picker-input" placeholder="Search product, barcode, or part number">
                 <div id="adjustment-search-results" class="result-list"></div>
             </section>
             <section class="panel">
                 <div class="page-head" style="margin-bottom:12px;">
-                    <div><h3 style="margin:0;">2. Adjustment Items</h3><p style="margin:6px 0 0;">Add the stock units and set the unit difference to correct.</p></div>
-                    <div class="actions"><button type="button" id="clear-adjustment-cart" class="button-link">Clear Adjustment</button></div>
+                    <div><h3 style="margin:0;">2. {{ $openingStockMode ? 'Existing Stock Items' : 'Adjustment Items' }}</h3><p style="margin:6px 0 0;">{{ $openingStockMode ? 'Add each product/unit and enter the quantity already in the shop.' : 'Add the stock units and set the unit difference to correct.' }}</p></div>
+                    <div class="actions"><button type="button" id="clear-adjustment-cart" class="button-link">{{ $openingStockMode ? 'Clear Entry' : 'Clear Adjustment' }}</button></div>
                 </div>
                 <div id="adjustment-cart-empty" class="empty-state">No items added yet.</div>
                 <div id="adjustment-cart-list" class="cart-list"></div>
@@ -71,29 +81,33 @@
         </div>
         <div class="workflow-stack">
             <section class="panel">
-                <h3>3. Adjustment Details</h3>
+                <h3>3. {{ $openingStockMode ? 'Opening Stock Details' : 'Adjustment Details' }}</h3>
                 <div class="compact-grid" style="margin-top:14px;">
-                    <label class="form-field"><span>Adjustment Date</span><input type="date" name="adjustment_date" value="{{ old('adjustment_date', now()->toDateString()) }}" required></label>
+                    <label class="form-field"><span>{{ $openingStockMode ? 'Entry Date' : 'Adjustment Date' }}</span><input type="date" name="adjustment_date" value="{{ old('adjustment_date', now()->toDateString()) }}" required></label>
                     <div class="form-field"><span>Shop</span><div class="store-pill">{{ $currentStore?->name ?? config('business.name', 'Apples Of Gold') }}</div></div>
-                    <label class="form-field" style="grid-column:1 / -1;">
-                        <span>Adjustment Type</span>
-                        <select name="adjustment_type" id="adjustment-type" required>
-                            <option value="increase" @selected(old('adjustment_type', $prefillAdjustment['adjustment_type'] ?? 'increase') === 'increase')>Increase stock</option>
-                            <option value="decrease" @selected(old('adjustment_type', $prefillAdjustment['adjustment_type'] ?? 'increase') === 'decrease')>Decrease stock</option>
-                        </select>
-                    </label>
+                    @if ($openingStockMode)
+                        <label class="form-field" style="grid-column:1 / -1;"><span>Optional Reference</span><input type="text" name="opening_reference" value="{{ old('opening_reference', $openingStockReference ?? '') }}" placeholder="Example: Opening stock sheet, shelf count, notebook ref"></label>
+                    @else
+                        <label class="form-field" style="grid-column:1 / -1;">
+                            <span>Adjustment Type</span>
+                            <select name="adjustment_type" id="adjustment-type" required>
+                                <option value="increase" @selected(old('adjustment_type', $prefillAdjustment['adjustment_type'] ?? 'increase') === 'increase')>Increase stock</option>
+                                <option value="decrease" @selected(old('adjustment_type', $prefillAdjustment['adjustment_type'] ?? 'increase') === 'decrease')>Decrease stock</option>
+                            </select>
+                        </label>
+                    @endif
                 </div>
-                <label class="form-field" style="margin-top:12px;"><span>Remarks / Reason</span><textarea name="remarks" rows="3">{{ old('remarks') }}</textarea></label>
+                <label class="form-field" style="margin-top:12px;"><span>Reason / Note</span><textarea name="remarks" rows="3">{{ old('remarks', $openingStockMode ? 'Existing stock before system start' : '') }}</textarea></label>
             </section>
             <section class="panel">
                 <h3>4. Save</h3>
-                <div id="adjustment-badge" class="status-pill decrease" style="margin-top:14px;">Decrease Stock</div>
+                <div id="adjustment-badge" class="status-pill {{ $openingStockMode ? '' : 'decrease' }}" style="margin-top:14px;">{{ $openingStockMode ? 'Opening Stock In' : 'Decrease Stock' }}</div>
                 <div class="summary-block" style="margin-top:14px;">
                     <div class="summary-row"><span>Lines</span><strong id="adjustment-lines-summary">0</strong></div>
                     <div class="summary-row"><span>Total Quantity</span><strong id="adjustment-qty-summary">0</strong></div>
                 </div>
-                <p class="list-note">Use this for stock take differences, damaged goods, corrections, or items found during recount. When a staff member does a physical stock count, compare the physical count to the system count and post only the difference here.</p>
-                <button type="submit" style="margin-top:14px; width:100%;">Record Adjustment</button>
+                <p class="list-note">{{ $openingStockMode ? 'This will create stock-in records only. It will not create a supplier purchase, supplier payment, or supplier balance.' : 'Use this for stock take differences, damaged goods, corrections, or items found during recount. When a staff member does a physical stock count, compare the physical count to the system count and post only the difference here.' }}</p>
+                <button type="submit" style="margin-top:14px; width:100%;">{{ $openingStockMode ? 'Post Opening Stock' : 'Record Adjustment' }}</button>
             </section>
         </div>
     </form>
@@ -101,6 +115,7 @@
     <script>
         (() => {
             const units = @json($unitsPayload);
+            const openingStockMode = @json($openingStockMode);
             const form = document.getElementById('adjustment-form');
             if (!form) return;
             const searchInput = document.getElementById('adjustment-search');
@@ -128,7 +143,14 @@
                 @endif
             @endforeach
             let cart = initialItems;
-            const normalizeQuantity = (value) => Math.max(Math.round(Number(value || 0)), 1);
+            const normalizeQuantity = (value) => {
+                const numeric = Number(value || 0);
+                if (openingStockMode) {
+                    return Math.max(Math.round(numeric * 1000) / 1000, 0.001);
+                }
+
+                return Math.max(Math.round(numeric), 1);
+            };
 
             function renderResults() {
                 const needle = String(searchInput.value || '').trim().toLowerCase();
@@ -138,13 +160,19 @@
 
             function renderCart() {
                 cartEmpty.style.display = cart.length ? 'none' : 'block';
-                cartList.innerHTML = cart.map((item, index) => `<div class="cart-item"><div class="cart-item-head"><strong>${item.label}</strong><button type="button" class="cart-remove" data-remove="${index}">Remove</button></div><label class="form-field"><span>Quantity</span><div class="qty-box"><button type="button" data-minus="${index}">-</button><input type="number" min="1" step="1" value="${item.quantity}" data-qty="${index}"><button type="button" data-plus="${index}">+</button></div></label></div>`).join('');
+                cartList.innerHTML = cart.map((item, index) => `<div class="cart-item"><div class="cart-item-head"><strong>${item.label}</strong><button type="button" class="cart-remove" data-remove="${index}">Remove</button></div><label class="form-field"><span>Quantity</span><div class="qty-box"><button type="button" data-minus="${index}">-</button><input type="number" min="${openingStockMode ? '0.001' : '1'}" step="${openingStockMode ? '0.001' : '1'}" value="${item.quantity}" data-qty="${index}"><button type="button" data-plus="${index}">+</button></div></label></div>`).join('');
                 hidden.innerHTML = cart.map((item, index) => `<input type="hidden" name="items[${index}][product_unit_id]" value="${item.id}"><input type="hidden" name="items[${index}][quantity]" value="${item.quantity}">`).join('');
                 linesSummary.textContent = String(cart.length);
                 qtySummary.textContent = String(cart.reduce((sum, item) => sum + normalizeQuantity(item.quantity), 0));
             }
 
             function updateBadge() {
+                if (!typeSelect) {
+                    badge.textContent = 'Opening Stock In';
+                    badge.classList.remove('decrease');
+                    return;
+                }
+
                 if (typeSelect.value === 'increase') {
                     badge.textContent = 'Increase Stock';
                     badge.classList.remove('decrease');
@@ -184,9 +212,9 @@
                 if (qty) { const i = Number(qty.dataset.qty); cart[i].quantity = normalizeQuantity(qty.value); renderCart(); }
             });
             document.getElementById('clear-adjustment-cart').addEventListener('click', () => { cart = []; renderCart(); });
-            typeSelect.addEventListener('change', updateBadge);
+            typeSelect?.addEventListener('change', updateBadge);
             form.addEventListener('submit', (event) => {
-                if (!cart.length) { event.preventDefault(); alert('Add at least one item before posting the adjustment.'); searchInput.focus(); }
+                if (!cart.length) { event.preventDefault(); alert(openingStockMode ? 'Add at least one existing stock item before posting.' : 'Add at least one item before posting the adjustment.'); searchInput.focus(); }
             });
             renderResults();
             renderCart();

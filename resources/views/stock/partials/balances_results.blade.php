@@ -81,6 +81,10 @@
                                         <span>Stock Adjustment</span>
                                         <span class="meta">Adj</span>
                                     </a>
+                                    <a href="{{ route('stock.opening-stock.create', ['product_id' => $row->product_id, 'return_to' => url()->full()]) }}" class="row-action-link primary">
+                                        <span>Add Existing Stock</span>
+                                        <span class="meta">Open</span>
+                                    </a>
                             @endif
                             @if ($access->can('purchases.manage'))
                                     <a href="{{ route('purchases.create', ['product_id' => $row->product_id, 'return_to' => url()->full()]) }}" class="row-action-link primary">
