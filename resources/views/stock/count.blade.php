@@ -18,26 +18,32 @@
     @php($firstVisibleLine = method_exists($rows, 'firstItem') ? ($rows->firstItem() ?? 0) : ($visibleLineCount ? 1 : 0))
     @php($lastVisibleLine = method_exists($rows, 'lastItem') ? ($rows->lastItem() ?? 0) : $visibleLineCount)
     <style>
-        .count-shell { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(300px,.86fr); gap:18px; align-items:start; }
+        .count-shell { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,380px); gap:18px; align-items:start; }
         .count-stack { display:grid; gap:16px; }
+        .count-side-panel { align-content:start; }
         .count-filter-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; }
         .count-filter-grid .span-two { grid-column: span 2; }
+        .count-sheet-panel { overflow:hidden; }
+        .count-sheet-scroller { overflow-x:auto; padding-bottom:4px; scrollbar-width:thin; }
+        .count-sheet-grid { min-width:1120px; }
+        .count-grid-columns { display:grid; grid-template-columns:minmax(250px,1.2fr) 190px minmax(310px,1.15fr) 150px 130px 120px; gap:12px; align-items:start; }
         .count-list { display:grid; gap:10px; }
-        .count-row { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(170px,.8fr) minmax(260px,1.15fr) 140px 120px 120px; gap:10px; align-items:start; padding:12px; border:1px solid var(--line); border-radius:16px; background:#fff; }
+        .count-row { padding:10px 12px; border:1px solid var(--line); border-radius:14px; background:#fff; }
         .count-row.counted { border-color:#b8d7c4; background:linear-gradient(135deg, #f8fffb 0%, #f1faf5 100%); }
         .count-row strong { display:block; margin-bottom:3px; }
-        .count-input { width:100%; border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-height:44px; }
-        .count-variance { display:inline-flex; justify-content:center; align-items:center; min-height:44px; padding:0 10px; border-radius:12px; border:1px solid var(--line); background:var(--panel-soft); font-weight:700; }
+        .count-system-stock .badge { white-space:normal; line-height:1.25; }
+        .count-input { width:100%; border:1px solid var(--line); border-radius:12px; padding:8px 10px; min-height:40px; }
+        .count-variance { display:inline-flex; justify-content:center; align-items:center; width:100%; min-height:40px; padding:0 10px; border-radius:12px; border:1px solid var(--line); background:var(--panel-soft); font-weight:700; }
         .count-variance.plus { background:var(--brand-soft); color:var(--brand); border-color:#b8d7c4; }
         .count-variance.minus { background:var(--apple-soft); color:var(--apple); border-color:#d7b3b3; }
-        .count-toggle { display:flex; align-items:center; gap:8px; min-height:44px; padding:0 10px; border:1px solid var(--line); border-radius:12px; background:var(--panel-soft); }
+        .count-toggle { display:flex; align-items:center; gap:8px; min-height:40px; padding:0 10px; border:1px solid var(--line); border-radius:12px; background:var(--panel-soft); }
         .count-toggle input { width:18px; height:18px; accent-color:var(--brand); }
         .count-toggle.active { border-color:#b8d7c4; background:var(--brand-soft); color:var(--brand); font-weight:700; }
         .summary-grid { display:grid; gap:12px; }
         .summary-row { display:flex; justify-content:space-between; gap:12px; align-items:center; }
         .summary-callout { padding:12px 14px; border-radius:14px; background:var(--accent-soft); border:1px solid #ead79f; color:var(--accent-ink); line-height:1.45; }
-        .count-head { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(170px,.8fr) minmax(260px,1.15fr) 140px 120px 120px; gap:10px; padding:0 12px 8px; color:var(--muted); font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
-        .unit-entry-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(118px, 1fr)); gap:8px; }
+        .count-head { padding:0 12px 8px; color:var(--muted); font-size:.76rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+        .unit-entry-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(135px, 1fr)); gap:8px; }
         .unit-entry { display:grid; gap:4px; }
         .unit-entry span { color:var(--muted); font-size:.78rem; font-weight:700; }
         .count-base-total { display:grid; gap:5px; color:var(--muted); }
@@ -48,12 +54,17 @@
         .count-pager { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-top:14px; }
         .count-pager-meta { color:var(--muted); font-size:.92rem; }
         .count-pager-actions { display:flex; gap:8px; flex-wrap:wrap; }
-        @media (max-width:1100px) { .count-shell { grid-template-columns:1fr; } }
+        @media (max-width:1380px) {
+            .count-shell { grid-template-columns:1fr; }
+            .count-side-panel { grid-template-columns:repeat(2, minmax(0,1fr)); }
+        }
+        @media (max-width:920px) { .count-side-panel { grid-template-columns:1fr; } }
         @media (max-width:760px) {
             .count-filter-grid { grid-template-columns:1fr; }
             .count-filter-grid .span-two { grid-column:auto; }
             .count-head { display:none; }
-            .count-row { grid-template-columns:1fr; }
+            .count-sheet-grid { min-width:0; }
+            .count-row.count-grid-columns { grid-template-columns:1fr; }
         }
     </style>
 
@@ -143,7 +154,7 @@
         <input type="hidden" name="page" value="{{ method_exists($rows, 'currentPage') ? $rows->currentPage() : 1 }}">
         <input type="hidden" name="per_page" value="{{ $perPage }}">
         <div class="count-stack">
-            <section class="panel">
+            <section class="panel count-sheet-panel">
                 <div class="page-head" style="margin-bottom:12px;">
                     <div>
                         <h3 style="margin:0;">Count Sheet</h3>
@@ -165,73 +176,77 @@
                         <span>Showing {{ number_format($firstVisibleLine) }}-{{ number_format($lastVisibleLine) }} of {{ number_format($matchingLineCount) }} matching lines.</span>
                         <span>{{ $countFocus === 'all' ? 'Batch size: '.number_format($perPage).' lines' : ($countFocus === 'low_stock' ? 'Priority: low stock lines' : 'Priority: zero / negative lines') }}</span>
                     </div>
-                    <div class="count-head">
-                        <div>Product</div>
-                        <div>System Base Stock</div>
-                        <div>Count Using Units</div>
-                        <div>Physical Base Total</div>
-                        <div>Counted</div>
-                        <div>Variance</div>
-                    </div>
-                    <div class="count-list">
-                        @foreach ($rowCollection as $index => $row)
-                            @php($systemCount = max((float) $row->base_balance, 0))
-                            @php($savedItem = $savedItemsCollection->firstWhere('product_id', $row->product_id))
-                            @php($isCounted = (bool) data_get($savedItem, 'is_counted', false))
-                            @php($savedUnitEntries = collect(data_get($savedItem, 'unit_entries', []))->keyBy('product_unit_id'))
-                            @php($physicalBaseCount = (float) data_get($savedItem, 'physical_base_qty', 0))
-                            <div class="count-row {{ $isCounted ? 'counted' : '' }}">
-                                <div>
-                                    <strong>{{ $row->product_name }}</strong>
-                                    <div class="table-meta">{{ $row->product_code ?: 'No code' }}</div>
-                                    <div class="table-meta">{{ $row->category_name ?? 'Uncategorized' }}</div>
-                                    <div class="table-meta">Base unit: {{ $row->base_unit_label }}</div>
-                                </div>
-                                <div>
-                                    <span class="badge soft">System {{ $row->base_stock_label }}</span>
-                                    <div class="table-meta" style="margin-top:6px;">{{ $row->friendly_breakdown }}</div>
-                                    <div class="table-meta">Units: {{ $row->configured_units }}</div>
-                                </div>
-                                <div>
-                                    <input type="hidden" name="items[{{ $index }}][product_id]" value="{{ $row->product_id }}">
-                                    <input type="hidden" name="items[{{ $index }}][system_base_qty]" value="{{ $systemCount }}" data-system-base>
-                                    <div class="unit-entry-grid">
-                                        @foreach ($row->units as $unitIndex => $unit)
-                                            @php($savedEntry = $savedUnitEntries->get($unit->id))
-                                            @php($step = $unit->allow_fractional_quantity ? '0.'.str_repeat('0', max((int) $unit->quantity_precision - 1, 0)).'1' : '1')
-                                            <label class="unit-entry">
-                                                <span>{{ $unit->unit_name }}</span>
-                                                <input type="hidden" name="items[{{ $index }}][unit_entries][{{ $unitIndex }}][product_unit_id]" value="{{ $unit->id }}">
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="{{ $step }}"
-                                                    name="items[{{ $index }}][unit_entries][{{ $unitIndex }}][entered_quantity]"
-                                                    value="{{ old("items.{$index}.unit_entries.{$unitIndex}.entered_quantity", data_get($savedEntry, 'entered_quantity')) }}"
-                                                    class="count-input"
-                                                    data-count-input
-                                                    data-factor="{{ (float) $unit->conversion_factor > 0 ? (float) $unit->conversion_factor : 1 }}"
-                                                    data-precision="{{ (int) $unit->quantity_precision }}"
-                                                >
-                                            </label>
-                                        @endforeach
-                                    </div>
-                                </div>
-                                <div class="count-base-total">
-                                    <strong data-physical-base-total>{{ $physicalBaseCount > 0 ? number_format($physicalBaseCount, 3, '.', '') : '0' }}</strong>
-                                    <span>{{ strtolower($row->base_unit_label) }}</span>
-                                </div>
-                                <div>
-                                    <label class="count-toggle {{ old("items.{$index}.is_counted", $isCounted ? 1 : 0) ? 'active' : '' }}">
-                                        <input type="checkbox" name="items[{{ $index }}][is_counted]" value="1" @checked(old("items.{$index}.is_counted", $isCounted ? 1 : 0)) data-counted-toggle>
-                                        <span>{{ old("items.{$index}.is_counted", $isCounted ? 1 : 0) ? 'Counted' : 'Pending' }}</span>
-                                    </label>
-                                </div>
-                                <div>
-                                    <span class="count-variance" data-variance-chip>Match</span>
-                                </div>
+                    <div class="count-sheet-scroller">
+                        <div class="count-sheet-grid">
+                            <div class="count-head count-grid-columns">
+                                <div>Product</div>
+                                <div>System Base Stock</div>
+                                <div>Count Using Units</div>
+                                <div>Physical Base Total</div>
+                                <div>Counted</div>
+                                <div>Variance</div>
                             </div>
-                        @endforeach
+                            <div class="count-list">
+                                @foreach ($rowCollection as $index => $row)
+                                    @php($systemCount = max((float) $row->base_balance, 0))
+                                    @php($savedItem = $savedItemsCollection->firstWhere('product_id', $row->product_id))
+                                    @php($isCounted = (bool) data_get($savedItem, 'is_counted', false))
+                                    @php($savedUnitEntries = collect(data_get($savedItem, 'unit_entries', []))->keyBy('product_unit_id'))
+                                    @php($physicalBaseCount = (float) data_get($savedItem, 'physical_base_qty', 0))
+                                    <div class="count-row count-grid-columns {{ $isCounted ? 'counted' : '' }}">
+                                        <div>
+                                            <strong>{{ $row->product_name }}</strong>
+                                            <div class="table-meta">{{ $row->product_code ?: 'No code' }}</div>
+                                            <div class="table-meta">{{ $row->category_name ?? 'Uncategorized' }}</div>
+                                            <div class="table-meta">Base unit: {{ $row->base_unit_label }}</div>
+                                        </div>
+                                        <div class="count-system-stock">
+                                            <span class="badge soft">System {{ $row->base_stock_label }}</span>
+                                            <div class="table-meta" style="margin-top:6px;">{{ $row->friendly_breakdown }}</div>
+                                            <div class="table-meta">Units: {{ $row->configured_units }}</div>
+                                        </div>
+                                        <div>
+                                            <input type="hidden" name="items[{{ $index }}][product_id]" value="{{ $row->product_id }}">
+                                            <input type="hidden" name="items[{{ $index }}][system_base_qty]" value="{{ $systemCount }}" data-system-base>
+                                            <div class="unit-entry-grid">
+                                                @foreach ($row->units as $unitIndex => $unit)
+                                                    @php($savedEntry = $savedUnitEntries->get($unit->id))
+                                                    @php($step = $unit->allow_fractional_quantity ? '0.'.str_repeat('0', max((int) $unit->quantity_precision - 1, 0)).'1' : '1')
+                                                    <label class="unit-entry">
+                                                        <span>{{ $unit->unit_name }}</span>
+                                                        <input type="hidden" name="items[{{ $index }}][unit_entries][{{ $unitIndex }}][product_unit_id]" value="{{ $unit->id }}">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="{{ $step }}"
+                                                            name="items[{{ $index }}][unit_entries][{{ $unitIndex }}][entered_quantity]"
+                                                            value="{{ old("items.{$index}.unit_entries.{$unitIndex}.entered_quantity", data_get($savedEntry, 'entered_quantity')) }}"
+                                                            class="count-input"
+                                                            data-count-input
+                                                            data-factor="{{ (float) $unit->conversion_factor > 0 ? (float) $unit->conversion_factor : 1 }}"
+                                                            data-precision="{{ (int) $unit->quantity_precision }}"
+                                                        >
+                                                    </label>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                        <div class="count-base-total">
+                                            <strong data-physical-base-total>{{ $physicalBaseCount > 0 ? number_format($physicalBaseCount, 3, '.', '') : '0' }}</strong>
+                                            <span>{{ strtolower($row->base_unit_label) }}</span>
+                                        </div>
+                                        <div>
+                                            <label class="count-toggle {{ old("items.{$index}.is_counted", $isCounted ? 1 : 0) ? 'active' : '' }}">
+                                                <input type="checkbox" name="items[{{ $index }}][is_counted]" value="1" @checked(old("items.{$index}.is_counted", $isCounted ? 1 : 0)) data-counted-toggle>
+                                                <span>{{ old("items.{$index}.is_counted", $isCounted ? 1 : 0) ? 'Counted' : 'Pending' }}</span>
+                                            </label>
+                                        </div>
+                                        <div>
+                                            <span class="count-variance" data-variance-chip>Match</span>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
                     </div>
                     @if (method_exists($rows, 'hasPages') && $rows->hasPages())
                         <div class="count-pager">
@@ -254,7 +269,7 @@
             </section>
         </div>
 
-        <div class="count-stack">
+        <div class="count-stack count-side-panel">
             <section class="panel">
                 <h3>Count Details</h3>
                 <div class="summary-grid" style="margin-top:14px;">

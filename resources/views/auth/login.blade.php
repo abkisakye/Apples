@@ -229,21 +229,21 @@
                     @if ($businessLogo)
                         <img src="{{ $businessLogo }}" alt="{{ $businessName }} logo" class="hero-logo">
                     @endif
-                    <h1>{{ $businessTagline }}</h1>
-                    <p>Retail sales, stock control, credit tracking, supplier handling, and daily management in one working system built for the supermarket team.</p>
+                    <h1>Wholesale & Retail Management System</h1>
+                    <p>Run counter sales, bulk sales, carton and piece stock control, customer credit, supplier purchases, and owner reporting in one workspace built for Apples Of Gold.</p>
                 </div>
                 <div class="hero-grid">
                     <div class="hero-card">
-                        <strong>Fast cashier flow</strong>
-                        <span>Search products, build the sale list, take payment, and print clean branded receipts immediately.</span>
+                        <strong>Wholesale-ready stock</strong>
+                        <span>Handle cartons, sacks, boxes, dozens, pieces, kg, and other selling packs without confusing duplicate product records.</span>
                     </div>
                     <div class="hero-card">
-                        <strong>Management visibility</strong>
-                        <span>Track low stock, overdue credit, follow-ups, and day-to-day movement without leaving the dashboard.</span>
+                        <strong>Fast sales desk</strong>
+                        <span>Search products, choose the right pack, take payment, and print clean branded receipts at the counter.</span>
                     </div>
                     <div class="hero-card">
-                        <strong>Controlled access</strong>
-                        <span>Use named staff accounts with the right roles and store assignment for day-to-day work.</span>
+                        <strong>Owner visibility</strong>
+                        <span>Track daily sales, supplier purchases, low stock, credit customers, and staff activity from the same system.</span>
                     </div>
                 </div>
             </div>
