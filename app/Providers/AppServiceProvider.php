@@ -7,6 +7,7 @@ use App\Support\AccessService;
 use App\Support\ApprovalPinService;
 use App\Support\StockAvailabilityService;
 use App\Support\StoreAssignmentService;
+use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
@@ -45,8 +46,16 @@ class AppServiceProvider extends ServiceProvider
 
     private function loadBusinessSettings(): void
     {
+        $request = $this->currentRequest();
+
+        if ($request?->attributes->get('business_settings_loaded')) {
+            return;
+        }
+
         try {
             if (! Schema::hasTable('business_settings')) {
+                $request?->attributes->set('business_settings_loaded', true);
+
                 return;
             }
 
@@ -71,8 +80,20 @@ class AppServiceProvider extends ServiceProvider
                     config(["business.{$key}" => $settings[$key]]);
                 }
             }
+
+            $request?->attributes->set('business_settings_loaded', true);
         } catch (Throwable) {
+            $request?->attributes->set('business_settings_loaded', true);
             // Fall back to file/env config when the settings table is not available yet.
+        }
+    }
+
+    private function currentRequest(): ?Request
+    {
+        try {
+            return $this->app->bound('request') ? $this->app['request'] : null;
+        } catch (Throwable) {
+            return null;
         }
     }
 }

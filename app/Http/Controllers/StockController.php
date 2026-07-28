@@ -32,7 +32,7 @@ class StockController extends Controller
     public function balances(Request $request, StockDisplayService $stockDisplayService): View
     {
         [$stores, $categories, $filters] = $this->stockReferenceData($request);
-        $rows = $stockDisplayService->rows($request);
+        $rows = $stockDisplayService->paginatedRows($request);
 
         if ($request->ajax()) {
             return view('stock.partials.balances_results', compact('rows', 'stores', 'categories', 'filters'));

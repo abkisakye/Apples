@@ -151,6 +151,37 @@ class StockDisplayTest extends TestCase
             ->assertSee('View History');
     }
 
+    public function test_stock_balances_are_paginated_but_search_still_checks_all_products(): void
+    {
+        foreach (range(1, 55) as $number) {
+            $product = Product::create([
+                'name' => sprintf('Paged Stock Product %03d', $number),
+                'is_active' => true,
+            ]);
+
+            ProductUnit::create([
+                'product_id' => $product->id,
+                'unit_name' => 'Piece',
+                'conversion_factor' => 1,
+                'selling_price' => 1000,
+                'cost_price' => 600,
+                'is_base_unit' => true,
+                'is_active' => true,
+            ]);
+        }
+
+        $this->get('/stock/balances?store_id='.$this->store->id.'&per_page=20')
+            ->assertOk()
+            ->assertSee('Paged Stock Product 001')
+            ->assertDontSee('Paged Stock Product 055')
+            ->assertSee('page=2', false);
+
+        $this->get('/stock/balances?store_id='.$this->store->id.'&per_page=20&q=Paged Stock Product 055')
+            ->assertOk()
+            ->assertSee('Paged Stock Product 055')
+            ->assertDontSee('Paged Stock Product 001');
+    }
+
     public function test_old_unit_level_history_route_still_works_and_links_to_product_history(): void
     {
         [$product, $piece] = $this->pieceCartonProduct('Unit History Crisps');

@@ -1,11 +1,12 @@
 @php($currency = config('business.currency', 'UGX'))
-@php($lowItems = $rows->filter(fn ($row) => (float) $row->reorder_level > 0 && (float) $row->base_balance <= (float) $row->reorder_level))
+@php($rowCollection = collect(method_exists($rows, 'items') ? $rows->items() : $rows))
+@php($lowItems = $rowCollection->filter(fn ($row) => (float) $row->reorder_level > 0 && (float) $row->base_balance <= (float) $row->reorder_level))
 
 <section class="cards">
-    <div class="card"><div class="label">Items Shown</div><div class="value">{{ number_format($rows->count()) }}</div></div>
+    <div class="card"><div class="label">Items Shown</div><div class="value">{{ number_format($rowCollection->count()) }}</div></div>
     <div class="card"><div class="label">Low Stock</div><div class="value">{{ number_format($lowItems->count()) }}</div></div>
-    <div class="card"><div class="label">Total Stock Value</div><div class="value money">{{ number_format($rows->sum('stock_value'), 0) }}</div></div>
-    <div class="card"><div class="label">Negative / Zero</div><div class="value">{{ number_format($rows->filter(fn ($row) => (float) $row->base_balance <= 0)->count()) }}</div></div>
+    <div class="card"><div class="label">Shown Stock Value</div><div class="value money">{{ number_format($rowCollection->sum('stock_value'), 0) }}</div></div>
+    <div class="card"><div class="label">Negative / Zero</div><div class="value">{{ number_format($rowCollection->filter(fn ($row) => (float) $row->base_balance <= 0)->count()) }}</div></div>
 </section>
 
 <section class="panel">
@@ -20,7 +21,7 @@
             </tr>
         </thead>
         <tbody>
-            @forelse ($rows as $row)
+            @forelse ($rowCollection as $row)
                 <tr>
                     <td>
                         <div class="stock-unit-title">
@@ -99,5 +100,8 @@
         </tbody>
     </table>
     </div>
+    @if (method_exists($rows, 'hasPages') && $rows->hasPages())
+        <div class="pagination">{{ $rows->links() }}</div>
+    @endif
     <p class="list-note">This page shows stock controlled in each product's base unit. Sales and purchases can still use cartons, sacks, dozens, pieces, or kg while the balance remains one product-level figure.</p>
 </section>

@@ -6,6 +6,7 @@ use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -22,36 +23,25 @@ class StockDisplayService
         $products = $this->productsForDisplay($request)->get();
         $balances = $this->baseBalances($products->pluck('id')->all(), $storeId);
 
-        return $products
-            ->map(function (Product $product) use ($balances) {
-                $baseBalance = round((float) ($balances[$product->id] ?? 0), 3);
-                $baseUnit = $this->conversionService->baseUnitForProduct($product);
-                $baseUnitLabel = $product->base_unit_label ?: $baseUnit?->unit_name ?: 'base unit(s)';
-                $baseCost = $this->baseUnitCost($product, $baseUnit);
-
-                return (object) [
-                    'id' => $product->id,
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'product_code' => $product->code,
-                    'category_name' => $product->category?->name,
-                    'reorder_level' => (float) $product->reorder_level,
-                    'base_balance' => $baseBalance,
-                    'base_stock_label' => $this->formatQuantityWithUnit($baseBalance, $baseUnitLabel, $baseUnit),
-                    'base_unit_label' => $baseUnitLabel,
-                    'friendly_breakdown' => $this->friendlyBreakdown($baseBalance, $product, $baseUnit),
-                    'configured_units' => $this->configuredUnitsLabel($product),
-                    'stock_value' => round($baseBalance * $baseCost, 2),
-                    'primary_unit_id' => $this->primaryUnit($product)?->id,
-                    'shortage' => max(round((float) $product->reorder_level - $baseBalance, 3), 0),
-                    'shortage_label' => $this->formatQuantityWithUnit(max(round((float) $product->reorder_level - $baseBalance, 3), 0), $baseUnitLabel, $baseUnit),
-                    'reorder_level_label' => $this->formatQuantityWithUnit((float) $product->reorder_level, $baseUnitLabel, $baseUnit),
-                ];
-            })
+        return $this->displayRows($products, $balances)
             ->when($reorderOnly, fn (Collection $rows) => $rows
                 ->filter(fn ($row) => (float) $row->reorder_level > 0 && (float) $row->base_balance <= (float) $row->reorder_level)
                 ->values())
             ->values();
+    }
+
+    public function paginatedRows(Request $request): LengthAwarePaginator
+    {
+        $storeId = $request->integer('store_id');
+        $perPage = max(20, min((int) $request->integer('per_page', 50), 100));
+        $products = $this->productsForDisplay($request)
+            ->paginate($perPage)
+            ->withQueryString();
+        $balances = $this->baseBalances($products->getCollection()->pluck('id')->all(), $storeId);
+
+        $products->setCollection($this->displayRows($products->getCollection(), $balances));
+
+        return $products;
     }
 
     public function formatQuantityWithUnit(float|int|string $quantity, string $unitLabel, ?ProductUnit $unit = null): string
@@ -212,6 +202,35 @@ class StockDisplayService
             })
             ->when($categoryId > 0, fn ($query) => $query->where('category_id', $categoryId))
             ->orderBy('name');
+    }
+
+    private function displayRows(Collection $products, Collection $balances): Collection
+    {
+        return $products->map(function (Product $product) use ($balances) {
+            $baseBalance = round((float) ($balances[$product->id] ?? 0), 3);
+            $baseUnit = $this->conversionService->baseUnitForProduct($product);
+            $baseUnitLabel = $product->base_unit_label ?: $baseUnit?->unit_name ?: 'base unit(s)';
+            $baseCost = $this->baseUnitCost($product, $baseUnit);
+
+            return (object) [
+                'id' => $product->id,
+                'product_id' => $product->id,
+                'product_name' => $product->name,
+                'product_code' => $product->code,
+                'category_name' => $product->category?->name,
+                'reorder_level' => (float) $product->reorder_level,
+                'base_balance' => $baseBalance,
+                'base_stock_label' => $this->formatQuantityWithUnit($baseBalance, $baseUnitLabel, $baseUnit),
+                'base_unit_label' => $baseUnitLabel,
+                'friendly_breakdown' => $this->friendlyBreakdown($baseBalance, $product, $baseUnit),
+                'configured_units' => $this->configuredUnitsLabel($product),
+                'stock_value' => round($baseBalance * $baseCost, 2),
+                'primary_unit_id' => $this->primaryUnit($product)?->id,
+                'shortage' => max(round((float) $product->reorder_level - $baseBalance, 3), 0),
+                'shortage_label' => $this->formatQuantityWithUnit(max(round((float) $product->reorder_level - $baseBalance, 3), 0), $baseUnitLabel, $baseUnit),
+                'reorder_level_label' => $this->formatQuantityWithUnit((float) $product->reorder_level, $baseUnitLabel, $baseUnit),
+            ];
+        });
     }
 
     private function baseBalances(array $productIds, int $storeId = 0): Collection
