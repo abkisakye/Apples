@@ -250,7 +250,7 @@ class StockController extends Controller
             $request->integer('product_id')
         );
         $prefill = [
-            'adjustment_type' => $request->string('adjustment_type')->value() === 'increase' ? 'increase' : 'decrease',
+            'adjustment_type' => $request->string('adjustment_type')->value() === 'decrease' ? 'decrease' : 'increase',
             'items' => $selectedUnit ? [[
                 'product_unit_id' => $selectedUnit->id,
                 'quantity' => 1,
@@ -411,6 +411,20 @@ class StockController extends Controller
             throw ValidationException::withMessages([
                 'items' => 'Add at least one item to adjust.',
             ]);
+        }
+
+        if ($validated['adjustment_type'] === 'decrease') {
+            if (trim((string) ($validated['remarks'] ?? '')) === '') {
+                throw ValidationException::withMessages([
+                    'remarks' => 'A reason is required before stock can be reduced.',
+                ]);
+            }
+
+            if (! app(AccessService::class)->hasRole('admin')) {
+                throw ValidationException::withMessages([
+                    'adjustment_type' => 'Only an admin can post stock decrease adjustments.',
+                ]);
+            }
         }
 
         $units = ProductUnit::query()->whereIn('id', $items->pluck('product_unit_id'))->get()->keyBy('id');

@@ -41,6 +41,7 @@
         <div>
             <h2>Stock Adjustment</h2>
             <p>Search items, add them to the adjustment list, choose whether system stock is increasing or decreasing, and post the correction for your current store.</p>
+            <p class="list-note">For existing shop stock that was already paid before system start, use Increase stock with an opening-stock note. This adds stock without creating supplier debt.</p>
         </div>
         <div class="actions">
             <a href="{{ $returnTo ?: route('stock.balances') }}" class="button-link">Back to Stock</a>
@@ -77,12 +78,12 @@
                     <label class="form-field" style="grid-column:1 / -1;">
                         <span>Adjustment Type</span>
                         <select name="adjustment_type" id="adjustment-type" required>
-                            <option value="decrease" @selected(old('adjustment_type', $prefillAdjustment['adjustment_type'] ?? 'decrease') === 'decrease')>Decrease stock</option>
-                            <option value="increase" @selected(old('adjustment_type', $prefillAdjustment['adjustment_type'] ?? 'decrease') === 'increase')>Increase stock</option>
+                            <option value="increase" @selected(old('adjustment_type', $prefillAdjustment['adjustment_type'] ?? 'increase') === 'increase')>Increase stock</option>
+                            <option value="decrease" @selected(old('adjustment_type', $prefillAdjustment['adjustment_type'] ?? 'increase') === 'decrease')>Decrease stock</option>
                         </select>
                     </label>
                 </div>
-                <label class="form-field" style="margin-top:12px;"><span>Remarks</span><textarea name="remarks" rows="3">{{ old('remarks') }}</textarea></label>
+                <label class="form-field" style="margin-top:12px;"><span>Remarks / Reason</span><textarea name="remarks" rows="3">{{ old('remarks') }}</textarea></label>
             </section>
             <section class="panel">
                 <h3>4. Save</h3>

@@ -2424,6 +2424,7 @@ class WorkflowTest extends TestCase
             'adjustment_date' => '2026-03-25',
             'store_id' => $storeA->id,
             'adjustment_type' => 'decrease',
+            'remarks' => 'Damaged stock removed after supervisor check',
             'items' => [
                 ['product_unit_id' => $unit->id, 'quantity' => 2],
             ],
@@ -4581,5 +4582,109 @@ class WorkflowTest extends TestCase
             ->assertSee('Financial Summary')
             ->assertSee('36,000')
             ->assertSee('20,000');
+    }
+
+    public function test_stock_adjustment_create_defaults_to_increase_and_prefills_product(): void
+    {
+        $product = Product::create(['name' => 'Opening Stock Soap', 'is_active' => true]);
+        ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Carton',
+            'cost_price' => 12000,
+            'selling_price' => 15000,
+            'is_active' => true,
+        ]);
+
+        $this->get('/stock/adjustments/create?product_id='.$product->id)
+            ->assertOk()
+            ->assertSee('Opening Stock Soap - Carton')
+            ->assertSee('value="increase" selected', false);
+    }
+
+    public function test_decrease_stock_adjustment_requires_reason(): void
+    {
+        [$store, $unit] = $this->stockAdjustmentFixture();
+        $this->seedStock($store, $unit, 5);
+
+        $this->from('/stock/adjustments/create')->post('/stock/adjustments', [
+            'adjustment_date' => '2026-07-28',
+            'store_id' => $store->id,
+            'adjustment_type' => 'decrease',
+            'remarks' => '',
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1],
+            ],
+        ])
+            ->assertRedirect('/stock/adjustments/create')
+            ->assertSessionHasErrors('remarks');
+
+        $this->assertDatabaseMissing('inventory_transactions', [
+            'reference_type' => 'stock_adjustment',
+            'movement_type' => 'adjustment_out',
+        ]);
+    }
+
+    public function test_non_admin_cannot_post_decrease_stock_adjustment(): void
+    {
+        [$store, $unit] = $this->stockAdjustmentFixture();
+        $this->seedStock($store, $unit, 5);
+        $stockClerk = $this->signInAsRole('stock_clerk');
+        $stockClerk->update(['default_store_id' => $store->id]);
+
+        $this->from('/stock/adjustments/create')->post('/stock/adjustments', [
+            'adjustment_date' => '2026-07-28',
+            'store_id' => $store->id,
+            'adjustment_type' => 'decrease',
+            'remarks' => 'Damaged stock removed',
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1],
+            ],
+        ])
+            ->assertRedirect('/stock/adjustments/create')
+            ->assertSessionHasErrors('adjustment_type');
+
+        $this->assertDatabaseMissing('inventory_transactions', [
+            'reference_type' => 'stock_adjustment',
+            'movement_type' => 'adjustment_out',
+        ]);
+    }
+
+    public function test_admin_can_post_decrease_stock_adjustment_with_reason(): void
+    {
+        [$store, $unit] = $this->stockAdjustmentFixture();
+        $this->seedStock($store, $unit, 5);
+
+        $this->post('/stock/adjustments', [
+            'adjustment_date' => '2026-07-28',
+            'store_id' => $store->id,
+            'adjustment_type' => 'decrease',
+            'remarks' => 'Expired units removed after count',
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1],
+            ],
+        ])
+            ->assertRedirect('/stock/adjustments/ADJ-20260728-0001');
+
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'stock_adjustment',
+            'reference_no' => 'ADJ-20260728-0001',
+            'movement_type' => 'adjustment_out',
+            'remarks' => 'Expired units removed after count',
+        ]);
+    }
+
+    private function stockAdjustmentFixture(): array
+    {
+        $store = Store::query()->firstOrCreate(['name' => 'Apples Of Gold'], ['is_active' => true]);
+        $product = Product::create(['name' => 'Adjustment Safety Product '.uniqid(), 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Piece',
+            'cost_price' => 1000,
+            'selling_price' => 1500,
+            'is_active' => true,
+        ]);
+
+        return [$store, $unit];
     }
 }
