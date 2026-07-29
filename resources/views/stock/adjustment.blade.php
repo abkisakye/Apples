@@ -34,6 +34,10 @@
         .cart-remove { border:1px solid #ecd4c0; background:#fff7ef; color:#9a5821; border-radius:10px; padding:7px 10px; cursor:pointer; font-weight:700; font-size:.78rem; }
         .status-pill { display:inline-flex; align-items:center; justify-content:center; width:100%; padding:10px 12px; border-radius:13px; background:var(--brand-soft); color:var(--brand); font-weight:700; }
         .status-pill.decrease { background:var(--accent-soft); color:var(--accent-ink); }
+        .opening-stock-banner { display:grid; gap:6px; margin:-4px 0 14px; padding:14px 16px; border-radius:16px; border:1px solid #d4af37; background:linear-gradient(135deg, #fff7d7 0%, #fffdf3 100%); color:var(--accent-ink); box-shadow:0 14px 28px rgba(94,69,0,.08); }
+        .opening-stock-banner strong { font-size:.86rem; letter-spacing:.08em; text-transform:uppercase; }
+        .opening-stock-banner span { color:var(--ink); line-height:1.4; }
+        .old-stock-chip { display:inline-flex; align-items:center; width:fit-content; padding:4px 8px; border-radius:999px; background:var(--accent-soft); color:var(--accent-ink); font-size:.72rem; font-weight:800; letter-spacing:.05em; }
         .summary-block { display:grid; gap:10px; }
         .summary-row { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:.94rem; }
         .empty-state { padding:22px 16px; border:1px dashed var(--line-strong); border-radius:16px; text-align:center; color:var(--muted); background:#fbfcfb; }
@@ -54,6 +58,12 @@
             <a href="{{ $returnTo ?: route('stock.balances') }}" class="button-link">Back to Stock</a>
         </div>
     </div>
+    @if ($openingStockMode)
+        <div class="opening-stock-banner">
+            <strong>EXISTING / OLD STOCK MODE</strong>
+            <span>You are entering stock that was already physically in the shop before this system started. This is not a new purchase or delivery.</span>
+        </div>
+    @endif
 
     <form method="post" action="{{ $openingStockMode ? route('stock.opening-stock.store') : route('stock.adjustments.store') }}" id="adjustment-form" class="workflow-shell">
         @csrf
@@ -71,7 +81,7 @@
             </section>
             <section class="panel">
                 <div class="page-head" style="margin-bottom:12px;">
-                    <div><h3 style="margin:0;">2. {{ $openingStockMode ? 'Existing Stock Items' : 'Adjustment Items' }}</h3><p style="margin:6px 0 0;">{{ $openingStockMode ? 'Add each product/unit and enter the quantity already in the shop.' : 'Add the stock units and set the unit difference to correct.' }}</p></div>
+                    <div><h3 style="margin:0;">2. {{ $openingStockMode ? 'Old / Existing Stock Being Added' : 'Adjustment Items' }}</h3><p style="margin:6px 0 0;">{{ $openingStockMode ? 'Add each product/unit and enter the quantity already in the shop.' : 'Add the stock units and set the unit difference to correct.' }}</p></div>
                     <div class="actions"><button type="button" id="clear-adjustment-cart" class="button-link">{{ $openingStockMode ? 'Clear Entry' : 'Clear Adjustment' }}</button></div>
                 </div>
                 <div id="adjustment-cart-empty" class="empty-state">No items added yet.</div>
@@ -101,13 +111,13 @@
             </section>
             <section class="panel">
                 <h3>4. Save</h3>
-                <div id="adjustment-badge" class="status-pill {{ $openingStockMode ? '' : 'decrease' }}" style="margin-top:14px;">{{ $openingStockMode ? 'Opening Stock In' : 'Decrease Stock' }}</div>
+                <div id="adjustment-badge" class="status-pill {{ $openingStockMode ? '' : 'decrease' }}" style="margin-top:14px;">{{ $openingStockMode ? 'Old / Existing Stock In' : 'Decrease Stock' }}</div>
                 <div class="summary-block" style="margin-top:14px;">
                     <div class="summary-row"><span>Lines</span><strong id="adjustment-lines-summary">0</strong></div>
                     <div class="summary-row"><span>Total Quantity</span><strong id="adjustment-qty-summary">0</strong></div>
                 </div>
                 <p class="list-note">{{ $openingStockMode ? 'This will create stock-in records only. It will not create a supplier purchase, supplier payment, or supplier balance.' : 'Use this for stock take differences, damaged goods, corrections, or items found during recount. When a staff member does a physical stock count, compare the physical count to the system count and post only the difference here.' }}</p>
-                <button type="submit" style="margin-top:14px; width:100%;">{{ $openingStockMode ? 'Post Opening Stock' : 'Record Adjustment' }}</button>
+                <button type="submit" style="margin-top:14px; width:100%;">{{ $openingStockMode ? 'Post Old / Existing Stock' : 'Record Adjustment' }}</button>
             </section>
         </div>
     </form>
@@ -155,12 +165,12 @@
             function renderResults() {
                 const needle = String(searchInput.value || '').trim().toLowerCase();
                 const rows = needle.length < 1 ? units.slice(0, 8) : units.filter((item) => item.search.includes(needle)).slice(0, 20);
-                results.innerHTML = rows.length ? rows.map((item) => `<div class="result-card"><div><strong>${item.label}</strong><div class="result-meta">Ready for correction entry</div></div><button type="button" class="sale-add-button" data-add="${item.id}">Add</button></div>`).join('') : `<div class="empty-state">No items matched that search.</div>`;
+                results.innerHTML = rows.length ? rows.map((item) => `<div class="result-card"><div><strong>${item.label}</strong><div class="result-meta">${openingStockMode ? 'Select this unit for old stock entry' : 'Ready for correction entry'}</div></div><button type="button" class="sale-add-button" data-add="${item.id}">${openingStockMode ? 'Add as Old Stock' : 'Add'}</button></div>`).join('') : `<div class="empty-state">No items matched that search.</div>`;
             }
 
             function renderCart() {
                 cartEmpty.style.display = cart.length ? 'none' : 'block';
-                cartList.innerHTML = cart.map((item, index) => `<div class="cart-item"><div class="cart-item-head"><strong>${item.label}</strong><button type="button" class="cart-remove" data-remove="${index}">Remove</button></div><label class="form-field"><span>Quantity</span><div class="qty-box"><button type="button" data-minus="${index}">-</button><input type="number" min="${openingStockMode ? '0.001' : '1'}" step="${openingStockMode ? '0.001' : '1'}" value="${item.quantity}" data-qty="${index}"><button type="button" data-plus="${index}">+</button></div></label></div>`).join('');
+                cartList.innerHTML = cart.map((item, index) => `<div class="cart-item"><div class="cart-item-head"><div><strong>${item.label}</strong>${openingStockMode ? '<span class="old-stock-chip">OLD STOCK</span>' : ''}</div><button type="button" class="cart-remove" data-remove="${index}">Remove</button></div><label class="form-field"><span>Quantity</span><div class="qty-box"><button type="button" data-minus="${index}">-</button><input type="number" min="${openingStockMode ? '0.001' : '1'}" step="${openingStockMode ? '0.001' : '1'}" value="${item.quantity}" data-qty="${index}"><button type="button" data-plus="${index}">+</button></div></label></div>`).join('');
                 hidden.innerHTML = cart.map((item, index) => `<input type="hidden" name="items[${index}][product_unit_id]" value="${item.id}"><input type="hidden" name="items[${index}][quantity]" value="${item.quantity}">`).join('');
                 linesSummary.textContent = String(cart.length);
                 qtySummary.textContent = String(cart.reduce((sum, item) => sum + normalizeQuantity(item.quantity), 0));
@@ -168,7 +178,7 @@
 
             function updateBadge() {
                 if (!typeSelect) {
-                    badge.textContent = 'Opening Stock In';
+                    badge.textContent = 'Old / Existing Stock In';
                     badge.classList.remove('decrease');
                     return;
                 }
@@ -214,7 +224,11 @@
             document.getElementById('clear-adjustment-cart').addEventListener('click', () => { cart = []; renderCart(); });
             typeSelect?.addEventListener('change', updateBadge);
             form.addEventListener('submit', (event) => {
-                if (!cart.length) { event.preventDefault(); alert(openingStockMode ? 'Add at least one existing stock item before posting.' : 'Add at least one item before posting the adjustment.'); searchInput.focus(); }
+                if (!cart.length) { event.preventDefault(); alert(openingStockMode ? 'Add at least one existing stock item before posting.' : 'Add at least one item before posting the adjustment.'); searchInput.focus(); return; }
+
+                if (openingStockMode && !window.confirm('You are about to add these quantities as old/existing stock.\nNo purchase, supplier payment, or supplier balance will be created.\nContinue?')) {
+                    event.preventDefault();
+                }
             });
             renderResults();
             renderCart();
