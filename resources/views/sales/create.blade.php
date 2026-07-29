@@ -2564,7 +2564,7 @@
                                 </div>
                                 <div class="bill-cell" role="cell">
                                     <div class="bill-label">Total</div>
-                                    <div class="bill-line-total">${money(Number(item.quantity) * Number(item.price))}</div>
+                                    <div class="bill-line-total" data-line-total="${index}">${money(Number(item.quantity) * Number(item.price))}</div>
                                 </div>
                             </div>
                         </div>
@@ -2572,12 +2572,30 @@
                     </div>
                 ` : '';
 
+                syncCartSummary();
+            }
+
+            function updateCartHiddenInputs() {
                 hiddenInputs.innerHTML = cart.map((item, index) => `
                     <input type="hidden" name="items[${index}][product_unit_id]" value="${item.id}">
                     <input type="hidden" name="items[${index}][quantity]" value="${item.quantity}">
                     <input type="hidden" name="items[${index}][unit_price]" value="${item.price}">
                 `).join('');
+            }
 
+            function updateCartLineTotal(index) {
+                const lineTotal = cartList.querySelector(`[data-line-total="${index}"]`);
+                const item = cart[index];
+
+                if (!lineTotal || !item) {
+                    return;
+                }
+
+                lineTotal.textContent = money(Number(item.quantity || 0) * Number(item.price || 0));
+            }
+
+            function syncCartSummary() {
+                updateCartHiddenInputs();
                 itemsSummary.textContent = String(cart.length);
                 itemsInlineSummary.textContent = String(cart.length);
                 unitsInlineSummary.textContent = String(cart.reduce((carry, item) => carry + normalizeQuantity(item.quantity), 0));
@@ -2900,7 +2918,8 @@
                 if (qtyInput) {
                     const index = Number(qtyInput.dataset.qtyInput);
                     cart[index].quantity = normalizeQuantity(qtyInput.value);
-                    renderCart();
+                    updateCartLineTotal(index);
+                    syncCartSummary();
                     return;
                 }
 
@@ -2912,7 +2931,29 @@
                     }
                     const index = Number(priceInput.dataset.priceInput);
                     cart[index].price = Math.max(Number(priceInput.value || 0), 0);
-                    renderCart();
+                    updateCartLineTotal(index);
+                    syncCartSummary();
+                }
+            });
+
+            cartList.addEventListener('focusout', (event) => {
+                const qtyInput = event.target.closest('[data-qty-input]');
+                if (qtyInput) {
+                    const index = Number(qtyInput.dataset.qtyInput);
+                    cart[index].quantity = normalizeQuantity(qtyInput.value);
+                    qtyInput.value = cart[index].quantity;
+                    updateCartLineTotal(index);
+                    syncCartSummary();
+                    return;
+                }
+
+                const priceInput = event.target.closest('[data-price-input]');
+                if (priceInput && canOverridePrices) {
+                    const index = Number(priceInput.dataset.priceInput);
+                    cart[index].price = Math.max(Number(priceInput.value || 0), 0);
+                    priceInput.value = cart[index].price;
+                    updateCartLineTotal(index);
+                    syncCartSummary();
                 }
             });
 
