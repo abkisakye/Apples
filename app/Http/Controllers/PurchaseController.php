@@ -12,6 +12,7 @@ use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Support\ProductUnitConversionService;
 use App\Support\StoreAssignmentService;
+use App\Support\AccessService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -74,6 +75,9 @@ class PurchaseController extends Controller
         $sourcePurchase = null;
         $prefill = [
             'supplier_id' => null,
+            'store_id' => $currentStore?->id,
+            'purchase_date' => now()->toDateString(),
+            'payment_mode_id' => null,
             'amount_paid' => 0,
             'credit_period_days' => 30,
             'supplier_invoice_no' => null,
@@ -87,11 +91,17 @@ class PurchaseController extends Controller
 
         if ($correctPurchaseId > 0) {
             $sourcePurchase = Purchase::query()
-                ->with(['items.productUnit.product:id,name,code'])
+                ->with(['items.productUnit.product:id,name,code', 'payments', 'returns'])
                 ->findOrFail($correctPurchaseId);
+
+            $this->ensurePurchaseCorrectionAllowed();
+            $this->guardCorrectionEligibility($sourcePurchase);
 
             $prefill = [
                 'supplier_id' => $sourcePurchase->supplier_id,
+                'store_id' => $sourcePurchase->store_id,
+                'purchase_date' => $sourcePurchase->purchase_date?->toDateString() ?? now()->toDateString(),
+                'payment_mode_id' => $sourcePurchase->payment_mode_id,
                 'amount_paid' => (float) $sourcePurchase->amount_paid,
                 'credit_period_days' => (int) ($sourcePurchase->credit_period_days ?? 30),
                 'supplier_invoice_no' => $sourcePurchase->supplier_invoice_no,
@@ -129,6 +139,9 @@ class PurchaseController extends Controller
 
     public function correct(Purchase $purchase): RedirectResponse
     {
+        $this->ensurePurchaseCorrectionAllowed();
+        $this->guardCorrectionEligibility($purchase);
+
         return redirect()->route('purchases.create', ['correct_purchase_id' => $purchase->id]);
     }
 
@@ -234,9 +247,19 @@ class PurchaseController extends Controller
             ->whereIn('id', $items->pluck('product_unit_id'))
             ->get()
             ->keyBy('id');
+        $correctionSourcePurchase = null;
+
+        if (! empty($validated['corrected_from_purchase_id'])) {
+            $this->ensurePurchaseCorrectionAllowed();
+            $correctionSourcePurchase = Purchase::query()
+                ->with(['items', 'payments', 'returns'])
+                ->findOrFail($validated['corrected_from_purchase_id']);
+            $this->guardCorrectionEligibility($correctionSourcePurchase);
+        }
+
         $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), app(\App\Support\AccessService::class));
 
-        $purchase = DB::transaction(function () use ($validated, $items, $productUnits, $documentNumberService, $storeId, $conversionService) {
+        $purchase = DB::transaction(function () use ($validated, $items, $productUnits, $documentNumberService, $storeId, $conversionService, $correctionSourcePurchase) {
             $preparedItems = $items->map(function (array $item) use ($productUnits, $conversionService) {
                 /** @var ProductUnit|null $unit */
                 $unit = $productUnits->get((int) $item['product_unit_id']);
@@ -333,13 +356,10 @@ class PurchaseController extends Controller
                 ]);
             }
 
-            if (! empty($validated['corrected_from_purchase_id'])) {
-                /** @var Purchase $sourcePurchase */
-                $sourcePurchase = Purchase::query()->with(['items', 'payments', 'returns'])->findOrFail($validated['corrected_from_purchase_id']);
-                $this->guardCorrectionEligibility($sourcePurchase);
-                $this->voidPurchaseRecord($sourcePurchase, 'Corrected and reposted as '.$purchase->purchase_no, false);
-                $sourcePurchase->update(['replaced_by_purchase_id' => $purchase->id]);
-                $purchase->update(['corrected_from_purchase_id' => $sourcePurchase->id]);
+            if ($correctionSourcePurchase) {
+                $this->voidPurchaseRecord($correctionSourcePurchase, 'Corrected and reposted as '.$purchase->purchase_no, false);
+                $correctionSourcePurchase->update(['replaced_by_purchase_id' => $purchase->id]);
+                $purchase->update(['corrected_from_purchase_id' => $correctionSourcePurchase->id]);
             }
 
             return $purchase;
@@ -350,6 +370,13 @@ class PurchaseController extends Controller
             'total_amount' => $purchase->total_amount,
             'corrected_from_purchase_id' => $purchase->corrected_from_purchase_id,
         ]);
+
+        if ($purchase->corrected_from_purchase_id) {
+            $auditLogService->record('purchase.corrected', $purchase, "Purchase {$purchase->purchase_no} replaced purchase {$purchase->correctedFrom?->purchase_no}.", [
+                'purchase_id' => $purchase->id,
+                'corrected_from_purchase_id' => $purchase->corrected_from_purchase_id,
+            ]);
+        }
 
         $returnTo = $this->safeReturnTo($validated['return_to'] ?? null);
 
@@ -400,6 +427,13 @@ class PurchaseController extends Controller
         }
     }
 
+    private function ensurePurchaseCorrectionAllowed(): void
+    {
+        $access = app(AccessService::class);
+
+        abort_unless($access->hasRole('admin') || $access->can('purchases.correct'), 403);
+    }
+
     private function voidPurchaseRecord(Purchase $purchase, ?string $reason = null, bool $enforceFollowOnChecks = true): void
     {
         if ($purchase->status !== 'posted') {
@@ -417,6 +451,10 @@ class PurchaseController extends Controller
         $purchase->loadMissing('items');
 
         foreach ($purchase->items as $item) {
+            $conversionFactor = (float) ($item->conversion_factor_snapshot ?: 1);
+            $conversionFactor = $conversionFactor > 0 ? $conversionFactor : 1;
+            $baseQuantity = (float) ($item->base_quantity ?: ((float) $item->quantity * $conversionFactor));
+
             InventoryTransaction::create([
                 'transaction_date' => $purchase->purchase_date,
                 'store_id' => $purchase->store_id,
@@ -428,6 +466,9 @@ class PurchaseController extends Controller
                 'movement_type' => 'purchase_void',
                 'quantity_in' => 0,
                 'quantity_out' => $item->quantity,
+                'base_quantity_in' => 0,
+                'base_quantity_out' => $baseQuantity,
+                'conversion_factor_snapshot' => $conversionFactor,
                 'unit_cost' => $item->unit_cost,
                 'unit_price' => null,
             ]);

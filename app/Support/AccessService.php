@@ -58,6 +58,7 @@ class AccessService
             'sales.manage',
             'purchases.view',
             'purchases.manage',
+            'purchases.correct',
             'capital.view',
             'capital.manage',
             'stock.view',

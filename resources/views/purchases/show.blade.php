@@ -2,10 +2,14 @@
 
 @section('content')
     @php($currency = config('business.currency', 'UGX'))
+    @php($canCorrectPurchase = ($access->hasRole('admin') || $access->can('purchases.correct')) && $purchase->status === 'posted' && $purchase->payments->isEmpty() && $purchase->returns->isEmpty())
     <div class="page-head">
         <div>
             <h2>Purchase {{ $purchase->purchase_no }}</h2>
             <p>Purchase summary showing received items, supplier details, payment progress, and print-ready records.</p>
+            @if ($canCorrectPurchase)
+                <p class="list-note" style="margin-top:8px;">Saved too early or entered wrong? Use Correct / Edit Purchase to add, remove, or change items safely.</p>
+            @endif
         </div>
         <div class="actions">
             @if ($access->can('supplier_payments.manage') && $purchase->balance_due > 0)
@@ -14,8 +18,8 @@
             @if ($access->can('purchases.manage') && $purchase->status === 'posted')
                 <a href="{{ route('purchases.returns.create', $purchase) }}" class="button-link">Supplier Return</a>
             @endif
-            @if ($access->can('purchases.manage') && $purchase->status === 'posted' && $purchase->payments->isEmpty() && $purchase->returns->isEmpty())
-                <a href="{{ route('purchases.correct', $purchase) }}" class="button-link">Correct And Repost</a>
+            @if ($canCorrectPurchase)
+                <a href="{{ route('purchases.correct', $purchase) }}" class="button-link" title="Use this when a purchase was saved too early or entered wrongly.">Correct / Edit Purchase</a>
             @endif
             @if ($access->can('purchases.manage') && $purchase->status === 'posted' && $purchase->payments->isEmpty() && $purchase->returns->isEmpty())
                 <form method="post" action="{{ route('purchases.void', $purchase) }}">

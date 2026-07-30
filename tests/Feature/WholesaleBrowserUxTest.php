@@ -62,6 +62,36 @@ class WholesaleBrowserUxTest extends TestCase
 
         $response
             ->assertOk()
+            ->assertSee('Find Items')
+            ->assertSee('Supplier & Invoice', false)
+            ->assertSee('Quick Add Supplier')
+            ->assertSee('Incoming Items')
+            ->assertSee('Purchase Summary')
+            ->assertSee('Receive')
+            ->assertSee('Product / Pack')
+            ->assertSee('Qty Received')
+            ->assertSee('Buying Cost')
+            ->assertSee('Line Total')
+            ->assertSee('Remove')
+            ->assertSee('<input type="hidden" name="store_id"', false)
+            ->assertDontSee('<span>Store</span>', false)
+            ->assertSee('class="result-list"', false)
+            ->assertSee('grid-template-rows:auto auto auto minmax(0,1fr)', false)
+            ->assertSee('height:100%', false)
+            ->assertSeeInOrder([
+                'Find Items',
+                'Search product, barcode, code, or part number',
+                'id="purchase-search"',
+                'id="purchase-search-results"',
+            ], false)
+            ->assertSee('data-add-unit', false)
+            ->assertSee('data-minus', false)
+            ->assertSee('data-qty', false)
+            ->assertSee('data-plus', false)
+            ->assertSee('data-price', false)
+            ->assertSee('data-remove', false)
+            ->assertSee('cart.unshift', false)
+            ->assertSee('cart.splice(existingIndex, 1)', false)
             ->assertSee('Tea Bags - Tea Bag Box 6 Packets')
             ->assertSee('GONJA CRISPS - Piece')
             ->assertSee('"id":'.$teaBox->id, false)

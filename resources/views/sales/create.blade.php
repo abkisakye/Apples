@@ -1686,33 +1686,6 @@
         }
     </style>
 
-    <div class="sale-hero panel">
-        <div class="sale-hero-top">
-            <div>
-                <h2>Sales Desk</h2>
-                <p class="sale-hero-note">
-                    Scan, select products, receive payment, and print.
-                </p>
-            </div>
-            <div class="sale-badges">
-                @if ($requiresShift)
-                    @if ($activeShift)
-                        <div class="sale-badge">Shift {{ $activeShift->shift_no }}</div>
-                    @else
-                        <a href="{{ route('cash-shifts.create') }}" class="button-link primary">Open Shift First</a>
-                    @endif
-                @endif
-                @if ($currentStore)
-                    <div class="sale-badge">{{ $currentStore->name }}</div>
-                @endif
-            </div>
-        </div>
-        <div class="sale-hero-actions">
-            <a href="{{ route('sales.index') }}" class="button-link">Back to Sales</a>
-            <a href="{{ route('customer-payments.create') }}" class="button-link">Customer Payment</a>
-        </div>
-    </div>
-
     <form method="post" action="{{ route('sales.store') }}" id="sale-form" class="sale-workspace">
         @csrf
         <input type="hidden" name="corrected_from_sale_id" value="{{ old('corrected_from_sale_id', $sourceSale?->id) }}">

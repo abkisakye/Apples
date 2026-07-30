@@ -2385,6 +2385,207 @@ class WorkflowTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_open_purchase_correction_form_prefilled_with_original_items(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Early Save Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'BREAD IMPROVER', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Cartons',
+            'conversion_factor' => 24,
+            'selling_price' => 82000,
+            'cost_price' => 64000,
+            'is_active' => true,
+        ]);
+
+        $this->post('/purchases', [
+            'purchase_date' => '2026-07-28',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 128000,
+            'supplier_invoice_no' => 'INV-OLD-1',
+            'remarks' => 'Saved before all items were entered',
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 2, 'unit_cost' => 64000],
+            ],
+        ])->assertRedirect();
+
+        $purchase = Purchase::query()->firstOrFail();
+
+        $this->get('/purchases/'.$purchase->id)
+            ->assertOk()
+            ->assertSee('Correct / Edit Purchase')
+            ->assertSee('Saved too early or entered wrong? Use Correct / Edit Purchase to add, remove, or change items safely.');
+
+        $this->followingRedirects()
+            ->get('/purchases/'.$purchase->id.'/correct')
+            ->assertOk()
+            ->assertSee('Purchase correction mode')
+            ->assertSee("You are correcting purchase {$purchase->purchase_no}. Posting will replace the old purchase with a corrected one.")
+            ->assertSee('BREAD IMPROVER - Cartons')
+            ->assertSee('INV-OLD-1')
+            ->assertSee('Post Corrected Purchase');
+    }
+
+    public function test_purchase_correction_can_add_remove_and_edit_items_without_double_counting_stock_or_supplier_balance(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Correction Supplier Two', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        $crisps = Product::create(['name' => 'GONJA CRISPS', 'base_unit_label' => 'pieces', 'is_active' => true]);
+        $crispsCarton = ProductUnit::create([
+            'product_id' => $crisps->id,
+            'unit_name' => 'Carton',
+            'conversion_factor' => 24,
+            'selling_price' => 24000,
+            'cost_price' => 100,
+            'is_active' => true,
+        ]);
+        $soap = Product::create(['name' => 'WRONG SOAP', 'base_unit_label' => 'pieces', 'is_active' => true]);
+        $soapPiece = ProductUnit::create([
+            'product_id' => $soap->id,
+            'unit_name' => 'Piece',
+            'conversion_factor' => 1,
+            'selling_price' => 1000,
+            'cost_price' => 50,
+            'is_active' => true,
+        ]);
+        $rice = Product::create(['name' => 'RICE', 'base_unit_label' => 'kg', 'is_active' => true]);
+        $riceKg = ProductUnit::create([
+            'product_id' => $rice->id,
+            'unit_name' => 'Kg',
+            'conversion_factor' => 1,
+            'selling_price' => 4000,
+            'cost_price' => 25,
+            'is_active' => true,
+        ]);
+
+        $this->post('/purchases', [
+            'purchase_date' => '2026-07-28',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 0,
+            'items' => [
+                ['product_unit_id' => $crispsCarton->id, 'quantity' => 1, 'unit_cost' => 100],
+                ['product_unit_id' => $soapPiece->id, 'quantity' => 3, 'unit_cost' => 50],
+            ],
+        ])->assertRedirect();
+
+        $originalPurchase = Purchase::query()->firstOrFail();
+
+        $this->post('/purchases', [
+            'purchase_date' => '2026-07-29',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 100,
+            'corrected_from_purchase_id' => $originalPurchase->id,
+            'items' => [
+                ['product_unit_id' => $crispsCarton->id, 'quantity' => 2, 'unit_cost' => 120],
+                ['product_unit_id' => $riceKg->id, 'quantity' => 4, 'unit_cost' => 25],
+            ],
+        ])->assertRedirect();
+
+        $replacement = Purchase::query()->whereNotNull('corrected_from_purchase_id')->firstOrFail();
+        $originalPurchase->refresh();
+        $replacement->refresh();
+
+        $this->assertSame('void', $originalPurchase->status);
+        $this->assertSame(0.0, (float) $originalPurchase->balance_due);
+        $this->assertSame($replacement->id, $originalPurchase->replaced_by_purchase_id);
+        $this->assertSame($originalPurchase->id, $replacement->corrected_from_purchase_id);
+        $this->assertEquals(340.0, (float) $replacement->total_amount);
+        $this->assertEquals(240.0, (float) $replacement->balance_due);
+        $this->assertDatabaseMissing('purchase_items', [
+            'purchase_id' => $replacement->id,
+            'product_id' => $soap->id,
+        ]);
+        $this->assertDatabaseHas('purchase_items', [
+            'purchase_id' => $replacement->id,
+            'product_unit_id' => $crispsCarton->id,
+            'quantity' => 2,
+            'unit_cost' => 120,
+        ]);
+        $this->assertDatabaseHas('purchase_items', [
+            'purchase_id' => $replacement->id,
+            'product_unit_id' => $riceKg->id,
+            'quantity' => 4,
+            'unit_cost' => 25,
+        ]);
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'purchase_void',
+            'reference_no' => $originalPurchase->purchase_no,
+            'product_id' => $crisps->id,
+            'base_quantity_out' => 24,
+        ]);
+
+        $stockFor = fn (Product $product): float => (float) InventoryTransaction::query()
+            ->where('store_id', $store->id)
+            ->where('product_id', $product->id)
+            ->selectRaw('COALESCE(SUM(base_quantity_in), 0) - COALESCE(SUM(base_quantity_out), 0) as balance')
+            ->value('balance');
+
+        $this->assertEquals(48.0, $stockFor($crisps));
+        $this->assertEquals(0.0, $stockFor($soap));
+        $this->assertEquals(4.0, $stockFor($rice));
+        $this->assertEquals(240.0, (float) Purchase::query()->posted()->where('supplier_id', $supplier->id)->sum('balance_due'));
+        $this->assertDatabaseHas('activity_logs', [
+            'event' => 'purchase.corrected',
+        ]);
+    }
+
+    public function test_non_admin_purchase_user_cannot_correct_posted_purchase(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Blocked Correction Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Blocked Product', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Box',
+            'conversion_factor' => 1,
+            'selling_price' => 1000,
+            'cost_price' => 500,
+            'is_active' => true,
+        ]);
+
+        $this->post('/purchases', [
+            'purchase_date' => '2026-07-28',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 500,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_cost' => 500],
+            ],
+        ])->assertRedirect();
+
+        $purchase = Purchase::query()->firstOrFail();
+
+        $this->signInAsRole('stock_clerk');
+
+        $this->get('/purchases/'.$purchase->id.'/correct')->assertForbidden();
+        $this->post('/purchases', [
+            'purchase_date' => '2026-07-29',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 500,
+            'corrected_from_purchase_id' => $purchase->id,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_cost' => 500],
+            ],
+        ])->assertForbidden();
+
+        $this->assertDatabaseCount('purchases', 1);
+        $this->assertNull($purchase->fresh()->replaced_by_purchase_id);
+    }
+
     public function test_stock_transfer_and_adjustment_post_inventory_transactions(): void
     {
         $storeA = Store::create(['name' => 'Store A', 'is_active' => true]);
@@ -4045,6 +4246,8 @@ class WorkflowTest extends TestCase
             ->assertSee('Cart')
             ->assertSee('Clear All')
             ->assertSee('Search products')
+            ->assertDontSee('<h2>Sales Desk</h2>', false)
+            ->assertDontSee('class="sale-hero panel"', false)
             ->assertSee('id="product-search-results"', false)
             ->assertSee('class="sale-floating-results"', false)
             ->assertSee('role="listbox"', false)

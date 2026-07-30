@@ -36,12 +36,23 @@
             --purchase-blue: #1D4ED8;
             --purchase-ink: #1F2937;
         }
-        .receive-shell { display:grid; grid-template-columns:300px minmax(420px,1fr) 300px; grid-template-areas:"details finder summary" "items items summary"; gap:12px; align-items:start; }
-        .receive-panel { border:1px solid #fed7aa; border-radius:10px; background:#fffdfa; padding:12px; box-shadow:0 10px 24px rgba(146,64,14,.06); }
+        .workspace {
+            padding-left: 8px;
+            padding-right: 8px;
+        }
+        .page {
+            width: 100%;
+            max-width: none;
+        }
+        .receive-shell { display:grid; grid-template-columns:minmax(280px,310px) minmax(560px,1fr) minmax(280px,310px); grid-template-areas:"details finder summary" "items items summary"; gap:10px; align-items:start; width:100%; }
+        .receive-panel { border:1px solid #fed7aa; border-radius:10px; background:#fffdfa; padding:10px; box-shadow:0 10px 24px rgba(146,64,14,.06); }
         .receive-panel h3 { margin:0; color:var(--purchase-main); font-size:1rem; }
         .receive-panel .list-note { margin:4px 0 0; font-size:.82rem; }
         .details-panel { grid-area:details; }
-        .finder-panel { grid-area:finder; }
+        .details-panel .receive-grid { gap:7px; margin-top:8px; }
+        .details-panel .form-field { gap:4px; }
+        .details-panel textarea { min-height:54px; }
+        .finder-panel { grid-area:finder; display:grid; grid-template-rows:auto auto auto minmax(0,1fr); min-height:min(560px, calc(100vh - 245px)); align-content:start; }
         .items-panel { grid-area:items; }
         .summary-panel { grid-area:summary; position:sticky; top:14px; }
         .receive-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:10px; }
@@ -54,38 +65,47 @@
         .mini-stat { border:1px solid #fed7aa; border-radius:9px; padding:6px 8px; background:var(--purchase-soft); min-width:74px; }
         .mini-stat .label { color:#78716c; font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; }
         .mini-stat .value { margin-top:2px; font-size:.9rem; font-weight:800; color:var(--purchase-main); }
-        .result-list { display:grid; gap:7px; margin-top:10px; max-height:190px; overflow-y:auto; }
-        .result-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; padding:8px 10px; border-radius:9px; border:1px solid #e7e5e4; background:#fff; }
-        .result-card strong { display:block; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .result-list { display:grid; align-content:start; gap:6px; margin-top:10px; min-height:0; height:100%; max-height:min(560px, calc(100vh - 285px)); overflow-y:auto; padding-right:2px; }
+        .result-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; padding:7px 9px; border-radius:9px; border:1px solid #e7e5e4; background:#fff; }
+        .result-card strong { display:block; margin-bottom:2px; white-space:normal; overflow-wrap:anywhere; line-height:1.2; }
         .result-meta { color:#6b7280; font-size:.78rem; line-height:1.35; }
         .receive-add-button { border:0; border-radius:8px; padding:7px 10px; background:#1D4ED8; color:#fff; font-weight:800; cursor:pointer; font-size:.78rem; }
-        .party-results { display:grid; gap:6px; max-height:120px; overflow-y:auto; }
-        .party-result { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:7px 8px; border:1px solid #e7e5e4; border-radius:9px; background:#fff; }
+        .party-results { display:grid; gap:5px; max-height:104px; overflow-y:auto; }
+        .party-result { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:6px 7px; border:1px solid #e7e5e4; border-radius:9px; background:#fff; }
         .party-result strong { display:block; margin:0; font-size:.88rem; }
-        .quick-supplier-box { display:none; gap:8px; margin-top:8px; padding:9px; border:1px dashed #fed7aa; border-radius:9px; background:var(--purchase-soft); }
+        .quick-supplier-box { display:none; gap:7px; margin-top:8px; padding:8px; border:1px dashed #fed7aa; border-radius:9px; background:var(--purchase-soft); }
         .quick-supplier-box.is-visible { display:grid; }
         .quick-supplier-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.8fr); gap:8px; }
         .picker-empty { padding:10px; border:1px dashed #fed7aa; border-radius:9px; color:#78716c; background:var(--purchase-soft); font-size:.84rem; }
-        .store-pill { display:inline-flex; align-items:center; min-height:38px; width:100%; padding:0 10px; border-radius:9px; border:1px solid #fed7aa; background:var(--purchase-soft); color:var(--purchase-main); font-weight:700; }
         .receive-warning { display:none; margin-top:10px; padding:8px 10px; border:1px solid var(--purchase-border); border-radius:9px; background:var(--purchase-soft); color:var(--purchase-main); font-weight:700; font-size:.82rem; }
         .receive-warning.is-visible { display:block; }
+        .correction-banner { margin:0 0 12px; padding:12px 14px; border:1px solid #f59e0b; border-radius:10px; background:#fffbeb; color:#78350f; box-shadow:0 10px 22px rgba(146,64,14,.06); }
+        .correction-banner strong { display:block; margin-bottom:4px; font-size:.95rem; text-transform:uppercase; letter-spacing:.04em; }
+        .correction-banner p { margin:0; color:#78350f; }
         .summary-block { display:grid; gap:9px; margin-top:10px; }
         .summary-row { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:.9rem; }
         .summary-row.total { padding-top:10px; border-top:1px solid #fed7aa; font-size:1.08rem; font-weight:800; color:var(--purchase-main); }
         .status-pill { display:inline-flex; align-items:center; justify-content:center; width:100%; padding:9px 10px; border-radius:9px; background:#DBEAFE; color:#1D4ED8; font-weight:800; }
         .status-pill.credit { background:var(--purchase-soft); color:var(--purchase-main); }
-        .incoming-table-wrap { margin-top:10px; max-height:285px; overflow:auto; border:1px solid #e7e5e4; border-radius:10px; background:#fff; }
-        .incoming-table { width:100%; border-collapse:collapse; min-width:760px; }
-        .incoming-table th, .incoming-table td { padding:7px 8px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
+        .incoming-table-wrap { margin-top:8px; max-height:min(360px, calc(100vh - 390px)); overflow:auto; border:1px solid #e7e5e4; border-radius:10px; background:#fff; }
+        .incoming-table { width:100%; border-collapse:collapse; min-width:760px; table-layout:fixed; }
+        .incoming-table th, .incoming-table td { padding:5px 7px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:middle; }
         .incoming-table th { position:sticky; top:0; z-index:1; background:var(--purchase-soft); color:var(--purchase-main); font-size:.76rem; text-transform:uppercase; letter-spacing:.04em; }
-        .incoming-table input { min-height:34px; padding:6px 8px; }
+        .incoming-table input { width:100%; min-height:30px; padding:5px 7px; }
+        .incoming-table th:nth-child(1), .incoming-table td:nth-child(1) { width:39%; }
+        .incoming-table th:nth-child(2), .incoming-table td:nth-child(2) { width:18%; }
+        .incoming-table th:nth-child(3), .incoming-table td:nth-child(3) { width:17%; }
+        .incoming-table th:nth-child(4), .incoming-table td:nth-child(4) { width:16%; }
+        .incoming-table th:nth-child(5), .incoming-table td:nth-child(5) { width:10%; }
         .incoming-product { font-weight:800; color:var(--purchase-ink); }
         .incoming-unit { color:#6b7280; font-size:.78rem; margin-top:2px; }
+        .purchase-qty-box { display:grid; grid-template-columns:28px minmax(0,1fr) 28px; gap:4px; align-items:center; }
+        .purchase-qty-box button { min-width:28px; height:30px; padding:0; border-radius:8px; border:1px solid #fed7aa; background:#fff7ed; color:var(--purchase-main); font-weight:800; cursor:pointer; }
         .line-total-field { background:#f8fafc; font-weight:800; }
         .cart-remove { border:1px solid #fed7aa; background:#fff7ed; color:var(--purchase-main); border-radius:8px; padding:6px 9px; cursor:pointer; font-weight:800; font-size:.76rem; }
         .empty-state { padding:18px 14px; border:1px dashed #fed7aa; border-radius:10px; text-align:center; color:#78716c; background:var(--purchase-soft); }
         .footer-actions { display:grid; gap:8px; margin-top:12px; }
-        @media (max-width:1180px) { .receive-shell { grid-template-columns:1fr 1fr; grid-template-areas:"details summary" "finder finder" "items items"; } .summary-panel { position:static; } }
+        @media (max-width:1180px) { .receive-shell { grid-template-columns:1fr 1fr; grid-template-areas:"details summary" "finder finder" "items items"; } .summary-panel { position:static; } .finder-panel { min-height:0; } .result-list { max-height:420px; } }
         @media (max-width:760px) { .receive-shell, .receive-grid, .find-row { grid-template-columns:1fr; grid-template-areas:none; } .details-panel, .finder-panel, .items-panel, .summary-panel { grid-area:auto; } .incoming-table { min-width:680px; } .picker-input, .receive-panel input, .receive-panel select { min-height:46px; font-size:16px; } }
     </style>
 
@@ -94,14 +114,21 @@
             <h2>New Purchase</h2>
             <p>
                 {{ $sourcePurchase
-                    ? 'You are correcting '.$sourcePurchase->purchase_no.'. Review the copied items and save the corrected version. The original purchase will be voided automatically after the new one posts.'
-                    : 'Search items, add them to the incoming list, choose the supplier, enter how much is being paid now, and save. Any unpaid balance becomes supplier credit automatically.' }}
+                    ? 'Review the copied items, add missing items, remove wrong items, or change quantities and costs before reposting.'
+                    : 'Search items.' }}
             </p>
         </div>
         <div class="actions">
             <a href="{{ $returnTo ?: route('purchases.index') }}" class="button-link">Back to Purchases</a>
         </div>
     </div>
+
+    @if ($sourcePurchase)
+        <div class="correction-banner">
+            <strong>Purchase correction mode</strong>
+            <p>You are correcting purchase {{ $sourcePurchase->purchase_no }}. Posting will replace the old purchase with a corrected one.</p>
+        </div>
+    @endif
 
     <form method="post" action="{{ route('purchases.store') }}" id="purchase-form" class="receive-shell">
         @csrf
@@ -135,17 +162,12 @@
 
         <section class="receive-panel details-panel">
                 <h3>Supplier & Invoice</h3>
-                <p class="list-note">Choose who delivered the stock and capture the supplier document.</p>
-                <input type="hidden" name="store_id" value="{{ $currentStore?->id }}">
+                <input type="hidden" name="store_id" value="{{ old('store_id', $prefillPurchase['store_id'] ?? $currentStore?->id) }}">
                 <div class="receive-grid">
                     <label class="form-field">
                         <span>Purchase Date</span>
-                        <input type="date" name="purchase_date" id="purchase-date" value="{{ old('purchase_date', now()->toDateString()) }}" required>
+                        <input type="date" name="purchase_date" id="purchase-date" value="{{ old('purchase_date', $prefillPurchase['purchase_date'] ?? now()->toDateString()) }}" required>
                     </label>
-                    <div class="form-field">
-                        <span>Store</span>
-                        <div class="store-pill">{{ $currentStore?->name ?? config('business.name', 'Apples Of Gold') }}</div>
-                    </div>
                     <div class="form-field span-full">
                         <span>Supplier</span>
                         <input type="hidden" name="supplier_id" id="purchase-supplier" value="{{ old('supplier_id', $prefillPurchase['supplier_id']) }}">
@@ -184,7 +206,7 @@
                         <select name="payment_mode_id">
                             <option value="">Auto-select</option>
                             @foreach ($paymentModes as $mode)
-                                <option value="{{ $mode->id }}" @selected((string) old('payment_mode_id') === (string) $mode->id)>{{ $mode->name }}</option>
+                                <option value="{{ $mode->id }}" @selected((string) old('payment_mode_id', $prefillPurchase['payment_mode_id'] ?? null) === (string) $mode->id)>{{ $mode->name }}</option>
                             @endforeach
                         </select>
                     </label>
@@ -214,7 +236,7 @@
                 <div id="balance-warning" class="receive-warning">Supplier balance will remain open.</div>
                 <div class="footer-actions">
                     <button type="button" id="purchase-fill-total" class="button-link">Pay Full Amount</button>
-                    <button type="submit" class="receive-primary-button">Record Purchase</button>
+                    <button type="submit" class="receive-primary-button">{{ $sourcePurchase ? 'Post Corrected Purchase' : 'Record Purchase' }}</button>
                 </div>
             </section>
 
@@ -433,11 +455,10 @@
                     <table class="incoming-table">
                         <thead>
                             <tr>
-                                <th>Product</th>
-                                <th>Unit</th>
+                                <th>Product / Pack</th>
                                 <th>Qty Received</th>
                                 <th>Buying Cost</th>
-                                <th>Total</th>
+                                <th>Line Total</th>
                                 <th>Remove</th>
                             </tr>
                         </thead>
@@ -446,10 +467,15 @@
                                 <tr>
                                     <td>
                                         <div class="incoming-product">${item.product_name}</div>
-                                        <div class="incoming-unit">${item.code ? `Code: ${item.code}` : 'No code'}${item.barcode ? ` / Barcode: ${item.barcode}` : ''}</div>
+                                        <div class="incoming-unit">${item.unit_name}${item.code ? ` / Code: ${item.code}` : ' / No code'}${item.barcode ? ` / Barcode: ${item.barcode}` : ''}</div>
                                     </td>
-                                    <td>${item.unit_name}</td>
-                                    <td><input type="number" min="1" step="1" value="${item.quantity}" data-qty="${index}" inputmode="numeric"></td>
+                                    <td>
+                                        <div class="purchase-qty-box">
+                                            <button type="button" data-minus="${index}">-</button>
+                                            <input type="number" min="1" step="1" value="${item.quantity}" data-qty="${index}" inputmode="numeric">
+                                            <button type="button" data-plus="${index}">+</button>
+                                        </div>
+                                    </td>
                                     <td><input type="number" min="0" step="0.01" value="${item.price}" data-price="${index}"></td>
                                     <td><input type="text" value="${money(Number(item.quantity) * Number(item.price))}" data-line-total="${index}" class="line-total-field" readonly></td>
                                     <td><button type="button" class="cart-remove" data-remove="${index}">Remove</button></td>
@@ -465,9 +491,14 @@
             function addUnit(unitId) {
                 const unit = units.find((item) => Number(item.id) === Number(unitId));
                 if (!unit) return;
-                const existing = cart.find((item) => Number(item.id) === Number(unit.id));
-                if (existing) existing.quantity = normalizeQuantity(existing.quantity) + 1;
-                else cart.push({ ...unit, quantity: 1 });
+                const existingIndex = cart.findIndex((item) => Number(item.id) === Number(unit.id));
+                if (existingIndex >= 0) {
+                    const existing = cart.splice(existingIndex, 1)[0];
+                    existing.quantity = normalizeQuantity(existing.quantity) + 1;
+                    cart.unshift(existing);
+                } else {
+                    cart.unshift({ ...unit, quantity: 1 });
+                }
                 renderCart();
                 searchInput.value = '';
                 renderSearchResults();
