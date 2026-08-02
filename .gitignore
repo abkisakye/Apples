@@ -39,3 +39,6 @@ Thumbs.db
 # Personal documents accidentally placed in the project root
 /Kisakye_*
 /~$*
+
+# Local database backups
+/storage/backups/
