@@ -243,8 +243,7 @@ class PurchaseReturnController extends Controller
 
         return redirect()
             ->route('purchase-returns.show', $return)
-            ->with('status', "Purchase return {$return->return_no} posted successfully.")
-            ->with('auto_print_document', true);
+            ->with('status', "Purchase return {$return->return_no} posted successfully.");
     }
 
     public function show(PurchaseReturn $purchaseReturn): View

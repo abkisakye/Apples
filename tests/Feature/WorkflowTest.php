@@ -17,6 +17,7 @@ use App\Models\PaymentMode;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\Purchase;
+use App\Models\PurchaseFundingSource;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Store;
@@ -61,6 +62,28 @@ class WorkflowTest extends TestCase
         ]);
     }
 
+    private function businessCashFundingSource(): PurchaseFundingSource
+    {
+        return PurchaseFundingSource::query()->firstOrCreate([
+            'name' => 'Business Cash / Shop Cash',
+        ], [
+            'description' => 'Cash available in the shop or business till.',
+            'is_active' => true,
+            'sort_order' => 10,
+        ]);
+    }
+
+    private function supplierCreditFundingSource(): PurchaseFundingSource
+    {
+        return PurchaseFundingSource::query()->firstOrCreate([
+            'name' => 'Supplier Credit / Not Paid Yet',
+        ], [
+            'description' => 'Unpaid supplier credit balance.',
+            'is_active' => true,
+            'sort_order' => 80,
+        ]);
+    }
+
     public function test_cash_sale_posting_creates_sale_items_and_inventory_transaction(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
@@ -89,7 +112,7 @@ class WorkflowTest extends TestCase
 
         $sale = Sale::query()->firstOrFail();
         $response->assertRedirect('/sales/'.$sale->id);
-        $response->assertSessionHas('auto_print_document', true);
+        $response->assertSessionMissing('auto_print_document');
 
         $this->assertSame($walkInCustomer->id, $sale->customer_id);
         $this->assertSame('cash', $sale->sale_type);
@@ -143,6 +166,9 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseCount('sale_items', 0);
         $this->assertDatabaseCount('customer_payments', 0);
         $this->assertDatabaseCount('inventory_transactions', 0);
+        $this->get('/sales/create')
+            ->assertOk()
+            ->assertSee('AZAM 2KG - Cartons');
         $this->get('/sales')->assertOk()->assertDontSee('UGX 82,000');
     }
 
@@ -520,7 +546,7 @@ class WorkflowTest extends TestCase
 
         $payment = \App\Models\CustomerPayment::query()->firstOrFail();
         $response->assertRedirect('/customer-payments/'.$payment->id);
-        $response->assertSessionHas('auto_print_receipt', true);
+        $response->assertSessionMissing('auto_print_receipt');
 
         $sale->refresh();
 
@@ -588,7 +614,7 @@ class WorkflowTest extends TestCase
 
         $sale = Sale::query()->firstOrFail();
         $response->assertRedirect('/sales/'.$sale->id);
-        $response->assertSessionHas('auto_print_document', true);
+        $response->assertSessionMissing('auto_print_document');
 
         $this->assertSame('credit', $sale->sale_type);
         $this->assertEquals(4000.0, (float) $sale->total_amount);
@@ -627,7 +653,7 @@ class WorkflowTest extends TestCase
 
         $sale = Sale::query()->firstOrFail();
         $response->assertRedirect('/sales/'.$sale->id);
-        $response->assertSessionHas('auto_print_document', true);
+        $response->assertSessionMissing('auto_print_document');
 
         $this->assertSame($walkInCustomer->id, $sale->customer_id);
         $this->assertSame('cash', $sale->sale_type);
@@ -727,6 +753,29 @@ class WorkflowTest extends TestCase
         ]);
     }
 
+    public function test_common_sale_customer_and_purchase_supplier_are_ordered_first(): void
+    {
+        Customer::create(['name' => 'Zulu Customer', 'is_active' => true]);
+        Customer::create(['name' => 'Walk-in Customer', 'is_walk_in' => true, 'is_system' => true, 'is_active' => true]);
+        Customer::create(['name' => 'Alpha Customer', 'is_active' => true]);
+
+        $saleContent = $this->get('/sales/create')->assertOk()->getContent();
+        $this->assertLessThan(
+            strpos($saleContent, 'Alpha Customer'),
+            strpos($saleContent, 'Walk-in Customer')
+        );
+
+        Supplier::create(['name' => 'Zulu Supplier', 'is_active' => true]);
+        Supplier::create(['name' => 'OTHERS', 'is_active' => true]);
+        Supplier::create(['name' => 'Alpha Supplier', 'is_active' => true]);
+
+        $purchaseContent = $this->get('/purchases/create')->assertOk()->getContent();
+        $this->assertLessThan(
+            strpos($purchaseContent, 'Alpha Supplier'),
+            strpos($purchaseContent, 'OTHERS')
+        );
+    }
+
     public function test_sale_detail_and_print_pages_load(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
@@ -746,7 +795,12 @@ class WorkflowTest extends TestCase
             'status' => 'posted',
         ]);
 
-        $this->get('/sales/'.$sale->id)->assertOk()->assertSee($sale->sale_no);
+        $this->get('/sales/'.$sale->id)
+            ->assertOk()
+            ->assertSee($sale->sale_no)
+            ->assertSee('Shortcut: F2 to print receipt')
+            ->assertSee("event.key !== 'F2'", false)
+            ->assertSee("localStorage.removeItem('apples.pos.sale.draft')", false);
         $this->get('/sales/'.$sale->id.'/print')
             ->assertOk()
             ->assertSee($sale->sale_no)
@@ -777,6 +831,7 @@ class WorkflowTest extends TestCase
             'supplier_id' => $supplier->id,
             'purchase_type' => 'cash',
             'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
             'items' => [
                 ['product_unit_id' => $unit->id, 'quantity' => 3, 'unit_cost' => 100000],
             ],
@@ -784,8 +839,9 @@ class WorkflowTest extends TestCase
 
         $purchase = Purchase::query()->firstOrFail();
         $response->assertRedirect('/purchases/'.$purchase->id);
-        $response->assertSessionHas('auto_print_document', true);
+        $response->assertSessionMissing('auto_print_document');
 
+        $this->assertSame('Business Cash / Shop Cash', $purchase->fundingSource?->name);
         $this->assertDatabaseCount('purchases', 1);
         $this->assertDatabaseCount('purchase_items', 1);
         $this->assertDatabaseHas('inventory_transactions', [
@@ -794,6 +850,175 @@ class WorkflowTest extends TestCase
             'product_unit_id' => $unit->id,
             'quantity_in' => 3,
         ]);
+
+        $this->get('/purchases/'.$purchase->id)
+            ->assertOk()
+            ->assertSee('Money Source')
+            ->assertSee('Business Cash / Shop Cash');
+
+        $this->get('/purchases?q=Business+Cash')
+            ->assertOk()
+            ->assertSee($purchase->purchase_no)
+            ->assertSee('Business Cash / Shop Cash');
+    }
+
+    public function test_paid_purchase_requires_money_source_and_preserves_selected_items(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Money Source Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Money Source Rice', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Bag',
+            'selling_price' => 120000,
+            'cost_price' => 100000,
+            'is_active' => true,
+        ]);
+
+        $this->from('/purchases/create')->post('/purchases', [
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 100000,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_cost' => 100000],
+            ],
+        ])
+            ->assertRedirect('/purchases/create')
+            ->assertSessionHasErrors([
+                'purchase_funding_source_id' => 'Please select where the purchase money came from.',
+            ]);
+
+        $this->assertDatabaseCount('purchases', 0);
+
+        $this->get('/purchases/create')
+            ->assertOk()
+            ->assertSee('Money Source')
+            ->assertSee('purchase-funding-required', false)
+            ->assertSee('For unpaid credit purchases, money source will be Supplier Credit / Not Paid Yet.')
+            ->assertSee('Select the cash, mobile money, bank, owner, loan, or other real source used to pay.')
+            ->assertSee('Money Source Rice - Bag');
+    }
+
+    public function test_unpaid_credit_purchase_defaults_to_supplier_credit_source(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Credit Source Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Credit Source Rice', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Bag',
+            'selling_price' => 120000,
+            'cost_price' => 100000,
+            'is_active' => true,
+        ]);
+
+        $response = $this->post('/purchases', [
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 0,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_cost' => 100000],
+            ],
+        ]);
+
+        $purchase = Purchase::query()->firstOrFail();
+        $response->assertRedirect('/purchases/'.$purchase->id);
+        $this->assertSame('Supplier Credit / Not Paid Yet', $purchase->fundingSource?->name);
+    }
+
+    public function test_credit_purchase_with_partial_payment_requires_actual_money_source(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Partial Credit Source Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Partial Credit Rice', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Bag',
+            'selling_price' => 120000,
+            'cost_price' => 100000,
+            'is_active' => true,
+        ]);
+
+        $this->from('/purchases/create')->post('/purchases', [
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 25000,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_cost' => 100000],
+            ],
+        ])
+            ->assertRedirect('/purchases/create')
+            ->assertSessionHasErrors([
+                'purchase_funding_source_id' => 'Please select where the purchase money came from.',
+            ]);
+
+        $this->assertDatabaseCount('purchases', 0);
+
+        $response = $this->post('/purchases', [
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
+            'amount_paid' => 25000,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_cost' => 100000],
+            ],
+        ]);
+
+        $purchase = Purchase::query()->firstOrFail();
+        $response->assertRedirect('/purchases/'.$purchase->id);
+        $this->assertSame('credit', $purchase->purchase_type);
+        $this->assertEquals(25000.0, (float) $purchase->amount_paid);
+        $this->assertEquals(75000.0, (float) $purchase->balance_due);
+        $this->assertSame('Business Cash / Shop Cash', $purchase->fundingSource?->name);
+    }
+
+    public function test_paid_purchase_cannot_use_supplier_credit_as_money_source(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Wrong Source Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Wrong Source Rice', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Bag',
+            'selling_price' => 120000,
+            'cost_price' => 100000,
+            'is_active' => true,
+        ]);
+
+        $this->from('/purchases/create')->post('/purchases', [
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->supplierCreditFundingSource()->id,
+            'amount_paid' => 100000,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_cost' => 100000],
+            ],
+        ])
+            ->assertRedirect('/purchases/create')
+            ->assertSessionHasErrors([
+                'purchase_funding_source_id' => 'Paid purchases must use an actual money source, not Supplier Credit / Not Paid Yet.',
+            ]);
+
+        $this->assertDatabaseCount('purchases', 0);
     }
 
     public function test_supplier_payment_reduces_credit_purchase_balance(): void
@@ -826,7 +1051,7 @@ class WorkflowTest extends TestCase
 
         $payment = \App\Models\SupplierPayment::query()->firstOrFail();
         $response->assertRedirect('/supplier-payments/'.$payment->id);
-        $response->assertSessionHas('auto_print_receipt', true);
+        $response->assertSessionMissing('auto_print_receipt');
 
         $purchase->refresh();
 
@@ -1817,7 +2042,7 @@ class WorkflowTest extends TestCase
         $saleReturn = \App\Models\SaleReturn::query()->firstOrFail();
 
         $response->assertRedirect('/sale-returns/'.$saleReturn->id);
-        $response->assertSessionHas('auto_print_document', true);
+        $response->assertSessionMissing('auto_print_document');
 
         $sale->refresh();
 
@@ -2211,7 +2436,7 @@ class WorkflowTest extends TestCase
         $purchaseReturn = \App\Models\PurchaseReturn::query()->firstOrFail();
 
         $response->assertRedirect('/purchase-returns/'.$purchaseReturn->id);
-        $response->assertSessionHas('auto_print_document', true);
+        $response->assertSessionMissing('auto_print_document');
 
         $purchase->refresh();
 
@@ -2360,6 +2585,7 @@ class WorkflowTest extends TestCase
             'store_id' => $store->id,
             'supplier_id' => $supplier->id,
             'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
             'amount_paid' => 1500,
             'corrected_from_purchase_id' => $purchase->id,
             'items' => [
@@ -2405,6 +2631,7 @@ class WorkflowTest extends TestCase
             'store_id' => $store->id,
             'supplier_id' => $supplier->id,
             'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
             'amount_paid' => 128000,
             'supplier_invoice_no' => 'INV-OLD-1',
             'remarks' => 'Saved before all items were entered',
@@ -2483,6 +2710,7 @@ class WorkflowTest extends TestCase
             'store_id' => $store->id,
             'supplier_id' => $supplier->id,
             'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
             'amount_paid' => 100,
             'corrected_from_purchase_id' => $originalPurchase->id,
             'items' => [
@@ -2559,6 +2787,7 @@ class WorkflowTest extends TestCase
             'store_id' => $store->id,
             'supplier_id' => $supplier->id,
             'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
             'amount_paid' => 500,
             'items' => [
                 ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_cost' => 500],
@@ -2575,6 +2804,7 @@ class WorkflowTest extends TestCase
             'store_id' => $store->id,
             'supplier_id' => $supplier->id,
             'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
             'amount_paid' => 500,
             'corrected_from_purchase_id' => $purchase->id,
             'items' => [
@@ -2610,7 +2840,7 @@ class WorkflowTest extends TestCase
         ]);
 
         $transferResponse->assertRedirect('/stock/transfers/TRF-20260325-0001');
-        $transferResponse->assertSessionHas('auto_print_document', true);
+        $transferResponse->assertSessionMissing('auto_print_document');
 
         $this->assertDatabaseHas('inventory_transactions', [
             'reference_type' => 'stock_transfer',
@@ -2632,7 +2862,7 @@ class WorkflowTest extends TestCase
         ]);
 
         $adjustmentResponse->assertRedirect('/stock/adjustments/ADJ-20260325-0001');
-        $adjustmentResponse->assertSessionHas('auto_print_document', true);
+        $adjustmentResponse->assertSessionMissing('auto_print_document');
 
         $this->assertDatabaseHas('inventory_transactions', [
             'reference_type' => 'stock_adjustment',
@@ -2710,7 +2940,7 @@ class WorkflowTest extends TestCase
         ]);
 
         $response->assertRedirect('/stock/counts/CNT-20260325-0001');
-        $response->assertSessionHas('auto_print_document', true);
+        $response->assertSessionMissing('auto_print_document');
 
         $this->assertDatabaseHas('stock_counts', [
             'count_no' => 'CNT-20260325-0001',
@@ -4328,6 +4558,8 @@ class WorkflowTest extends TestCase
             ->assertSee('data-line-total', false)
             ->assertSee('function syncCartSummary()', false)
             ->assertSee('function updateCartLineTotal(index)', false)
+            ->assertSee('const saleDraftKey = \'apples.pos.sale.draft\'', false)
+            ->assertSee('Your previous items were restored.', false)
             ->assertSee("cartList.addEventListener('focusout'", false)
             ->assertSee('data-remove-index', false)
             ->assertSee('title="Remove item"', false)
@@ -4409,6 +4641,7 @@ class WorkflowTest extends TestCase
             'supplier_id' => $supplier->id,
             'purchase_type' => 'cash',
             'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
             'amount_paid' => 2400000,
             'items' => [
                 ['product_unit_id' => $carton->id, 'quantity' => 10, 'unit_cost' => 240000],
@@ -4566,6 +4799,7 @@ class WorkflowTest extends TestCase
             'store_id' => $storeMain->id,
             'supplier_id' => $supplier->id,
             'payment_mode_id' => $cashMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
             'amount_paid' => 16000,
             'credit_period_days' => 7,
             'supplier_invoice_no' => 'SUP-001',
@@ -4577,7 +4811,7 @@ class WorkflowTest extends TestCase
 
         $purchase = Purchase::query()->firstOrFail();
         $purchaseResponse->assertRedirect('/purchases/'.$purchase->id);
-        $purchaseResponse->assertSessionHas('auto_print_document', true);
+        $purchaseResponse->assertSessionMissing('auto_print_document');
         $this->assertSame('credit', $purchase->purchase_type);
         $this->assertEquals(36000.0, (float) $purchase->total_amount);
         $this->assertEquals(20000.0, (float) $purchase->balance_due);
@@ -4594,7 +4828,7 @@ class WorkflowTest extends TestCase
 
         $supplierPayment = \App\Models\SupplierPayment::query()->firstOrFail();
         $supplierPaymentResponse->assertRedirect('/supplier-payments/'.$supplierPayment->id);
-        $supplierPaymentResponse->assertSessionHas('auto_print_receipt', true);
+        $supplierPaymentResponse->assertSessionMissing('auto_print_receipt');
 
         $purchase->refresh();
         $this->assertEquals(9000.0, (float) $purchase->balance_due);
@@ -4614,7 +4848,7 @@ class WorkflowTest extends TestCase
 
         $sale = Sale::query()->firstOrFail();
         $saleResponse->assertRedirect('/sales/'.$sale->id);
-        $saleResponse->assertSessionHas('auto_print_document', true);
+        $saleResponse->assertSessionMissing('auto_print_document');
         $this->assertSame('credit', $sale->sale_type);
         $this->assertEquals(20000.0, (float) $sale->total_amount);
         $this->assertEquals(12000.0, (float) $sale->balance_due);
@@ -4632,7 +4866,7 @@ class WorkflowTest extends TestCase
 
         $customerPayment = \App\Models\CustomerPayment::query()->firstOrFail();
         $customerPaymentResponse->assertRedirect('/customer-payments/'.$customerPayment->id);
-        $customerPaymentResponse->assertSessionHas('auto_print_receipt', true);
+        $customerPaymentResponse->assertSessionMissing('auto_print_receipt');
 
         $sale->refresh();
         $this->assertEquals(7000.0, (float) $sale->balance_due);
@@ -4650,7 +4884,7 @@ class WorkflowTest extends TestCase
 
         $saleReturn = \App\Models\SaleReturn::query()->firstOrFail();
         $saleReturnResponse->assertRedirect('/sale-returns/'.$saleReturn->id);
-        $saleReturnResponse->assertSessionHas('auto_print_document', true);
+        $saleReturnResponse->assertSessionMissing('auto_print_document');
 
         $sale->refresh();
         $this->assertEquals(2000.0, (float) $sale->balance_due);
@@ -4666,7 +4900,7 @@ class WorkflowTest extends TestCase
         ]);
 
         $transferResponse->assertRedirect('/stock/transfers/TRF-20260404-0001');
-        $transferResponse->assertSessionHas('auto_print_document', true);
+        $transferResponse->assertSessionMissing('auto_print_document');
 
         $adjustmentResponse = $this->post('/stock/adjustments', [
             'adjustment_date' => '2026-04-04',
@@ -4679,7 +4913,7 @@ class WorkflowTest extends TestCase
         ]);
 
         $adjustmentResponse->assertRedirect('/stock/adjustments/ADJ-20260404-0001');
-        $adjustmentResponse->assertSessionHas('auto_print_document', true);
+        $adjustmentResponse->assertSessionMissing('auto_print_document');
 
         $countResponse = $this->post('/stock/counts', [
             'action' => 'post',
@@ -4694,7 +4928,7 @@ class WorkflowTest extends TestCase
         ]);
 
         $countResponse->assertRedirect('/stock/counts/CNT-20260405-0001');
-        $countResponse->assertSessionHas('auto_print_document', true);
+        $countResponse->assertSessionMissing('auto_print_document');
 
         $this->assertDatabaseHas('inventory_transactions', [
             'reference_type' => 'purchase',
@@ -4829,6 +5063,13 @@ class WorkflowTest extends TestCase
             'reference_type' => 'stock_adjustment',
             'movement_type' => 'adjustment_out',
         ]);
+
+        $this->get('/stock/adjustments/create')
+            ->assertOk()
+            ->assertSee($unit->product->name.' - '.$unit->unit_name)
+            ->assertSee('function syncCartState()', false)
+            ->assertSee("cartList.addEventListener('focusout'", false)
+            ->assertSee('data-qty', false);
     }
 
     public function test_non_admin_cannot_post_decrease_stock_adjustment(): void
@@ -4935,7 +5176,7 @@ class WorkflowTest extends TestCase
             ],
         ])
             ->assertRedirect('/stock/adjustments/ADJ-20260728-0001')
-            ->assertSessionHas('auto_print_document', true);
+            ->assertSessionMissing('auto_print_document');
 
         $this->assertDatabaseHas('inventory_transactions', [
             'reference_type' => 'stock_adjustment',

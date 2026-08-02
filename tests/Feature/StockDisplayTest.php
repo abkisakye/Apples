@@ -7,6 +7,7 @@ use App\Models\InventoryTransaction;
 use App\Models\PaymentMode;
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\PurchaseFundingSource;
 use App\Models\Store;
 use App\Models\Supplier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -316,6 +317,13 @@ class StockDisplayTest extends TestCase
             'supplier_id' => $this->supplier->id,
             'purchase_type' => 'cash',
             'payment_mode_id' => $this->cash->id,
+            'purchase_funding_source_id' => PurchaseFundingSource::query()->firstOrCreate([
+                'name' => 'Business Cash / Shop Cash',
+            ], [
+                'description' => 'Cash available in the shop or business till.',
+                'is_active' => true,
+                'sort_order' => 10,
+            ])->id,
             'amount_paid' => $quantity * $unitCost,
             'items' => [
                 ['product_unit_id' => $unit->id, 'quantity' => $quantity, 'unit_cost' => $unitCost],

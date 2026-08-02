@@ -205,8 +205,7 @@ class SupplierPaymentController extends Controller
 
         return redirect()
             ->route('supplier-payments.show', $payment)
-            ->with('status', "Supplier payment {$payment->payment_no} posted successfully.")
-            ->with('auto_print_receipt', true);
+            ->with('status', "Supplier payment {$payment->payment_no} posted successfully.");
     }
 
     private function periodRange(string $period): array

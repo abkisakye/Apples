@@ -64,12 +64,4 @@
         </div>
     </section>
 
-    @if (session('auto_print_document'))
-        <script>
-            (() => {
-                const popup = window.open(@json(route('purchase-returns.print', $purchaseReturn)), '_blank', 'noopener,noreferrer');
-                if (popup) popup.focus();
-            })();
-        </script>
-    @endif
 @endsection

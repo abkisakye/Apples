@@ -147,7 +147,14 @@ class SaleController extends Controller
         }
 
         $displayStore = $currentStore ?? Store::query()->orderBy('name')->first(['id', 'name']);
-        $prefillUnitIds = collect($prefill['items'])->pluck('product_unit_id')->filter()->map(fn ($id) => (int) $id);
+        $oldUnitIds = collect($request->old('items', []))->pluck('product_unit_id')->filter()->map(fn ($id) => (int) $id);
+        $prefillUnitIds = collect($prefill['items'])
+            ->pluck('product_unit_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->merge($oldUnitIds)
+            ->unique()
+            ->values();
         $productUnits = $this->posProductUnits('', 20);
         if ($prefillUnitIds->isNotEmpty()) {
             $productUnits = $productUnits
@@ -583,8 +590,7 @@ class SaleController extends Controller
 
         return redirect()
             ->route('sales.show', $sale)
-            ->with('status', "Sale {$sale->sale_no} posted successfully.")
-            ->with('auto_print_document', true);
+            ->with('status', "Sale {$sale->sale_no} posted successfully.");
     }
 
     public function void(Request $request, Sale $sale, AuditLogService $auditLogService): RedirectResponse

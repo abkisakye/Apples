@@ -47,6 +47,7 @@
                             <span class="badge {{ $purchase->purchase_type === 'credit' ? 'credit' : '' }}">{{ ucfirst($purchase->purchase_type) }}</span>
                             <span class="badge {{ $purchase->status === 'posted' ? 'success' : 'credit' }}">{{ ucfirst($purchase->status) }}</span>
                         </div>
+                        <div class="table-meta">{{ $purchase->fundingSource?->name ?? 'Money source not set' }}</div>
                     </td>
                     <td class="money">
                         <div class="cell-stack">

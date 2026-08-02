@@ -28,10 +28,11 @@
                 </form>
             @endif
             <a href="{{ route('sales.print', ['sale' => $sale, 'theme' => 'full']) }}" target="_blank" class="button-link">Full A4 Document</a>
-            <a href="{{ route('sales.print', $sale) }}" target="_blank" class="button-link primary">Print Receipt</a>
+            <a href="{{ route('sales.print', $sale) }}" target="_blank" class="button-link primary" id="main-print-receipt">Print Receipt</a>
             <a href="{{ route('sales.index') }}" class="button-link">Back to Sales</a>
         </div>
     </div>
+    <p class="list-note">Shortcut: F2 to print receipt.</p>
 
     <section class="cards">
         <div class="card"><div class="label">Customer</div><div class="value">{{ $sale->customer?->name ?? 'Walk-in customer' }}</div></div>
@@ -230,15 +231,14 @@
         </section>
     @endif
 
-    @if (session('auto_print_document'))
-        <script>
-            (() => {
-                const printUrl = @json(route('sales.print', ['sale' => $sale, 'theme' => 'thermal']));
-                const popup = window.open(printUrl, '_blank', 'noopener,noreferrer');
-                if (popup) {
-                    popup.focus();
-                }
-            })();
-        </script>
-    @endif
+    <script>
+        (() => {
+            localStorage.removeItem('apples.pos.sale.draft');
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'F2') return;
+                event.preventDefault();
+                document.getElementById('main-print-receipt')?.click();
+            });
+        })();
+    </script>
 @endsection

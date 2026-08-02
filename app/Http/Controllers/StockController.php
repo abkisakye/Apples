@@ -238,8 +238,7 @@ class StockController extends Controller
 
         return redirect()
             ->route('stock.transfers.show', $referenceNo)
-            ->with('status', "Stock transfer {$referenceNo} posted successfully.")
-            ->with('auto_print_document', true);
+            ->with('status', "Stock transfer {$referenceNo} posted successfully.");
     }
 
     public function adjustmentCreate(Request $request): View
@@ -497,8 +496,7 @@ class StockController extends Controller
 
         return redirect()
             ->route('stock.adjustments.show', $referenceNo)
-            ->with('status', "Stock adjustment {$referenceNo} posted successfully.")
-            ->with('auto_print_document', true);
+            ->with('status', "Stock adjustment {$referenceNo} posted successfully.");
     }
 
     public function openingStockStore(
@@ -595,8 +593,7 @@ class StockController extends Controller
 
         return redirect()
             ->route('stock.adjustments.show', $referenceNo)
-            ->with('status', "Opening stock entry {$referenceNo} posted successfully.")
-            ->with('auto_print_document', true);
+            ->with('status', "Opening stock entry {$referenceNo} posted successfully.");
     }
 
     public function countStore(
@@ -895,8 +892,7 @@ class StockController extends Controller
 
         return redirect()
             ->route('stock.counts.show', $count->count_no)
-            ->with('status', "Physical stock count {$count->count_no} posted successfully.")
-            ->with('auto_print_document', true);
+            ->with('status', "Physical stock count {$count->count_no} posted successfully.");
     }
 
     private function saveProductLevelCount(
@@ -1159,8 +1155,7 @@ class StockController extends Controller
 
             return redirect()
                 ->route('stock.counts.show', $count->count_no)
-                ->with('status', "Physical stock count {$count->count_no} posted successfully.")
-                ->with('auto_print_document', true);
+                ->with('status', "Physical stock count {$count->count_no} posted successfully.");
         }
 
         $auditLogService->record('stock_count.draft_saved', null, "Physical stock count draft {$count->count_no} saved.", [

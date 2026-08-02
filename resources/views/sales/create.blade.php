@@ -1691,6 +1691,7 @@
         <input type="hidden" name="corrected_from_sale_id" value="{{ old('corrected_from_sale_id', $sourceSale?->id) }}">
         <input type="hidden" name="exchange_return_id" value="{{ old('exchange_return_id', $exchangeReturn?->id) }}">
         <input type="hidden" name="store_id" value="{{ $currentStore?->id }}">
+        <div id="sale-draft-restored" class="summary-callout" hidden>Your previous items were restored.</div>
 
         <div class="sale-lane">
             <section class="panel sale-search-panel">
@@ -2097,6 +2098,7 @@
             let cart = initialItems;
             let customers = allCustomers;
             let customerDropdownOpen = false;
+            const saleDraftKey = 'apples.pos.sale.draft';
             let activeKeypadInput = null;
             let searchResultsOpen = false;
             let highlightedResultIndex = -1;
@@ -2162,6 +2164,42 @@
 
             function saleChange() {
                 return Math.max(amountReceived() - totalSale(), 0);
+            }
+
+            function saveSaleDraft() {
+                try {
+                    localStorage.setItem(saleDraftKey, JSON.stringify({
+                        items: cart,
+                        customer_id: customerSelect.value || '',
+                        amount_paid: amountPaidInput.value || '',
+                        discount_amount: discountAmountInput.value || '',
+                        payment_mode_id: paymentModeSelect?.value || '',
+                        credit_period_days: creditPeriodInput.value || '',
+                        sale_date: saleDateInput.value || '',
+                    }));
+                } catch (error) {
+                    // Draft persistence is a convenience only; posting does not depend on it.
+                }
+            }
+
+            function restoreSaleDraftIfNeeded() {
+                if (initialItems.length > 0) return;
+
+                try {
+                    const draft = JSON.parse(localStorage.getItem(saleDraftKey) || '{}');
+                    if (!Array.isArray(draft.items) || draft.items.length < 1) return;
+
+                    cart = draft.items;
+                    customerSelect.value = draft.customer_id || customerSelect.value || '';
+                    amountPaidInput.value = draft.amount_paid || amountPaidInput.value || '';
+                    discountAmountInput.value = draft.discount_amount || discountAmountInput.value || '';
+                    if (paymentModeSelect && draft.payment_mode_id) paymentModeSelect.value = draft.payment_mode_id;
+                    if (draft.credit_period_days) creditPeriodInput.value = draft.credit_period_days;
+                    if (draft.sale_date) saleDateInput.value = draft.sale_date;
+                    document.getElementById('sale-draft-restored')?.removeAttribute('hidden');
+                } catch (error) {
+                    localStorage.removeItem(saleDraftKey);
+                }
             }
 
             function dueDatePreview() {
@@ -2618,6 +2656,7 @@
                     saleKindBadge.classList.remove('credit');
                 }
                 syncPaymentShortcuts();
+                saveSaleDraft();
             }
 
             function renderCustomerResults() {
@@ -3076,6 +3115,7 @@
             renderQuickPickResults();
             renderSearchResults();
             renderCustomerResults();
+            restoreSaleDraftIfNeeded();
             renderCart();
             if (customerSelect.value) {
                 selectCustomer(customerSelect.value);

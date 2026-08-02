@@ -36,6 +36,7 @@
     <section class="cards">
         <div class="card"><div class="label">Supplier</div><div class="value">{{ $purchase->supplier?->name ?? 'Supplier not linked' }}</div></div>
         <div class="card"><div class="label">Purchase Type</div><div class="value">{{ ucfirst($purchase->purchase_type) }}</div></div>
+        <div class="card"><div class="label">Money Source</div><div class="value">{{ $purchase->fundingSource?->name ?? '-' }}</div></div>
         <div class="card"><div class="label">Store</div><div class="value">{{ $purchase->store?->name ?? '-' }}</div></div>
         <div class="card"><div class="label">Total</div><div class="value money">{{ $currency }} {{ number_format((float) $purchase->total_amount, 0) }}</div></div>
         <div class="card"><div class="label">Balance</div><div class="value money">{{ $currency }} {{ number_format((float) $purchase->balance_due, 0) }}</div></div>
@@ -91,6 +92,10 @@
                     <tr>
                         <th style="text-align:left;">Payment Mode</th>
                         <td>{{ $purchase->paymentMode?->name ?? '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th style="text-align:left;">Money Source</th>
+                        <td>{{ $purchase->fundingSource?->name ?? '-' }}</td>
                     </tr>
                     <tr>
                         <th style="text-align:left;">Status</th>
@@ -178,15 +183,4 @@
         </section>
     @endif
 
-    @if (session('auto_print_document'))
-        <script>
-            (() => {
-                const printUrl = @json(route('purchases.print', $purchase));
-                const popup = window.open(printUrl, '_blank', 'noopener,noreferrer');
-                if (popup) {
-                    popup.focus();
-                }
-            })();
-        </script>
-    @endif
 @endsection

@@ -184,13 +184,11 @@ class SaleReturnController extends Controller
         $redirect = route('sale-returns.show', $return);
         if ($return->return_type === 'exchange') {
             return redirect($redirect)
-                ->with('status', "Sale return {$return->return_no} posted successfully. Review the settlement summary, then create the replacement sale from this return document.")
-                ->with('auto_print_document', true);
+                ->with('status', "Sale return {$return->return_no} posted successfully. Review the settlement summary, then create the replacement sale from this return document.");
         }
 
         return redirect($redirect)
-            ->with('status', "Sale return {$return->return_no} posted successfully.")
-            ->with('auto_print_document', true);
+            ->with('status', "Sale return {$return->return_no} posted successfully.");
     }
 
     public function show(SaleReturn $saleReturn): View

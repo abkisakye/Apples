@@ -259,8 +259,7 @@ class CustomerPaymentController extends Controller
 
         return redirect()
             ->route('customer-payments.show', $payment)
-            ->with('status', "Customer payment {$payment->payment_no} posted successfully.")
-            ->with('auto_print_receipt', true);
+            ->with('status', "Customer payment {$payment->payment_no} posted successfully.");
     }
 
     private function paymentAccountSummary(CustomerPayment $payment): array

@@ -40,6 +40,11 @@ class Purchase extends Model
         return $this->belongsTo(PaymentMode::class);
     }
 
+    public function fundingSource(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseFundingSource::class, 'purchase_funding_source_id');
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(PurchaseItem::class);

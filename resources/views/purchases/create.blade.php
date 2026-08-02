@@ -76,6 +76,8 @@
         .quick-supplier-box { display:none; gap:7px; margin-top:8px; padding:8px; border:1px dashed #fed7aa; border-radius:9px; background:var(--purchase-soft); }
         .quick-supplier-box.is-visible { display:grid; }
         .quick-supplier-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.8fr); gap:8px; }
+        .required-mark { color:#b91c1c; }
+        .form-hint { display:block; margin-top:4px; color:#78716c; font-size:.74rem; line-height:1.35; }
         .picker-empty { padding:10px; border:1px dashed #fed7aa; border-radius:9px; color:#78716c; background:var(--purchase-soft); font-size:.84rem; }
         .receive-warning { display:none; margin-top:10px; padding:8px 10px; border:1px solid var(--purchase-border); border-radius:9px; background:var(--purchase-soft); color:var(--purchase-main); font-weight:700; font-size:.82rem; }
         .receive-warning.is-visible { display:block; }
@@ -211,6 +213,16 @@
                         </select>
                     </label>
                     <label class="form-field">
+                        <span>Money Source <strong id="purchase-funding-required" class="required-mark">*</strong></span>
+                        <select name="purchase_funding_source_id" id="purchase-funding-source">
+                            <option value="">Choose money source</option>
+                            @foreach ($fundingSources as $source)
+                                <option value="{{ $source->id }}" @selected((string) old('purchase_funding_source_id', $prefillPurchase['purchase_funding_source_id'] ?? null) === (string) $source->id)>{{ $source->name }}</option>
+                            @endforeach
+                        </select>
+                        <small id="purchase-funding-helper" class="form-hint">Select the cash, mobile money, bank, owner, loan, or other real source used to pay.</small>
+                    </label>
+                    <label class="form-field">
                         <span>Supplier Invoice</span>
                         <input type="text" name="supplier_invoice_no" value="{{ old('supplier_invoice_no', $prefillPurchase['supplier_invoice_no']) }}">
                     </label>
@@ -266,6 +278,9 @@
             const quickSupplierPhone = document.getElementById('quick-supplier-phone');
             const quickSupplierError = document.getElementById('quick-supplier-error');
             const amountPaidInput = document.getElementById('purchase-amount-paid');
+            const fundingSourceInput = document.getElementById('purchase-funding-source');
+            const fundingRequiredMark = document.getElementById('purchase-funding-required');
+            const fundingHelper = document.getElementById('purchase-funding-helper');
             const creditPeriodInput = document.getElementById('purchase-credit-period');
             const creditPeriodWrap = document.getElementById('purchase-credit-period-wrap');
             const purchaseDateInput = document.getElementById('purchase-date');
@@ -429,6 +444,18 @@
                 dueSummary.textContent = duePreview();
                 totalSummary.textContent = money(total());
                 syncCreditPeriodVisibility();
+                const sourceRequired = total() > 0 && (paidNow() > 0 || balance() <= 0);
+                if (fundingSourceInput) {
+                    fundingSourceInput.required = sourceRequired;
+                }
+                if (fundingRequiredMark) {
+                    fundingRequiredMark.hidden = !sourceRequired;
+                }
+                if (fundingHelper) {
+                    fundingHelper.textContent = sourceRequired
+                        ? 'Select the cash, mobile money, bank, owner, loan, or other real source used to pay.'
+                        : 'For unpaid credit purchases, money source will be Supplier Credit / Not Paid Yet.';
+                }
 
                 if (balance() > 0) {
                     badge.textContent = 'Credit Purchase';

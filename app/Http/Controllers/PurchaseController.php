@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\InventoryTransaction;
 use App\Models\PaymentMode;
+use App\Models\PurchaseFundingSource;
 use App\Models\ProductUnit;
 use App\Models\Purchase;
 use App\Models\Store;
@@ -33,7 +34,7 @@ class PurchaseController extends Controller
         $dateTo = $request->date('date_to')?->toDateString();
 
         $purchases = Purchase::query()
-            ->with(['supplier:id,name,phone,email', 'store:id,name', 'paymentMode:id,name'])
+            ->with(['supplier:id,name,phone,email', 'store:id,name', 'paymentMode:id,name', 'fundingSource:id,name'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($searchQuery) use ($search) {
                     $searchQuery->where('purchase_no', 'like', "%{$search}%")
@@ -46,7 +47,8 @@ class PurchaseController extends Controller
                             ->orWhere('phone', 'like', "%{$search}%")
                             ->orWhere('email', 'like', "%{$search}%"))
                         ->orWhereHas('store', fn ($store) => $store->where('name', 'like', "%{$search}%"))
-                        ->orWhereHas('paymentMode', fn ($paymentMode) => $paymentMode->where('name', 'like', "%{$search}%"));
+                        ->orWhereHas('paymentMode', fn ($paymentMode) => $paymentMode->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('fundingSource', fn ($source) => $source->where('name', 'like', "%{$search}%"));
                 });
             })
             ->when(in_array($type, ['cash', 'credit'], true), fn ($query) => $query->where('purchase_type', $type))
@@ -78,6 +80,7 @@ class PurchaseController extends Controller
             'store_id' => $currentStore?->id,
             'purchase_date' => now()->toDateString(),
             'payment_mode_id' => null,
+            'purchase_funding_source_id' => null,
             'amount_paid' => 0,
             'credit_period_days' => 30,
             'supplier_invoice_no' => null,
@@ -102,6 +105,7 @@ class PurchaseController extends Controller
                 'store_id' => $sourcePurchase->store_id,
                 'purchase_date' => $sourcePurchase->purchase_date?->toDateString() ?? now()->toDateString(),
                 'payment_mode_id' => $sourcePurchase->payment_mode_id,
+                'purchase_funding_source_id' => $sourcePurchase->purchase_funding_source_id,
                 'amount_paid' => (float) $sourcePurchase->amount_paid,
                 'credit_period_days' => (int) ($sourcePurchase->credit_period_days ?? 30),
                 'supplier_invoice_no' => $sourcePurchase->supplier_invoice_no,
@@ -121,9 +125,15 @@ class PurchaseController extends Controller
             'suppliers' => Supplier::query()
                 ->where('is_active', true)
                 ->withSum(['purchases as outstanding_credit' => fn ($query) => $query->posted()], 'balance_due')
+                ->orderByRaw("CASE WHEN LOWER(TRIM(name)) = 'others' THEN 0 ELSE 1 END")
                 ->orderBy('name')
                 ->get(['id', 'name', 'phone', 'country']),
             'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'fundingSources' => PurchaseFundingSource::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(['id', 'name']),
             'productUnits' => ProductUnit::query()
                 ->with('product:id,name,code')
                 ->where('is_active', true)
@@ -181,6 +191,7 @@ class PurchaseController extends Controller
             'supplier:id,name,phone,country',
             'store:id,name',
             'paymentMode:id,name',
+            'fundingSource:id,name',
             'items.product:id,name',
             'items.productUnit:id,unit_name',
             'payments.paymentMode:id,name',
@@ -198,6 +209,7 @@ class PurchaseController extends Controller
             'supplier:id,name,phone,country',
             'store:id,name',
             'paymentMode:id,name',
+            'fundingSource:id,name',
             'items.product:id,name',
             'items.productUnit:id,unit_name',
             'payments.paymentMode:id,name',
@@ -220,6 +232,7 @@ class PurchaseController extends Controller
             'supplier_id' => ['required', 'exists:suppliers,id'],
             'purchase_type' => ['nullable', 'in:cash,credit'],
             'payment_mode_id' => ['nullable', 'exists:payment_modes,id'],
+            'purchase_funding_source_id' => ['nullable', 'exists:purchase_funding_sources,id'],
             'supplier_invoice_no' => ['nullable', 'string', 'max:255'],
             'credit_period_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
             'amount_paid' => ['nullable', 'numeric', 'min:0'],
@@ -297,6 +310,26 @@ class PurchaseController extends Controller
             $balanceDue = max($subtotal - $amountApplied, 0);
             $paymentModeId = $validated['payment_mode_id']
                 ?? $this->defaultPaymentModeId($purchaseType === 'credit' ? 'Credit' : 'Cash');
+            $fundingSourceId = ! empty($validated['purchase_funding_source_id'])
+                ? (int) $validated['purchase_funding_source_id']
+                : null;
+            $requiresActualMoneySource = $requestedType === 'cash' || $purchaseType === 'cash' || $amountApplied > 0;
+
+            if ($requiresActualMoneySource && ! $fundingSourceId) {
+                throw ValidationException::withMessages([
+                    'purchase_funding_source_id' => 'Please select where the purchase money came from.',
+                ]);
+            }
+
+            if ($requiresActualMoneySource && $fundingSourceId && $this->isSupplierCreditFundingSourceId($fundingSourceId)) {
+                throw ValidationException::withMessages([
+                    'purchase_funding_source_id' => 'Paid purchases must use an actual money source, not Supplier Credit / Not Paid Yet.',
+                ]);
+            }
+
+            if (! $fundingSourceId && $purchaseType === 'credit') {
+                $fundingSourceId = $this->defaultFundingSourceId('Supplier Credit / Not Paid Yet');
+            }
 
             $purchase = Purchase::create([
                 'purchase_no' => $documentNumberService->make('purchase', $validated['purchase_date']),
@@ -305,6 +338,7 @@ class PurchaseController extends Controller
                 'store_id' => $storeId,
                 'purchase_type' => $purchaseType,
                 'payment_mode_id' => $paymentModeId,
+                'purchase_funding_source_id' => $fundingSourceId,
                 'supplier_invoice_no' => $validated['supplier_invoice_no'] ?? null,
                 'subtotal' => $subtotal,
                 'discount_amount' => 0,
@@ -388,8 +422,7 @@ class PurchaseController extends Controller
 
         return redirect()
             ->route('purchases.show', $purchase)
-            ->with('status', "Purchase {$purchase->purchase_no} posted successfully.")
-            ->with('auto_print_document', true);
+            ->with('status', "Purchase {$purchase->purchase_no} posted successfully.");
     }
 
     public function void(Request $request, Purchase $purchase, AuditLogService $auditLogService): RedirectResponse
@@ -488,6 +521,22 @@ class PurchaseController extends Controller
             ->whereRaw('UPPER(name) = ?', [strtoupper($preferredName)])
             ->value('id')
             ?? PaymentMode::query()->orderBy('name')->value('id');
+    }
+
+    private function defaultFundingSourceId(string $preferredName): ?int
+    {
+        return PurchaseFundingSource::query()
+            ->whereRaw('UPPER(name) = ?', [strtoupper($preferredName)])
+            ->value('id')
+            ?? PurchaseFundingSource::query()->where('is_active', true)->orderBy('sort_order')->value('id');
+    }
+
+    private function isSupplierCreditFundingSourceId(int $fundingSourceId): bool
+    {
+        return PurchaseFundingSource::query()
+            ->whereKey($fundingSourceId)
+            ->whereRaw('UPPER(TRIM(name)) = ?', ['SUPPLIER CREDIT / NOT PAID YET'])
+            ->exists();
     }
 
     private function resolveSelectedUnit(int $productUnitId = 0, int $productId = 0): ?ProductUnit

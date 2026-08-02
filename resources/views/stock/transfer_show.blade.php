@@ -71,13 +71,4 @@
         </div>
     </section>
 
-    @if (session('auto_print_document'))
-        <script>
-            (() => {
-                const printUrl = @json(route('stock.transfers.print', $referenceNo));
-                const popup = window.open(printUrl, '_blank', 'noopener,noreferrer');
-                if (popup) popup.focus();
-            })();
-        </script>
-    @endif
 @endsection

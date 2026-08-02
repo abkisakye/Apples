@@ -171,6 +171,10 @@
             function renderCart() {
                 cartEmpty.style.display = cart.length ? 'none' : 'block';
                 cartList.innerHTML = cart.map((item, index) => `<div class="cart-item"><div class="cart-item-head"><div><strong>${item.label}</strong>${openingStockMode ? '<span class="old-stock-chip">OLD STOCK</span>' : ''}</div><button type="button" class="cart-remove" data-remove="${index}">Remove</button></div><label class="form-field"><span>Quantity</span><div class="qty-box"><button type="button" data-minus="${index}">-</button><input type="number" min="${openingStockMode ? '0.001' : '1'}" step="${openingStockMode ? '0.001' : '1'}" value="${item.quantity}" data-qty="${index}"><button type="button" data-plus="${index}">+</button></div></label></div>`).join('');
+                syncCartState();
+            }
+
+            function syncCartState() {
                 hidden.innerHTML = cart.map((item, index) => `<input type="hidden" name="items[${index}][product_unit_id]" value="${item.id}"><input type="hidden" name="items[${index}][quantity]" value="${item.quantity}">`).join('');
                 linesSummary.textContent = String(cart.length);
                 qtySummary.textContent = String(cart.reduce((sum, item) => sum + normalizeQuantity(item.quantity), 0));
@@ -219,7 +223,20 @@
             });
             cartList.addEventListener('input', (event) => {
                 const qty = event.target.closest('[data-qty]');
-                if (qty) { const i = Number(qty.dataset.qty); cart[i].quantity = normalizeQuantity(qty.value); renderCart(); }
+                if (qty) {
+                    const i = Number(qty.dataset.qty);
+                    cart[i].quantity = qty.value;
+                    syncCartState();
+                }
+            });
+            cartList.addEventListener('focusout', (event) => {
+                const qty = event.target.closest('[data-qty]');
+                if (qty) {
+                    const i = Number(qty.dataset.qty);
+                    cart[i].quantity = normalizeQuantity(qty.value);
+                    qty.value = String(cart[i].quantity);
+                    syncCartState();
+                }
             });
             document.getElementById('clear-adjustment-cart').addEventListener('click', () => { cart = []; renderCart(); });
             typeSelect?.addEventListener('change', updateBadge);

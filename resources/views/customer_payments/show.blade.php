@@ -63,15 +63,4 @@
         </div>
     </section>
 
-    @if (session('auto_print_receipt'))
-        <script>
-            (() => {
-                const printUrl = @json(route('customer-payments.print', ['customerPayment' => $payment, 'theme' => 'thermal']));
-                const popup = window.open(printUrl, '_blank', 'noopener,noreferrer');
-                if (popup) {
-                    popup.focus();
-                }
-            })();
-        </script>
-    @endif
 @endsection
