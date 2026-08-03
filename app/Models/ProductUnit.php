@@ -20,6 +20,7 @@ class ProductUnit extends Model
             'is_pos_unit' => 'boolean',
             'allow_fractional_quantity' => 'boolean',
             'quantity_precision' => 'integer',
+            'minimum_wholesale_quantity' => 'decimal:3',
             'is_base_unit' => 'boolean',
             'is_active' => 'boolean',
         ];

@@ -3840,16 +3840,21 @@ class WorkflowTest extends TestCase
 
         $guidance = 'Create one product, then add all selling packs/units such as piece, dozen, box, carton, sack, bundle, bottle, tin, half carton where applicable.';
         $duplicateWarning = 'Do not create separate products for carton and piece versions of the same item';
+        $fractionalGuidance = 'Allow fractional quantities for wholesale packs such as 0.5 or 0.75 carton.';
 
         $this->get('/products/create')
             ->assertOk()
             ->assertSee($guidance)
-            ->assertSee($duplicateWarning);
+            ->assertSee($duplicateWarning)
+            ->assertSee($fractionalGuidance)
+            ->assertSee('Minimum Wholesale Qty');
 
         $this->get('/products/'.$product->id.'/edit')
             ->assertOk()
             ->assertSee($guidance)
-            ->assertSee($duplicateWarning);
+            ->assertSee($duplicateWarning)
+            ->assertSee($fractionalGuidance)
+            ->assertSee('Minimum Wholesale Qty');
     }
 
     public function test_product_unit_base_conversion_metadata_can_be_saved_without_changing_stock_behavior(): void
@@ -3883,8 +3888,8 @@ class WorkflowTest extends TestCase
                     'conversion_factor' => 50,
                     'selling_price' => 145000,
                     'cost_price' => 110000,
-                    'allow_fractional_quantity' => 0,
-                    'quantity_precision' => 0,
+                    'allow_fractional_quantity' => 1,
+                    'quantity_precision' => 2,
                     'is_base_unit' => 0,
                     'is_active' => 1,
                 ],
@@ -3910,6 +3915,9 @@ class WorkflowTest extends TestCase
             'product_id' => $product->id,
             'unit_name' => 'Sack',
             'conversion_factor' => 50,
+            'allow_fractional_quantity' => true,
+            'quantity_precision' => 2,
+            'minimum_wholesale_quantity' => 0.5,
             'is_base_unit' => false,
         ]);
     }

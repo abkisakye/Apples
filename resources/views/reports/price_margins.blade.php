@@ -76,7 +76,7 @@
                             <td>{{ $row->margin_amount === null ? 'N/A' : $currency.' '.number_format($row->margin_amount, 0) }}</td>
                             <td>{{ $row->margin_percent === null ? 'N/A' : number_format($row->margin_percent, 2).'%' }}</td>
                             <td>
-                                <span class="badge {{ $row->status_key === 'healthy_margin' && ! $row->conversion_review ? 'success' : 'credit' }}">{{ $row->warning_label }}</span>
+                                <a href="{{ route('products.edit', ['product' => $row->product->id, 'focus' => 'units']) }}" class="badge {{ $row->status_key === 'healthy_margin' && ! $row->conversion_review ? 'success' : 'credit' }}" title="Open product unit setup">{{ $row->warning_label }}</a>
                             </td>
                         </tr>
                     @empty

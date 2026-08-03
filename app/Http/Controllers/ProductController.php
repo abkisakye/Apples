@@ -185,6 +185,7 @@ class ProductController extends Controller
                     'part_number' => $unit->part_number,
                     'allow_fractional_quantity' => $unit->allow_fractional_quantity,
                     'quantity_precision' => (int) $unit->quantity_precision,
+                    'minimum_wholesale_quantity' => $unit->minimum_wholesale_quantity === null ? null : (float) $unit->minimum_wholesale_quantity,
                     'is_base_unit' => $unit->is_base_unit,
                     'is_active' => $unit->is_active,
                     'is_pos_unit' => $unit->is_pos_unit,
@@ -272,6 +273,7 @@ class ProductController extends Controller
             'units.*.part_number' => ['nullable', 'string', 'max:255'],
             'units.*.allow_fractional_quantity' => ['nullable', 'boolean'],
             'units.*.quantity_precision' => ['nullable', 'integer', 'min:0', 'max:3'],
+            'units.*.minimum_wholesale_quantity' => ['nullable', 'numeric', 'min:0'],
             'units.*.is_base_unit' => ['nullable', 'boolean'],
             'units.*.is_active' => ['nullable', 'boolean'],
             'default_unit_index' => ['nullable', 'integer', 'min:0'],
@@ -279,16 +281,23 @@ class ProductController extends Controller
 
         $unitRows = collect($validated['units'])
             ->map(function (array $unit) {
+                $allowFractional = filter_var($unit['allow_fractional_quantity'] ?? false, FILTER_VALIDATE_BOOL);
+                $unitName = trim((string) $unit['unit_name']);
+                $minimumWholesaleQuantity = $allowFractional
+                    ? $this->normaliseMinimumWholesaleQuantity($unit['minimum_wholesale_quantity'] ?? null, $unitName)
+                    : null;
+
                 return [
                     'id' => $unit['id'] ?? null,
-                    'unit_name' => trim((string) $unit['unit_name']),
+                    'unit_name' => $unitName,
                     'conversion_factor' => round((float) ($unit['conversion_factor'] ?? 1), 3),
                     'selling_price' => round((float) ($unit['selling_price'] ?? 0), 2),
                     'cost_price' => round((float) ($unit['cost_price'] ?? 0), 2),
                     'barcode' => blank($unit['barcode'] ?? null) ? null : trim((string) $unit['barcode']),
                     'part_number' => blank($unit['part_number'] ?? null) ? null : trim((string) $unit['part_number']),
-                    'allow_fractional_quantity' => filter_var($unit['allow_fractional_quantity'] ?? false, FILTER_VALIDATE_BOOL),
+                    'allow_fractional_quantity' => $allowFractional,
                     'quantity_precision' => (int) ($unit['quantity_precision'] ?? 0),
+                    'minimum_wholesale_quantity' => $minimumWholesaleQuantity,
                     'is_base_unit' => filter_var($unit['is_base_unit'] ?? false, FILTER_VALIDATE_BOOL),
                     'is_active' => filter_var($unit['is_active'] ?? true, FILTER_VALIDATE_BOOL),
                 ];
@@ -400,9 +409,32 @@ class ProductController extends Controller
             'part_number' => null,
             'allow_fractional_quantity' => false,
             'quantity_precision' => 0,
+            'minimum_wholesale_quantity' => null,
             'is_base_unit' => true,
             'is_active' => true,
             'is_pos_unit' => true,
         ];
+    }
+
+    private function normaliseMinimumWholesaleQuantity(mixed $value, string $unitName): ?float
+    {
+        if ($value !== null && $value !== '') {
+            return round((float) $value, 3);
+        }
+
+        return $this->isWholesalePackUnit($unitName) ? 0.5 : null;
+    }
+
+    private function isWholesalePackUnit(string $unitName): bool
+    {
+        $name = mb_strtolower($unitName);
+
+        foreach (['bag', 'box', 'carton', 'case', 'crate', 'dozen', 'packet', 'pack', 'sack'] as $keyword) {
+            if (str_contains($name, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

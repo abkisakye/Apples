@@ -2087,7 +2087,10 @@
                         product_name: @json($oldUnit->product->name),
                         unit_name: @json($oldUnit->unit_name),
                         price: {{ (float) ($oldItem['unit_price'] ?? $oldUnit->selling_price) }},
-                        quantity: {{ (int) round((float) ($oldItem['quantity'] ?? 1)) }},
+                        quantity: {{ (float) ($oldItem['quantity'] ?? 1) }},
+                        allow_fractional_quantity: @json((bool) $oldUnit->allow_fractional_quantity),
+                        quantity_precision: {{ (int) $oldUnit->quantity_precision }},
+                        minimum_wholesale_quantity: @json($oldUnit->minimum_wholesale_quantity === null ? null : (float) $oldUnit->minimum_wholesale_quantity),
                         barcode: @json($oldUnit->barcode),
                         code: @json($oldUnit->product->code),
                         image_url: null,
@@ -2142,8 +2145,29 @@
                 return cart.reduce((carry, item) => carry + (Number(item.quantity || 0) * Number(item.price || 0)), 0);
             }
 
-            function normalizeQuantity(value) {
-                return Math.max(Math.round(Number(value || 0)), 1);
+            function quantityPrecision(item) {
+                return item?.allow_fractional_quantity ? Math.max(Number(item.quantity_precision || 0), 0) : 0;
+            }
+
+            function quantityStep(item) {
+                const precision = quantityPrecision(item);
+                return item?.allow_fractional_quantity ? (1 / Math.pow(10, precision || 3)) : 1;
+            }
+
+            function minimumQuantity(item) {
+                const minimumWholesaleQuantity = Number(item?.minimum_wholesale_quantity || 0);
+                return item?.allow_fractional_quantity ? Math.max(minimumWholesaleQuantity || quantityStep(item), quantityStep(item)) : 1;
+            }
+
+            function normalizeQuantity(value, item = null) {
+                const raw = Math.max(Number(value || 0), minimumQuantity(item));
+
+                if (!item?.allow_fractional_quantity) {
+                    return Math.max(Math.round(raw), 1);
+                }
+
+                const precision = quantityPrecision(item);
+                return Number(raw.toFixed(precision || 3));
             }
 
             function discountAmount() {
@@ -2565,7 +2589,7 @@
                                     <div class="bill-label">Qty</div>
                                     <div class="qty-box">
                                         <button type="button" data-qty-minus="${index}">-</button>
-                                        <input type="number" min="1" step="1" value="${item.quantity}" data-qty-input="${index}" data-keypad-input="integer">
+                                        <input type="number" min="${minimumQuantity(item)}" step="${quantityStep(item)}" value="${item.quantity}" data-qty-input="${index}" data-keypad-input="${item.allow_fractional_quantity ? 'decimal' : 'integer'}">
                                         <button type="button" data-qty-plus="${index}">+</button>
                                     </div>
                                 </div>
@@ -2609,7 +2633,7 @@
                 updateCartHiddenInputs();
                 itemsSummary.textContent = String(cart.length);
                 itemsInlineSummary.textContent = String(cart.length);
-                unitsInlineSummary.textContent = String(cart.reduce((carry, item) => carry + normalizeQuantity(item.quantity), 0));
+                unitsInlineSummary.textContent = String(cart.reduce((carry, item) => carry + normalizeQuantity(item.quantity, item), 0));
                 subtotalSummary.textContent = money(subtotal());
                 discountSummary.textContent = money(discountAmount());
                 totalInlineSummary.textContent = money(totalSale());
@@ -2703,7 +2727,7 @@
                 const existingIndex = cart.findIndex((item) => Number(item.id) === Number(unit.id));
                 if (existingIndex >= 0) {
                     const existing = cart.splice(existingIndex, 1)[0];
-                    existing.quantity = normalizeQuantity(existing.quantity) + 1;
+                    existing.quantity = normalizeQuantity(existing.quantity, existing) + 1;
                     cart.unshift(existing);
                 } else {
                     cart.unshift({
@@ -2912,7 +2936,7 @@
                 const plusButton = event.target.closest('[data-qty-plus]');
                 if (plusButton) {
                     const index = Number(plusButton.dataset.qtyPlus);
-                    cart[index].quantity = normalizeQuantity(cart[index].quantity) + 1;
+                    cart[index].quantity = normalizeQuantity(cart[index].quantity, cart[index]) + 1;
                     renderCart();
                     return;
                 }
@@ -2920,7 +2944,7 @@
                 const minusButton = event.target.closest('[data-qty-minus]');
                 if (minusButton) {
                     const index = Number(minusButton.dataset.qtyMinus);
-                    cart[index].quantity = Math.max(normalizeQuantity(cart[index].quantity) - 1, 1);
+                    cart[index].quantity = Math.max(normalizeQuantity(cart[index].quantity, cart[index]) - 1, minimumQuantity(cart[index]));
                     renderCart();
                 }
             });
@@ -2929,7 +2953,7 @@
                 const qtyInput = event.target.closest('[data-qty-input]');
                 if (qtyInput) {
                     const index = Number(qtyInput.dataset.qtyInput);
-                    cart[index].quantity = normalizeQuantity(qtyInput.value);
+                    cart[index].quantity = normalizeQuantity(qtyInput.value, cart[index]);
                     updateCartLineTotal(index);
                     syncCartSummary();
                     return;
@@ -2952,7 +2976,7 @@
                 const qtyInput = event.target.closest('[data-qty-input]');
                 if (qtyInput) {
                     const index = Number(qtyInput.dataset.qtyInput);
-                    cart[index].quantity = normalizeQuantity(qtyInput.value);
+                    cart[index].quantity = normalizeQuantity(qtyInput.value, cart[index]);
                     qtyInput.value = cart[index].quantity;
                     updateCartLineTotal(index);
                     syncCartSummary();

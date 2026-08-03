@@ -116,7 +116,7 @@ class SaleController extends Controller
                 'items' => $sourceSale->items->map(function ($item) {
                     return [
                         'product_unit_id' => $item->product_unit_id,
-                        'quantity' => (int) round((float) $item->quantity),
+                        'quantity' => round((float) $item->quantity, 3),
                         'unit_price' => (float) $item->unit_price,
                     ];
                 })->all(),
@@ -138,7 +138,7 @@ class SaleController extends Controller
                     'items' => $exchangeReturn->items->map(function ($item) {
                         return [
                             'product_unit_id' => $item->product_unit_id,
-                            'quantity' => (int) round((float) $item->quantity),
+                            'quantity' => round((float) $item->quantity, 3),
                             'unit_price' => (float) $item->unit_price,
                         ];
                     })->all(),
@@ -286,7 +286,7 @@ class SaleController extends Controller
         }
 
         $productUnits = ProductUnit::query()
-            ->with('product:id,name')
+            ->with(['product:id,name,base_product_unit_id,base_unit_label', 'product.baseProductUnit:id,unit_name'])
             ->whereIn('id', $items->pluck('product_unit_id'))
             ->get()
             ->keyBy('id');
@@ -320,6 +320,7 @@ class SaleController extends Controller
 
             $quantity = round(max((float) $item['quantity'], 0.001), 3);
             $conversionService->validatePrecision($quantity, $unit, 'items');
+            $this->enforceMinimumWholesaleQuantity($quantity, $unit, "items.{$index}.quantity");
 
             return [
                 'unit' => $unit,
@@ -375,6 +376,7 @@ class SaleController extends Controller
 
                 $quantity = round(max((float) $item['quantity'], 0.001), 3);
                 $conversionService->validatePrecision($quantity, $unit, 'items');
+                $this->enforceMinimumWholesaleQuantity($quantity, $unit, "items.{$index}.quantity");
                 $conversionFactor = $conversionService->conversionFactorSnapshot($unit);
                 $baseQuantity = $conversionService->toBaseQuantity($quantity, $unit);
                 $catalogPrice = round((float) $unit->selling_price, 2);
@@ -756,6 +758,9 @@ class SaleController extends Controller
                 'product_units.barcode',
                 'product_units.part_number',
                 'product_units.conversion_factor',
+                'product_units.allow_fractional_quantity',
+                'product_units.quantity_precision',
+                'product_units.minimum_wholesale_quantity',
                 'product_units.is_base_unit',
             ]);
     }
@@ -790,6 +795,9 @@ class SaleController extends Controller
                 'product_units.barcode',
                 'product_units.part_number',
                 'product_units.conversion_factor',
+                'product_units.allow_fractional_quantity',
+                'product_units.quantity_precision',
+                'product_units.minimum_wholesale_quantity',
                 'product_units.is_base_unit',
             ]);
     }
@@ -829,6 +837,9 @@ class SaleController extends Controller
                 'unit_name' => $unit->unit_name,
                 'category_name' => $unit->product?->category?->name,
                 'price' => (float) $unit->selling_price,
+                'allow_fractional_quantity' => (bool) $unit->allow_fractional_quantity,
+                'quantity_precision' => (int) $unit->quantity_precision,
+                'minimum_wholesale_quantity' => $unit->minimum_wholesale_quantity === null ? null : (float) $unit->minimum_wholesale_quantity,
                 'barcode' => $unit->barcode,
                 'code' => $unit->product?->code,
                 'part_number' => $unit->part_number,
@@ -906,6 +917,24 @@ class SaleController extends Controller
     private function formatQuantity(float $quantity): string
     {
         return rtrim(rtrim(number_format($quantity, 3, '.', ''), '0'), '.');
+    }
+
+    private function enforceMinimumWholesaleQuantity(float $quantity, ProductUnit $unit, string $field): void
+    {
+        $minimum = (float) ($unit->minimum_wholesale_quantity ?? 0);
+
+        if (! $unit->allow_fractional_quantity || $minimum <= 0 || $quantity + 0.0005 >= $minimum) {
+            return;
+        }
+
+        $unitName = $unit->unit_name ?: 'selected unit';
+        $retailUnit = $unit->product?->base_unit_label
+            ?: $unit->product?->baseProductUnit?->unit_name
+            ?: 'Pieces / retail unit';
+
+        throw ValidationException::withMessages([
+            $field => 'Quantities below '.$this->formatQuantity($minimum).' '.$unitName.' should be sold using '.$retailUnit.' / retail unit.',
+        ]);
     }
 
     private function unitLabel(string $label, float $quantity): string

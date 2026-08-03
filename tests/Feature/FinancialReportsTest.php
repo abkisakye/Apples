@@ -62,6 +62,7 @@ class FinancialReportsTest extends TestCase
             ->assertOk()
             ->assertSee('MISSING COST SOAP')
             ->assertSee('Missing cost')
+            ->assertSee(route('products.edit', ['product' => $missingCostProduct->id, 'focus' => 'units'], false), false)
             ->assertDontSee('COSTED SOAP');
     }
 
@@ -84,10 +85,13 @@ class FinancialReportsTest extends TestCase
             ->assertSee('Cost vs Selling Price')
             ->assertSee($belowCostProduct->name)
             ->assertSee('Selling below cost')
+            ->assertSee(route('products.edit', ['product' => $belowCostProduct->id, 'focus' => 'units'], false), false)
             ->assertSee($zeroSellingProduct->name)
             ->assertSee('Zero selling price')
+            ->assertSee(route('products.edit', ['product' => $zeroSellingProduct->id, 'focus' => 'units'], false), false)
             ->assertSee($bulkProduct->name)
             ->assertSee('Possible Pack Conversion Review')
+            ->assertSee(route('products.edit', ['product' => $bulkProduct->id, 'focus' => 'units'], false), false)
             ->assertSee('N/A');
     }
 
@@ -255,6 +259,7 @@ class FinancialReportsTest extends TestCase
             ->assertSee('MISSING PROFIT COST')
             ->assertSee('Missing cost')
             ->assertSee('Missing cost review needed')
+            ->assertSee(route('products.edit', ['product' => $product->id, 'focus' => 'units'], false), false)
             ->assertSee('N/A')
             ->assertDontSee('100.00%')
             ->assertDontSee('<span class="badge success">OK</span>', false);
@@ -356,6 +361,19 @@ class FinancialReportsTest extends TestCase
             ->assertDontSee('UGX 43,500')
             ->assertDontSee('UGX 29,000')
             ->assertDontSee('UGX 14,500');
+    }
+
+    public function test_gross_profit_report_displays_fractional_wholesale_quantities(): void
+    {
+        [$product, , $carton] = $this->productWithPieceAndCarton('FRACTIONAL PROFIT CARTON');
+        $this->postSaleLine($product, $carton, '2026-07-10', 0.75, 36000, 27000, 18000);
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=FRACTIONAL+PROFIT+CARTON')
+            ->assertOk()
+            ->assertSee('FRACTIONAL PROFIT CARTON')
+            ->assertSee('0.75')
+            ->assertSee('UGX 27,000')
+            ->assertSee('UGX 13,500');
     }
 
     public function test_gross_profit_report_is_read_only(): void

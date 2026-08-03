@@ -195,6 +195,7 @@
                     <div>
                         <h3 class="form-section-title">Units & Selling Packs</h3>
                         <p class="list-note">Create one product, then add all selling packs/units such as piece, dozen, box, carton, sack, bundle, bottle, tin, half carton where applicable.</p>
+                        <p class="list-note">Allow fractional quantities for wholesale packs such as 0.5 or 0.75 carton. Use minimum wholesale quantity to prevent selling very small fractions at wholesale price.</p>
                     </div>
                     <button type="button" class="button-link" id="add-unit-row">Add Another Unit</button>
                 </div>
@@ -240,6 +241,11 @@
                                         <option value="{{ $precision }}" @selected((int) ($unit['quantity_precision'] ?? 0) === $precision)>{{ $precision }} decimal place{{ $precision === 1 ? '' : 's' }}</option>
                                     @endfor
                                 </select>
+                            </label>
+                            <label class="form-field">
+                                <span>Minimum Wholesale Qty</span>
+                                <input type="number" step="0.001" min="0" name="units[{{ $index }}][minimum_wholesale_quantity]" value="{{ $unit['minimum_wholesale_quantity'] ?? '' }}" placeholder="Example: 0.5">
+                                <span class="field-tip">Leave blank unless this wholesale pack can be sold in fractions.</span>
                             </label>
                             <label class="form-field">
                                 <span>Cost Price</span>
@@ -338,6 +344,11 @@
                     <option value="2">2 decimal places</option>
                     <option value="3">3 decimal places</option>
                 </select>
+            </label>
+            <label class="form-field">
+                <span>Minimum Wholesale Qty</span>
+                <input type="number" step="0.001" min="0" name="units[__INDEX__][minimum_wholesale_quantity]" value="" placeholder="Example: 0.5">
+                <span class="field-tip">Leave blank unless this wholesale pack can be sold in fractions.</span>
             </label>
             <label class="form-field">
                 <span>Cost Price</span>

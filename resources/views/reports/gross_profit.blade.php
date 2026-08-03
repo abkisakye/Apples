@@ -126,7 +126,7 @@
                             <td><strong>{{ $currency }} {{ number_format($row->estimated_gross_profit, 0) }}</strong></td>
                             <td>{{ $formatMargin($row->estimated_margin_percent) }}</td>
                             <td>{{ number_format($row->missing_cost_lines) }}</td>
-                            <td><span class="badge {{ $row->has_reliable_margin ? 'success' : 'credit' }}">{{ $row->warning_label }}</span></td>
+                            <td><a href="{{ route('products.edit', ['product' => $row->product_id, 'focus' => 'units']) }}" class="badge {{ $row->has_reliable_margin ? 'success' : 'credit' }}" title="Open product unit setup">{{ $row->warning_label }}</a></td>
                         </tr>
                     @empty
                         <tr><td colspan="9" class="muted">No product profit rows matched the selected filters.</td></tr>
@@ -237,7 +237,7 @@
                             <td>{{ $formatQty($row->quantity) }}</td>
                             <td>{{ $currency }} {{ number_format($row->sales_revenue, 0) }}</td>
                             <td>{{ $currency }} {{ number_format($row->current_cost_price, 0) }}</td>
-                            <td><span class="badge credit">Missing cost</span></td>
+                            <td><a href="{{ route('products.edit', ['product' => $row->product_id, 'focus' => 'units']) }}" class="badge credit" title="Open product unit setup">Missing cost</a></td>
                         </tr>
                     @empty
                         <tr><td colspan="8" class="muted">No missing-cost sale lines matched the selected filters.</td></tr>

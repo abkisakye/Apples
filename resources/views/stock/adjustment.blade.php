@@ -148,15 +148,22 @@
                         unit_name: @json($oldUnit->unit_name),
                         barcode: @json($oldUnit->barcode),
                         part_number: @json($oldUnit->part_number),
-                        quantity: {{ (int) round((float) ($oldItem['quantity'] ?? 1)) }},
+                        allow_fractional_quantity: @json((bool) $oldUnit->allow_fractional_quantity),
+                        quantity_precision: {{ (int) $oldUnit->quantity_precision }},
+                        quantity: {{ (float) ($oldItem['quantity'] ?? 1) }},
                     });
                 @endif
             @endforeach
             let cart = initialItems;
-            const normalizeQuantity = (value) => {
-                const numeric = Number(value || 0);
-                if (openingStockMode) {
-                    return Math.max(Math.round(numeric * 1000) / 1000, 0.001);
+            const quantityPrecision = (item) => item?.allow_fractional_quantity ? Math.max(Number(item.quantity_precision || 0), 0) : 0;
+            const quantityStep = (item) => item?.allow_fractional_quantity ? (1 / Math.pow(10, quantityPrecision(item) || 3)) : 1;
+            const minimumQuantity = (item) => item?.allow_fractional_quantity || openingStockMode ? quantityStep(item) : 1;
+            const normalizeQuantity = (value, item = null) => {
+                const numeric = Math.max(Number(value || 0), minimumQuantity(item));
+
+                if (item?.allow_fractional_quantity || openingStockMode) {
+                    const precision = quantityPrecision(item);
+                    return Number(numeric.toFixed(precision || 3));
                 }
 
                 return Math.max(Math.round(numeric), 1);
@@ -170,14 +177,14 @@
 
             function renderCart() {
                 cartEmpty.style.display = cart.length ? 'none' : 'block';
-                cartList.innerHTML = cart.map((item, index) => `<div class="cart-item"><div class="cart-item-head"><div><strong>${item.label}</strong>${openingStockMode ? '<span class="old-stock-chip">OLD STOCK</span>' : ''}</div><button type="button" class="cart-remove" data-remove="${index}">Remove</button></div><label class="form-field"><span>Quantity</span><div class="qty-box"><button type="button" data-minus="${index}">-</button><input type="number" min="${openingStockMode ? '0.001' : '1'}" step="${openingStockMode ? '0.001' : '1'}" value="${item.quantity}" data-qty="${index}"><button type="button" data-plus="${index}">+</button></div></label></div>`).join('');
+                cartList.innerHTML = cart.map((item, index) => `<div class="cart-item"><div class="cart-item-head"><div><strong>${item.label}</strong>${openingStockMode ? '<span class="old-stock-chip">OLD STOCK</span>' : ''}</div><button type="button" class="cart-remove" data-remove="${index}">Remove</button></div><label class="form-field"><span>Quantity</span><div class="qty-box"><button type="button" data-minus="${index}">-</button><input type="number" min="${minimumQuantity(item)}" step="${quantityStep(item)}" value="${item.quantity}" data-qty="${index}"><button type="button" data-plus="${index}">+</button></div></label></div>`).join('');
                 syncCartState();
             }
 
             function syncCartState() {
                 hidden.innerHTML = cart.map((item, index) => `<input type="hidden" name="items[${index}][product_unit_id]" value="${item.id}"><input type="hidden" name="items[${index}][quantity]" value="${item.quantity}">`).join('');
                 linesSummary.textContent = String(cart.length);
-                qtySummary.textContent = String(cart.reduce((sum, item) => sum + normalizeQuantity(item.quantity), 0));
+                qtySummary.textContent = String(cart.reduce((sum, item) => sum + normalizeQuantity(item.quantity, item), 0));
             }
 
             function updateBadge() {
@@ -200,7 +207,7 @@
                 const unit = units.find((item) => Number(item.id) === Number(id));
                 if (!unit) return;
                 const existing = cart.find((item) => Number(item.id) === Number(unit.id));
-                if (existing) existing.quantity = normalizeQuantity(existing.quantity) + 1;
+                if (existing) existing.quantity = normalizeQuantity(existing.quantity, existing) + 1;
                 else cart.push({ ...unit, quantity: 1 });
                 renderCart();
                 searchInput.value = '';
@@ -217,9 +224,9 @@
                 const remove = event.target.closest('[data-remove]');
                 if (remove) { cart.splice(Number(remove.dataset.remove), 1); renderCart(); return; }
                 const plus = event.target.closest('[data-plus]');
-                if (plus) { const i = Number(plus.dataset.plus); cart[i].quantity = normalizeQuantity(cart[i].quantity) + 1; renderCart(); return; }
+                if (plus) { const i = Number(plus.dataset.plus); cart[i].quantity = normalizeQuantity(cart[i].quantity, cart[i]) + 1; renderCart(); return; }
                 const minus = event.target.closest('[data-minus]');
-                if (minus) { const i = Number(minus.dataset.minus); cart[i].quantity = Math.max(normalizeQuantity(cart[i].quantity) - 1, 1); renderCart(); }
+                if (minus) { const i = Number(minus.dataset.minus); cart[i].quantity = Math.max(normalizeQuantity(cart[i].quantity, cart[i]) - 1, minimumQuantity(cart[i])); renderCart(); }
             });
             cartList.addEventListener('input', (event) => {
                 const qty = event.target.closest('[data-qty]');
@@ -233,7 +240,7 @@
                 const qty = event.target.closest('[data-qty]');
                 if (qty) {
                     const i = Number(qty.dataset.qty);
-                    cart[i].quantity = normalizeQuantity(qty.value);
+                    cart[i].quantity = normalizeQuantity(qty.value, cart[i]);
                     qty.value = String(cart[i].quantity);
                     syncCartState();
                 }

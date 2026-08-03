@@ -410,7 +410,8 @@ class StockController extends Controller
         DocumentNumberService $documentNumberService,
         AuditLogService $auditLogService,
         StoreAssignmentService $storeAssignmentService,
-        StockAvailabilityService $stockAvailabilityService
+        StockAvailabilityService $stockAvailabilityService,
+        ProductUnitConversionService $conversionService
     ): RedirectResponse
     {
         $validated = $request->validate([
@@ -421,7 +422,7 @@ class StockController extends Controller
             'return_to' => ['nullable', 'string', 'max:2048'],
             'items' => ['required', 'array'],
             'items.*.product_unit_id' => ['nullable', 'exists:product_units,id'],
-            'items.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'items.*.quantity' => ['nullable', 'numeric', 'gt:0'],
         ]);
 
         $items = collect($validated['items'])
@@ -449,14 +450,22 @@ class StockController extends Controller
         }
 
         $units = ProductUnit::query()->whereIn('id', $items->pluck('product_unit_id'))->get()->keyBy('id');
+
+        foreach ($items as $index => $item) {
+            $unit = $units->get((int) $item['product_unit_id']);
+            $conversionService->validatePrecision($item['quantity'], $unit, "items.{$index}.quantity");
+        }
+
         $referenceNo = $documentNumberService->make('stock_adjustment', $validated['adjustment_date']);
         $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), app(AccessService::class));
 
-        DB::transaction(function () use ($validated, $items, $units, $referenceNo, $storeId, $stockAvailabilityService) {
+        DB::transaction(function () use ($validated, $items, $units, $referenceNo, $storeId, $stockAvailabilityService, $conversionService) {
             foreach ($items as $index => $item) {
                 /** @var ProductUnit $unit */
                 $unit = $units->get((int) $item['product_unit_id']);
-                $quantity = max((int) $item['quantity'], 1);
+                $quantity = round((float) $item['quantity'], 3);
+                $conversionFactor = $conversionService->conversionFactorSnapshot($unit);
+                $baseQuantity = $conversionService->toBaseQuantity($quantity, $unit);
                 $referenceId = abs(crc32($referenceNo.'-'.$index));
 
                 if ($validated['adjustment_type'] === 'decrease') {
@@ -474,6 +483,9 @@ class StockController extends Controller
                     'movement_type' => $validated['adjustment_type'] === 'increase' ? 'adjustment_in' : 'adjustment_out',
                     'quantity_in' => $validated['adjustment_type'] === 'increase' ? $quantity : 0,
                     'quantity_out' => $validated['adjustment_type'] === 'decrease' ? $quantity : 0,
+                    'base_quantity_in' => $validated['adjustment_type'] === 'increase' ? $baseQuantity : 0,
+                    'base_quantity_out' => $validated['adjustment_type'] === 'decrease' ? $baseQuantity : 0,
+                    'conversion_factor_snapshot' => $conversionFactor,
                     'unit_cost' => $unit->cost_price,
                     'remarks' => $validated['remarks'] ?? null,
                 ]);

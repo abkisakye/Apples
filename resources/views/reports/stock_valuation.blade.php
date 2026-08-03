@@ -82,7 +82,7 @@
                             <td><strong>{{ $currency }} {{ number_format($row->estimated_stock_value, 0) }}</strong></td>
                             <td>{{ $row->cost_source }}</td>
                             <td>
-                                <span class="badge {{ $row->warning_label === 'OK' ? 'success' : 'credit' }}">{{ $row->warning_label }}</span>
+                                <a href="{{ route('products.edit', ['product' => $row->product->id, 'focus' => 'units']) }}" class="badge {{ $row->warning_label === 'OK' ? 'success' : 'credit' }}" title="Open product unit setup">{{ $row->warning_label }}</a>
                             </td>
                         </tr>
                     @empty

@@ -160,6 +160,104 @@ class BaseUnitStockBehaviorTest extends TestCase
         $this->postSale($this->storeA, $sack, 1.5, 100000)->assertSessionHasErrors('items');
     }
 
+    public function test_fractional_wholesale_carton_sale_uses_selected_pack_price_and_base_stock(): void
+    {
+        [$product, , $carton] = $this->pieceCartonProduct();
+        $carton->update([
+            'allow_fractional_quantity' => true,
+            'quantity_precision' => 2,
+            'minimum_wholesale_quantity' => 0.5,
+        ]);
+
+        $this->postPurchase($this->storeA, $carton, 1, 24000)->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->postSale($this->storeA, $carton->fresh(), 0.5, 30000)->assertRedirect()->assertSessionHasNoErrors();
+
+        $saleItem = Sale::query()->with('items')->latest('id')->firstOrFail()->items->first();
+        $this->assertEquals(0.5, (float) $saleItem->quantity);
+        $this->assertEquals(12.0, (float) $saleItem->base_quantity);
+        $this->assertEquals(15000.0, (float) $saleItem->line_total);
+        $this->assertBaseBalance($product, $this->storeA, 12, 'Half carton should deduct 12 base pieces.');
+    }
+
+    public function test_fractional_wholesale_sale_supports_three_quarter_pack_price(): void
+    {
+        [$product, , $carton] = $this->pieceCartonProduct();
+        $carton->update([
+            'allow_fractional_quantity' => true,
+            'quantity_precision' => 2,
+            'minimum_wholesale_quantity' => 0.5,
+        ]);
+
+        $this->postPurchase($this->storeA, $carton, 1, 24000)->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->postSale($this->storeA, $carton->fresh(), 0.75, 30000)->assertRedirect()->assertSessionHasNoErrors();
+
+        $saleItem = Sale::query()->with('items')->latest('id')->firstOrFail()->items->first();
+        $this->assertEquals(0.75, (float) $saleItem->quantity);
+        $this->assertEquals(18.0, (float) $saleItem->base_quantity);
+        $this->assertEquals(22500.0, (float) $saleItem->line_total);
+        $this->assertBaseBalance($product, $this->storeA, 6, 'Three-quarter carton should deduct 18 base pieces.');
+    }
+
+    public function test_fractional_wholesale_sale_below_minimum_is_rejected(): void
+    {
+        [$product, , $carton] = $this->pieceCartonProduct();
+        $carton->update([
+            'allow_fractional_quantity' => true,
+            'quantity_precision' => 2,
+            'minimum_wholesale_quantity' => 0.5,
+        ]);
+
+        $this->postPurchase($this->storeA, $carton, 1, 24000)->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->from('/sales/create')
+            ->post('/sales', [
+                'sale_date' => '2026-06-02',
+                'store_id' => $this->storeA->id,
+                'sale_type' => 'cash',
+                'customer_id' => $this->customer->id,
+                'payment_mode_id' => $this->cash->id,
+                'amount_paid' => 7500,
+                'items' => [
+                    ['product_unit_id' => $carton->id, 'quantity' => 0.25, 'unit_price' => 30000],
+                ],
+            ])
+            ->assertRedirect('/sales/create')
+            ->assertSessionHasErrors([
+                'items.0.quantity' => 'Quantities below 0.5 Carton should be sold using Piece / retail unit.',
+            ]);
+
+        $this->assertBaseBalance($product, $this->storeA, 24, 'Rejected quarter carton sale should not change stock.');
+    }
+
+    public function test_stock_adjustment_supports_fractional_quantity_only_for_fractional_units(): void
+    {
+        [$product, $kg, $sack] = $this->kgSackProduct();
+
+        $this->post('/stock/adjustments', [
+            'adjustment_date' => '2026-06-02',
+            'store_id' => $this->storeA->id,
+            'adjustment_type' => 'increase',
+            'remarks' => 'Fractional stock correction',
+            'items' => [
+                ['product_unit_id' => $kg->id, 'quantity' => 1.5],
+            ],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertBaseBalance($product, $this->storeA, 1.5, 'Fractional kg adjustment should add 1.5 base kg.');
+
+        $this->post('/stock/adjustments', [
+            'adjustment_date' => '2026-06-02',
+            'store_id' => $this->storeA->id,
+            'adjustment_type' => 'increase',
+            'remarks' => 'Invalid fractional sack correction',
+            'items' => [
+                ['product_unit_id' => $sack->id, 'quantity' => 1.5],
+            ],
+        ])->assertSessionHasErrors('items.0.quantity');
+    }
+
     public function test_existing_single_unit_product_workflow_remains_unchanged(): void
     {
         $product = Product::create(['name' => 'Single Unit Product', 'is_active' => true]);
