@@ -58,6 +58,26 @@ class ReportController extends Controller
         ]);
     }
 
+    public function grossProfit(Request $request, FinancialReportsService $financialReportsService): View
+    {
+        $data = $financialReportsService->grossProfitReport($request);
+
+        return view('reports.gross_profit', [
+            'fromDate' => $data['fromDate'],
+            'toDate' => $data['toDate'],
+            'period' => $data['period'],
+            'filters' => $data['filters'],
+            'summary' => $data['summary'],
+            'summaryRows' => $data['summaryRows'],
+            'productRows' => $data['productRows'],
+            'categoryRows' => $data['categoryRows'],
+            'dailyRows' => $data['dailyRows'],
+            'missingCostRows' => $data['missingCostRows'],
+            'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+        ]);
+    }
+
     public function financialSummary(Request $request): View
     {
         [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'month');

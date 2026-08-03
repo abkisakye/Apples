@@ -10,6 +10,7 @@
         </div>
         <div class="actions">
             <a href="{{ route('reports.daily-sales-summary', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Daily Sales Summary</a>
+            <a href="{{ route('reports.gross-profit', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Estimated Gross Profit</a>
             <a href="{{ route('reports.stock-valuation') }}" class="button-link">Stock Valuation</a>
             <a href="{{ route('reports.price-margins') }}" class="button-link">Cost vs Selling Price</a>
             <a href="{{ route('reports.daily-closing') }}" class="button-link">Daily Closing</a>

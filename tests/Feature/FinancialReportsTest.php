@@ -9,6 +9,7 @@ use App\Models\ProductUnit;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\Sale;
+use App\Models\SaleItem;
 use App\Models\Store;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -112,6 +113,143 @@ class FinancialReportsTest extends TestCase
             ->assertSee('AFRICA LOSS SOAP')
             ->assertSee('Selling below cost')
             ->assertDontSee('AFRICA HEALTHY SOAP');
+    }
+
+    public function test_gross_profit_report_page_loads_and_links_from_management_centre(): void
+    {
+        $this->get('/reports/gross-profit')
+            ->assertOk()
+            ->assertSee('Estimated Gross Profit')
+            ->assertSee('Sales Revenue')
+            ->assertSee('Profit By Product')
+            ->assertSee('Profit By Category')
+            ->assertSee('Daily Profit')
+            ->assertSee('Missing Cost Sales');
+
+        $this->get('/management-centre')
+            ->assertOk()
+            ->assertSee('Estimated Gross Profit')
+            ->assertSee(route('reports.gross-profit', [], false), false);
+    }
+
+    public function test_gross_profit_excludes_void_sales_and_uses_line_total_and_product_unit_cost(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('PROFIT SOAP', 700, 1000);
+        $this->postSaleLine($product, $unit, '2026-07-10', 2, 1000, 2500, 0, 'posted');
+        $this->postSaleLine($product, $unit, '2026-07-10', 9, 9999, 99999, 0, 'void');
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=PROFIT+SOAP')
+            ->assertOk()
+            ->assertSee('PROFIT SOAP')
+            ->assertSee('Product unit cost')
+            ->assertSee('UGX 2,500')
+            ->assertSee('UGX 1,400')
+            ->assertSee('UGX 1,100')
+            ->assertSee('44.00%')
+            ->assertDontSee('UGX 99,999');
+    }
+
+    public function test_gross_profit_uses_sale_cost_snapshot_before_current_unit_cost(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('SNAPSHOT SOAP', 1000, 2000);
+        $this->postSaleLine($product, $unit, '2026-07-10', 2, 2000, 4000, 1200);
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=SNAPSHOT+SOAP')
+            ->assertOk()
+            ->assertSee('SNAPSHOT SOAP')
+            ->assertSee('Sale cost snapshot')
+            ->assertSee('UGX 2,400')
+            ->assertSee('UGX 1,600');
+    }
+
+    public function test_gross_profit_missing_cost_line_is_flagged_and_margin_is_not_healthy(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('MISSING PROFIT COST', 0, 5000);
+        $this->postSaleLine($product, $unit, '2026-07-10', 1, 5000, 5000, 0);
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=MISSING+PROFIT+COST')
+            ->assertOk()
+            ->assertSee('MISSING PROFIT COST')
+            ->assertSee('Missing cost')
+            ->assertSee('Missing cost review needed')
+            ->assertSee('N/A')
+            ->assertDontSee('100.00%')
+            ->assertDontSee('<span class="badge success">OK</span>', false);
+    }
+
+    public function test_gross_profit_groups_by_product_category_and_date_and_applies_filters(): void
+    {
+        [$soapProduct, $soapUnit] = $this->singleUnitProduct('AFRICA SOAP PROFIT', 600, 1000);
+        $foodCategory = Category::create(['name' => 'FOODS']);
+        $foodProduct = Product::create([
+            'name' => 'AFRICA RICE PROFIT',
+            'code' => 'AFRICA-RICE-PROFIT',
+            'category_id' => $foodCategory->id,
+            'base_unit_label' => 'Pieces',
+            'is_active' => true,
+        ]);
+        $foodUnit = ProductUnit::create([
+            'product_id' => $foodProduct->id,
+            'unit_name' => 'Pieces',
+            'conversion_factor' => 1,
+            'cost_price' => 2000,
+            'selling_price' => 3000,
+            'is_base_unit' => true,
+            'is_active' => true,
+        ]);
+        $foodProduct->update(['base_product_unit_id' => $foodUnit->id]);
+
+        $this->postSaleLine($soapProduct, $soapUnit, '2026-07-10', 3, 1000, 3000, 0);
+        $this->postSaleLine($foodProduct, $foodUnit, '2026-07-11', 2, 3000, 6000, 0);
+        $this->postSaleLine($foodProduct, $foodUnit, '2026-08-02', 1, 3000, 3000, 0);
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=AFRICA')
+            ->assertOk()
+            ->assertSee('AFRICA SOAP PROFIT')
+            ->assertSee('AFRICA RICE PROFIT')
+            ->assertSee('BATHING SOAP')
+            ->assertSee('FOODS')
+            ->assertSee('10 Jul 2026')
+            ->assertSee('11 Jul 2026')
+            ->assertDontSee('02 Aug 2026');
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&category_id='.$this->category->id)
+            ->assertOk()
+            ->assertSee('AFRICA SOAP PROFIT')
+            ->assertDontSee('AFRICA RICE PROFIT');
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=RICE')
+            ->assertOk()
+            ->assertSee('AFRICA RICE PROFIT')
+            ->assertDontSee('AFRICA SOAP PROFIT');
+    }
+
+    public function test_gross_profit_report_is_read_only(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('READ ONLY PROFIT SOAP', 500, 1000);
+        $this->postPurchaseCost($product, $unit, 2, 500);
+        $this->stockMovement($product, $unit, 2, 0, 2, 0, 'purchase');
+        $this->postSaleLine($product, $unit, '2026-07-10', 1, 1000, 1000, 500);
+
+        $countsBefore = [
+            'sales' => Sale::query()->count(),
+            'sale_items' => SaleItem::query()->count(),
+            'purchases' => Purchase::query()->count(),
+            'purchase_items' => PurchaseItem::query()->count(),
+            'inventory_transactions' => InventoryTransaction::query()->count(),
+            'product_units' => ProductUnit::query()->count(),
+        ];
+        $pricesBefore = ProductUnit::query()->pluck('cost_price', 'id')->all();
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
+
+        $this->assertSame($countsBefore['sales'], Sale::query()->count());
+        $this->assertSame($countsBefore['sale_items'], SaleItem::query()->count());
+        $this->assertSame($countsBefore['purchases'], Purchase::query()->count());
+        $this->assertSame($countsBefore['purchase_items'], PurchaseItem::query()->count());
+        $this->assertSame($countsBefore['inventory_transactions'], InventoryTransaction::query()->count());
+        $this->assertSame($countsBefore['product_units'], ProductUnit::query()->count());
+        $this->assertEquals($pricesBefore, ProductUnit::query()->pluck('cost_price', 'id')->all());
     }
 
     public function test_financial_reports_are_read_only(): void
@@ -237,6 +375,34 @@ class FinancialReportsTest extends TestCase
             'base_quantity_out' => $baseOut,
             'conversion_factor_snapshot' => (float) $unit->conversion_factor,
             'unit_cost' => $unit->cost_price,
+        ]);
+    }
+
+    private function postSaleLine(Product $product, ProductUnit $unit, string $date, float $quantity, float $unitPrice, float $lineTotal, float $costSnapshot = 0, string $status = 'posted'): SaleItem
+    {
+        $sale = Sale::create([
+            'sale_no' => sprintf('SALE-REPORT-%04d', Sale::query()->count() + 1),
+            'sale_date' => $date,
+            'store_id' => $this->store->id,
+            'sale_type' => 'cash',
+            'subtotal' => $lineTotal,
+            'total_amount' => $lineTotal,
+            'amount_paid' => $status === 'posted' ? $lineTotal : 0,
+            'balance_due' => 0,
+            'status' => $status,
+        ]);
+
+        return SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $unit->id,
+            'quantity' => $quantity,
+            'base_quantity' => $quantity * (float) $unit->conversion_factor,
+            'conversion_factor_snapshot' => (float) $unit->conversion_factor,
+            'unit_price' => $unitPrice,
+            'selling_price_snapshot' => $unitPrice,
+            'cost_price_snapshot' => $costSnapshot,
+            'line_total' => $lineTotal,
         ]);
     }
 }

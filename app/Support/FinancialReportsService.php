@@ -4,8 +4,10 @@ namespace App\Support;
 
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\SaleItem;
 use App\Models\Store;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -122,6 +124,314 @@ class FinancialReportsService
                 'conversion_review_count' => $rows->where('conversion_review', true)->count(),
             ],
         ];
+    }
+
+    public function grossProfitReport(Request $request): array
+    {
+        [$fromDate, $toDate, $period] = $this->resolveDateRange($request);
+        $storeId = $request->integer('store_id');
+        $categoryId = $request->integer('category_id');
+        $search = trim((string) $request->query('q', $request->query('search', '')));
+        $costStatus = (string) $request->query('cost_status', 'all');
+
+        $items = SaleItem::query()
+            ->with([
+                'sale:id,sale_no,sale_date,store_id,status',
+                'sale.store:id,name',
+                'product:id,name,code,category_id',
+                'product.category:id,name',
+                'productUnit:id,product_id,unit_name,cost_price',
+            ])
+            ->whereHas('sale', function ($query) use ($fromDate, $toDate, $storeId) {
+                $query->posted()
+                    ->whereDate('sale_date', '>=', $fromDate)
+                    ->whereDate('sale_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId));
+            })
+            ->when($categoryId > 0, fn ($query) => $query->whereHas('product', fn ($product) => $product->where('category_id', $categoryId)))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($inner) use ($search) {
+                    $inner->whereHas('product', function ($product) use ($search) {
+                        $product->where('name', 'like', "%{$search}%")
+                            ->orWhere('code', 'like', "%{$search}%")
+                            ->orWhereHas('category', fn ($category) => $category->where('name', 'like', "%{$search}%"));
+                    })->orWhereHas('productUnit', fn ($unit) => $unit->where('unit_name', 'like', "%{$search}%"));
+                });
+            })
+            ->get();
+
+        $costMaps = $this->unitCostMaps($items->pluck('product_unit_id')->filter()->unique()->values());
+        $lineRows = $items
+            ->map(fn (SaleItem $item) => $this->grossProfitLineRow($item, $costMaps))
+            ->when($costStatus !== 'all', fn (Collection $rows) => $rows->filter(fn ($row) => $this->matchesGrossProfitCostStatus($row, $costStatus)))
+            ->values();
+
+        $summary = $this->profitSummary($lineRows, $fromDate, $toDate);
+        $productRows = $this->profitByProduct($lineRows);
+        $categoryRows = $this->profitByCategory($lineRows);
+        $dailyRows = $this->profitByDate($lineRows);
+        $missingCostRows = $lineRows->filter(fn ($row) => ! $row->has_cost)->values();
+
+        $summary['top_profit_product'] = $productRows->first(fn ($row) => $row->has_reliable_margin)?->product_name ?? 'N/A';
+        $summary['top_profit_category'] = $categoryRows->first(fn ($row) => $row->has_reliable_margin)?->category_name ?? 'N/A';
+
+        return [
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
+            'period' => $period,
+            'filters' => [
+                'store_id' => $storeId,
+                'category_id' => $categoryId,
+                'q' => $search,
+                'cost_status' => $costStatus,
+            ],
+            'summary' => $summary,
+            'summaryRows' => collect([(object) [
+                'label' => $fromDate === $toDate ? Carbon::parse($fromDate)->format('d M Y') : Carbon::parse($fromDate)->format('d M Y').' - '.Carbon::parse($toDate)->format('d M Y'),
+                'sales_revenue' => $summary['sales_revenue'],
+                'estimated_cogs' => $summary['estimated_cogs'],
+                'estimated_gross_profit' => $summary['estimated_gross_profit'],
+                'estimated_margin_percent' => $summary['estimated_margin_percent'],
+                'missing_cost_lines' => $summary['missing_cost_lines'],
+                'warning_label' => $summary['missing_cost_lines'] > 0 ? 'Missing cost review needed' : 'OK',
+            ]]),
+            'productRows' => $productRows,
+            'categoryRows' => $categoryRows,
+            'dailyRows' => $dailyRows,
+            'missingCostRows' => $missingCostRows,
+        ];
+    }
+
+    private function grossProfitLineRow(SaleItem $item, Collection $costMaps): object
+    {
+        $quantity = (float) $item->quantity;
+        $unitPrice = (float) $item->unit_price;
+        $lineTotal = (float) $item->line_total;
+        $revenue = round($lineTotal > 0 ? $lineTotal : $quantity * $unitPrice, 2);
+        [$unitCost, $costSource] = $this->resolveSaleItemUnitCost($item, $costMaps);
+        $hasCost = $unitCost > 0;
+        $estimatedCogs = $hasCost ? round($quantity * $unitCost, 2) : 0.0;
+        $estimatedGrossProfit = round($revenue - $estimatedCogs, 2);
+
+        return (object) [
+            'sale_id' => (int) $item->sale_id,
+            'sale_no' => $item->sale?->sale_no ?? 'Unknown sale',
+            'sale_date' => $item->sale?->sale_date?->toDateString() ?? '',
+            'store_id' => (int) ($item->sale?->store_id ?? 0),
+            'store_name' => $item->sale?->store?->name ?? 'Unassigned store',
+            'product_id' => (int) $item->product_id,
+            'product_name' => $item->product?->name ?? 'Unknown product',
+            'product_code' => $item->product?->code,
+            'category_id' => (int) ($item->product?->category_id ?? 0),
+            'category_name' => $item->product?->category?->name ?? 'Uncategorised',
+            'product_unit_id' => (int) $item->product_unit_id,
+            'unit_name' => $item->productUnit?->unit_name ?? 'Unit',
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'sales_revenue' => $revenue,
+            'current_cost_price' => (float) ($item->productUnit?->cost_price ?? 0),
+            'unit_cost' => $unitCost,
+            'estimated_cogs' => $estimatedCogs,
+            'estimated_gross_profit' => $estimatedGrossProfit,
+            'estimated_margin_percent' => $hasCost && $revenue > 0 ? round(($estimatedGrossProfit / $revenue) * 100, 2) : null,
+            'has_cost' => $hasCost,
+            'has_reliable_margin' => $hasCost,
+            'cost_source' => $costSource,
+            'warning_label' => $hasCost ? $costSource : 'Missing cost',
+        ];
+    }
+
+    private function resolveSaleItemUnitCost(SaleItem $item, Collection $costMaps): array
+    {
+        $snapshot = (float) $item->cost_price_snapshot;
+        if ($snapshot > 0) {
+            return [$snapshot, 'Sale cost snapshot'];
+        }
+
+        $configuredCost = (float) ($item->productUnit?->cost_price ?? 0);
+        if ($configuredCost > 0) {
+            return [$configuredCost, 'Product unit cost'];
+        }
+
+        $unitId = (int) $item->product_unit_id;
+        $latestCost = (float) ($costMaps['latest'][$unitId] ?? 0);
+        if ($latestCost > 0) {
+            return [$latestCost, 'Latest purchase cost'];
+        }
+
+        $weightedCost = (float) ($costMaps['weighted'][$unitId] ?? 0);
+        if ($weightedCost > 0) {
+            return [$weightedCost, 'Weighted purchase cost'];
+        }
+
+        return [0.0, 'Missing cost'];
+    }
+
+    private function unitCostMaps(Collection $productUnitIds): Collection
+    {
+        if ($productUnitIds->isEmpty()) {
+            return collect(['latest' => collect(), 'weighted' => collect()]);
+        }
+
+        $ids = $productUnitIds->map(fn ($id) => (int) $id)->all();
+
+        $latest = DB::table('purchase_items')
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->where('purchases.status', 'posted')
+            ->whereIn('purchase_items.product_unit_id', $ids)
+            ->where('purchase_items.unit_cost', '>', 0)
+            ->orderBy('purchase_items.product_unit_id')
+            ->orderByDesc('purchases.purchase_date')
+            ->orderByDesc('purchase_items.id')
+            ->get(['purchase_items.product_unit_id', 'purchase_items.unit_cost'])
+            ->groupBy('product_unit_id')
+            ->map(fn (Collection $rows) => (float) $rows->first()->unit_cost);
+
+        $weighted = DB::table('purchase_items')
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->where('purchases.status', 'posted')
+            ->whereIn('purchase_items.product_unit_id', $ids)
+            ->where('purchase_items.unit_cost', '>', 0)
+            ->selectRaw('
+                purchase_items.product_unit_id,
+                COALESCE(SUM(CASE WHEN purchase_items.line_total > 0 THEN purchase_items.line_total ELSE purchase_items.quantity * purchase_items.unit_cost END), 0) as total_cost,
+                COALESCE(SUM(purchase_items.quantity), 0) as total_quantity
+            ')
+            ->groupBy('purchase_items.product_unit_id')
+            ->get()
+            ->filter(fn ($row) => (float) $row->total_quantity > 0)
+            ->mapWithKeys(fn ($row) => [(int) $row->product_unit_id => round((float) $row->total_cost / (float) $row->total_quantity, 2)]);
+
+        return collect(['latest' => $latest, 'weighted' => $weighted]);
+    }
+
+    private function profitSummary(Collection $rows, string $fromDate, string $toDate): array
+    {
+        $revenue = round((float) $rows->sum('sales_revenue'), 2);
+        $cogs = round((float) $rows->sum('estimated_cogs'), 2);
+        $grossProfit = round($revenue - $cogs, 2);
+        $missingCostLines = $rows->filter(fn ($row) => ! $row->has_cost)->count();
+
+        return [
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+            'sales_revenue' => $revenue,
+            'estimated_cogs' => $cogs,
+            'estimated_gross_profit' => $grossProfit,
+            'estimated_margin_percent' => $missingCostLines > 0 || $revenue <= 0 ? null : round(($grossProfit / $revenue) * 100, 2),
+            'sales_count' => $rows->pluck('sale_id')->unique()->count(),
+            'quantity_sold' => round((float) $rows->sum('quantity'), 3),
+            'item_lines_sold' => $rows->count(),
+            'missing_cost_lines' => $missingCostLines,
+            'missing_cost_revenue' => round((float) $rows->filter(fn ($row) => ! $row->has_cost)->sum('sales_revenue'), 2),
+            'top_profit_product' => 'N/A',
+            'top_profit_category' => 'N/A',
+        ];
+    }
+
+    private function profitByProduct(Collection $rows): Collection
+    {
+        return $rows
+            ->groupBy('product_id')
+            ->map(function (Collection $group) {
+                $first = $group->first();
+
+                return $this->profitGroupRow($group, [
+                    'product_id' => $first->product_id,
+                    'product_name' => $first->product_name,
+                    'product_code' => $first->product_code,
+                    'category_name' => $first->category_name,
+                ]);
+            })
+            ->sortByDesc('estimated_gross_profit')
+            ->values();
+    }
+
+    private function profitByCategory(Collection $rows): Collection
+    {
+        return $rows
+            ->groupBy('category_id')
+            ->map(function (Collection $group) {
+                $first = $group->first();
+                $row = $this->profitGroupRow($group, [
+                    'category_id' => $first->category_id,
+                    'category_name' => $first->category_name,
+                ]);
+                $row->products_sold = $group->pluck('product_id')->unique()->count();
+
+                return $row;
+            })
+            ->sortByDesc('estimated_gross_profit')
+            ->values();
+    }
+
+    private function profitByDate(Collection $rows): Collection
+    {
+        return $rows
+            ->groupBy('sale_date')
+            ->map(function (Collection $group, string $date) {
+                $row = $this->profitGroupRow($group, [
+                    'date' => $date,
+                    'sales_count' => $group->pluck('sale_id')->unique()->count(),
+                ]);
+
+                return $row;
+            })
+            ->sortBy('date')
+            ->values();
+    }
+
+    private function profitGroupRow(Collection $group, array $attributes): object
+    {
+        $revenue = round((float) $group->sum('sales_revenue'), 2);
+        $cogs = round((float) $group->sum('estimated_cogs'), 2);
+        $grossProfit = round($revenue - $cogs, 2);
+        $missingCostLines = $group->filter(fn ($row) => ! $row->has_cost)->count();
+        $costSources = $group->pluck('cost_source')->filter(fn ($source) => $source !== 'Missing cost')->unique()->values();
+
+        return (object) array_merge($attributes, [
+            'quantity_sold' => round((float) $group->sum('quantity'), 3),
+            'sales_revenue' => $revenue,
+            'estimated_cogs' => $cogs,
+            'estimated_gross_profit' => $grossProfit,
+            'estimated_margin_percent' => $missingCostLines > 0 || $revenue <= 0 ? null : round(($grossProfit / $revenue) * 100, 2),
+            'missing_cost_lines' => $missingCostLines,
+            'has_reliable_margin' => $missingCostLines === 0 && $revenue > 0,
+            'warning_label' => $missingCostLines > 0
+                ? 'Missing cost review needed'
+                : ($costSources->count() === 1 ? $costSources->first() : 'Mixed cost sources'),
+        ]);
+    }
+
+    private function matchesGrossProfitCostStatus(object $row, string $status): bool
+    {
+        return match ($status) {
+            'has_cost' => $row->has_cost,
+            'missing_cost' => ! $row->has_cost,
+            'estimated_cost' => $row->has_cost && $row->cost_source !== 'Sale cost snapshot',
+            default => true,
+        };
+    }
+
+    private function resolveDateRange(Request $request): array
+    {
+        $period = trim((string) $request->string('period'));
+        $today = Carbon::today();
+
+        [$defaultFrom, $defaultTo] = match ($period !== '' ? $period : 'month') {
+            'today' => [$today->toDateString(), $today->toDateString()],
+            'week' => [$today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
+            default => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
+        };
+
+        $fromDate = Carbon::parse((string) $request->input('date_from', $request->input('from', $defaultFrom)))->toDateString();
+        $toDate = Carbon::parse((string) $request->input('date_to', $request->input('to', $defaultTo)))->toDateString();
+
+        if ($fromDate > $toDate) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+
+        return [$fromDate, $toDate, $period];
     }
 
     private function filteredProducts(Request $request)
