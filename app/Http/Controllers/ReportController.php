@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CashShift;
+use App\Models\Category;
 use App\Models\Customer;
 use App\Models\CustomerPayment;
 use App\Models\Expense;
@@ -10,10 +11,12 @@ use App\Models\Purchase;
 use App\Models\SaleItem;
 use App\Models\SaleReturn;
 use App\Models\Sale;
+use App\Models\Store;
 use App\Models\Supplier;
 use App\Models\SupplierPayment;
 use App\Models\User;
 use App\Services\ExcelExportService;
+use App\Support\FinancialReportsService;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -24,6 +27,37 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ReportController extends Controller
 {
+    public function stockValuation(Request $request, FinancialReportsService $financialReportsService): View
+    {
+        $data = $financialReportsService->stockValuation($request);
+
+        return view('reports.stock_valuation', [
+            'rows' => $data['rows'],
+            'summary' => $data['summary'],
+            'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'storeId' => $request->integer('store_id'),
+            'categoryId' => $request->integer('category_id'),
+            'search' => trim((string) $request->query('q', $request->query('search', ''))),
+            'costSource' => (string) $request->query('cost_source', 'all'),
+            'includeZeroStock' => $request->boolean('include_zero_stock'),
+        ]);
+    }
+
+    public function priceMargins(Request $request, FinancialReportsService $financialReportsService): View
+    {
+        $data = $financialReportsService->priceMargins($request);
+
+        return view('reports.price_margins', [
+            'rows' => $data['rows'],
+            'summary' => $data['summary'],
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'categoryId' => $request->integer('category_id'),
+            'search' => trim((string) $request->query('q', $request->query('search', ''))),
+            'status' => (string) $request->query('status', 'all'),
+        ]);
+    }
+
     public function financialSummary(Request $request): View
     {
         [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'month');

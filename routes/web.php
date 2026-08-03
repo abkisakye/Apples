@@ -110,6 +110,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/reports/customer-aging/export', [ReportController::class, 'customerAgingExport'])->middleware('ability:reports.view')->name('reports.customer-aging.export');
     Route::get('/reports/supplier-aging', [ReportController::class, 'supplierAging'])->middleware('ability:reports.view')->name('reports.supplier-aging');
     Route::get('/reports/supplier-aging/export', [ReportController::class, 'supplierAgingExport'])->middleware('ability:reports.view')->name('reports.supplier-aging.export');
+    Route::get('/reports/stock-valuation', [ReportController::class, 'stockValuation'])->middleware('ability:reports.view')->name('reports.stock-valuation');
+    Route::get('/reports/price-margins', [ReportController::class, 'priceMargins'])->middleware('ability:reports.view')->name('reports.price-margins');
     Route::get('/reports/financial-summary', [ReportController::class, 'financialSummary'])->middleware('ability:reports.view')->name('reports.financial-summary');
     Route::get('/reports/payment-methods', [ReportController::class, 'paymentMethods'])->middleware('ability:reports.view')->name('reports.payment-methods');
     Route::get('/reports/cashier-performance', [ReportController::class, 'cashierPerformance'])->middleware('ability:reports.view')->name('reports.cashier-performance');

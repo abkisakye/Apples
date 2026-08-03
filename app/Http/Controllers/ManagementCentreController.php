@@ -56,6 +56,8 @@ class ManagementCentreController extends Controller
                 'summary' => 'Management reports for trading, cashiers, daily closing, and credit control.',
                 'items' => [
                     ['label' => 'Daily Sales Summary', 'route' => 'reports.daily-sales-summary', 'ability' => 'reports.view', 'description' => 'Item-level sales and income by shop, payment type, quantity, and average rate.'],
+                    ['label' => 'Stock Valuation', 'route' => 'reports.stock-valuation', 'ability' => 'reports.view', 'description' => 'Estimate current stock value by base stock and cost source warnings.'],
+                    ['label' => 'Cost vs Selling Price', 'route' => 'reports.price-margins', 'ability' => 'reports.view', 'description' => 'Review product unit costs, selling prices, margins, and conversion warnings.'],
                     ['label' => 'Financial Summary', 'route' => 'reports.financial-summary', 'ability' => 'reports.view', 'description' => 'Sales, purchases, expenses, collections, and profit summary.'],
                     ['label' => 'Daily Closing', 'route' => 'reports.daily-closing', 'ability' => 'reports.view', 'description' => 'Close the day with cash, sales, credit, refunds, and expenses.'],
                     ['label' => 'Cashier Performance', 'route' => 'reports.cashier-performance', 'ability' => 'reports.view', 'description' => 'Review cashier sales, discounts, payments, and shifts.'],
