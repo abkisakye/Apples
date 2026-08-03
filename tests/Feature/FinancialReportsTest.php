@@ -11,6 +11,7 @@ use App\Models\PurchaseItem;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Store;
+use App\Models\Supplier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -113,6 +114,88 @@ class FinancialReportsTest extends TestCase
             ->assertSee('AFRICA LOSS SOAP')
             ->assertSee('Selling below cost')
             ->assertDontSee('AFRICA HEALTHY SOAP');
+    }
+
+    public function test_price_margins_product_search_matches_products_page_fields(): void
+    {
+        [$abcProduct, $abcUnit] = $this->singleUnitProduct('ABC DENT', 1000, 1600);
+        $abcProduct->update([
+            'code' => 'ABC-DENT-001',
+            'item_group' => 'DENTAL CARE',
+            'supplier_id' => Supplier::create(['name' => 'ABC SUPPLIER', 'is_active' => true])->id,
+        ]);
+        $abcUnit->update([
+            'unit_name' => 'Boxes',
+            'barcode' => 'ABC-BAR-001',
+            'part_number' => 'ABC-PART-001',
+        ]);
+        $this->singleUnitProduct('OTHER DENT', 1000, 1600);
+
+        $this->get('/reports/price-margins?q=abc')
+            ->assertOk()
+            ->assertSee('ABC DENT')
+            ->assertSee('Boxes')
+            ->assertDontSee('OTHER DENT');
+    }
+
+    public function test_price_margins_unit_search_filters_to_matching_pack_rows(): void
+    {
+        [$product, $piece, $carton] = $this->productWithPieceAndCarton('UNIT SEARCH SOAP');
+        $piece->update(['unit_name' => 'Pieces']);
+        $carton->update(['unit_name' => 'Cartons']);
+        ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Boxes',
+            'conversion_factor' => 12,
+            'cost_price' => 12000,
+            'selling_price' => 18000,
+            'is_active' => true,
+        ]);
+
+        $this->get('/reports/price-margins?q=Boxes')
+            ->assertOk()
+            ->assertSee('UNIT SEARCH SOAP')
+            ->assertSee('Boxes')
+            ->assertDontSee('Cartons')
+            ->assertDontSee('Pieces');
+
+        $this->get('/reports/price-margins?category_id=&q=Boxes&status=all')
+            ->assertOk()
+            ->assertSee('UNIT SEARCH SOAP')
+            ->assertSee('Boxes')
+            ->assertDontSee('Cartons')
+            ->assertDontSee('Pieces');
+
+        $this->get('/reports/price-margins?q=Cartons')
+            ->assertOk()
+            ->assertSee('UNIT SEARCH SOAP')
+            ->assertSee('Cartons')
+            ->assertDontSee('Boxes')
+            ->assertDontSee('Pieces');
+    }
+
+    public function test_stock_valuation_search_matches_product_code_unit_barcode_and_part_number(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('SEARCHABLE STOCK ITEM', 800, 1200);
+        $product->update(['code' => 'STOCK-CODE-ABC']);
+        $unit->update([
+            'unit_name' => 'Cartons',
+            'barcode' => 'STOCK-BAR-ABC',
+            'part_number' => 'STOCK-PART-ABC',
+        ]);
+        $this->stockMovement($product, $unit, 2, 0, 2, 0, 'opening_stock');
+        [$otherProduct, $otherUnit] = $this->singleUnitProduct('UNMATCHED STOCK ITEM', 800, 1200);
+        $this->stockMovement($otherProduct, $otherUnit, 2, 0, 2, 0, 'opening_stock');
+
+        $this->get('/reports/stock-valuation?q=STOCK-PART-ABC')
+            ->assertOk()
+            ->assertSee('SEARCHABLE STOCK ITEM')
+            ->assertDontSee('UNMATCHED STOCK ITEM');
+
+        $this->get('/reports/stock-valuation?q=Cartons')
+            ->assertOk()
+            ->assertSee('SEARCHABLE STOCK ITEM')
+            ->assertDontSee('UNMATCHED STOCK ITEM');
     }
 
     public function test_gross_profit_report_page_loads_and_links_from_management_centre(): void
@@ -222,6 +305,57 @@ class FinancialReportsTest extends TestCase
             ->assertOk()
             ->assertSee('AFRICA RICE PROFIT')
             ->assertDontSee('AFRICA SOAP PROFIT');
+    }
+
+    public function test_gross_profit_search_filters_summary_totals_to_matching_product_and_unit_fields(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('ABC DENT PROFIT', 700, 1000);
+        $product->update([
+            'code' => 'ABC-PROFIT-CODE',
+            'item_group' => 'DENTAL PROFITS',
+            'supplier_id' => Supplier::create(['name' => 'PROFIT SUPPLIER ABC', 'is_active' => true])->id,
+        ]);
+        $unit->update([
+            'unit_name' => 'Boxes',
+            'barcode' => 'PROFIT-BAR-ABC',
+            'part_number' => 'PROFIT-PART-ABC',
+        ]);
+        [$otherProduct, $otherUnit] = $this->singleUnitProduct('OTHER PROFIT ITEM', 700, 1000);
+
+        $this->postSaleLine($product, $unit, '2026-07-10', 3, 1000, 3000, 700);
+        $this->postSaleLine($otherProduct, $otherUnit, '2026-07-10', 9, 1000, 9000, 700);
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=PROFIT-PART-ABC')
+            ->assertOk()
+            ->assertSee('ABC DENT PROFIT')
+            ->assertSee('UGX 3,000')
+            ->assertSee('UGX 2,100')
+            ->assertSee('UGX 900')
+            ->assertDontSee('OTHER PROFIT ITEM')
+            ->assertDontSee('UGX 12,000');
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=Boxes&category_id='.$this->category->id.'&cost_status=has_cost')
+            ->assertOk()
+            ->assertSee('ABC DENT PROFIT')
+            ->assertSee('UGX 3,000')
+            ->assertDontSee('OTHER PROFIT ITEM');
+    }
+
+    public function test_gross_profit_unit_search_filters_to_selected_sale_item_unit_lines(): void
+    {
+        [$product, $piece, $carton] = $this->productWithPieceAndCarton('MIXED UNIT PROFIT');
+        $this->postSaleLine($product, $carton, '2026-07-10', 1, 36000, 36000, 24000);
+        $this->postSaleLine($product, $piece, '2026-07-10', 5, 1500, 7500, 1000);
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=Cartons')
+            ->assertOk()
+            ->assertSee('MIXED UNIT PROFIT')
+            ->assertSee('UGX 36,000')
+            ->assertSee('UGX 24,000')
+            ->assertSee('UGX 12,000')
+            ->assertDontSee('UGX 43,500')
+            ->assertDontSee('UGX 29,000')
+            ->assertDontSee('UGX 14,500');
     }
 
     public function test_gross_profit_report_is_read_only(): void

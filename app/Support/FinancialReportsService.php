@@ -106,10 +106,12 @@ class FinancialReportsService
     public function priceMargins(Request $request): array
     {
         $status = (string) $request->query('status', 'all');
+        $search = trim((string) $request->query('q', $request->query('search', '')));
         $products = $this->filteredProducts($request)->get();
 
         $rows = $products
             ->flatMap(fn (Product $product) => $product->units->map(fn (ProductUnit $unit) => $this->priceMarginRow($product, $unit)))
+            ->when($search !== '', fn (Collection $rows) => $rows->filter(fn ($row) => $this->priceMarginRowMatchesSearch($row, $search)))
             ->when($status !== 'all', fn (Collection $rows) => $rows->filter(fn ($row) => $this->matchesMarginStatus($row, $status)))
             ->values();
 
@@ -149,15 +151,7 @@ class FinancialReportsService
                     ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId));
             })
             ->when($categoryId > 0, fn ($query) => $query->whereHas('product', fn ($product) => $product->where('category_id', $categoryId)))
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($inner) use ($search) {
-                    $inner->whereHas('product', function ($product) use ($search) {
-                        $product->where('name', 'like', "%{$search}%")
-                            ->orWhere('code', 'like', "%{$search}%")
-                            ->orWhereHas('category', fn ($category) => $category->where('name', 'like', "%{$search}%"));
-                    })->orWhereHas('productUnit', fn ($unit) => $unit->where('unit_name', 'like', "%{$search}%"));
-                });
-            })
+            ->when($search !== '', fn ($query) => $this->applySaleItemSearch($query, $search))
             ->get();
 
         $costMaps = $this->unitCostMaps($items->pluck('product_unit_id')->filter()->unique()->values());
@@ -440,24 +434,82 @@ class FinancialReportsService
         $categoryId = $request->integer('category_id');
 
         return Product::query()
-            ->with(['category:id,name', 'baseProductUnit', 'units' => fn ($query) => $query
+            ->with(['category:id,name', 'supplier:id,name', 'baseProductUnit', 'units' => fn ($query) => $query
                 ->where('is_active', true)
                 ->orderByDesc('conversion_factor')
                 ->orderBy('unit_name')])
             ->where('is_active', true)
             ->when($categoryId > 0, fn ($query) => $query->where('category_id', $categoryId))
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($inner) use ($search) {
-                    $inner->where('name', 'like', "%{$search}%")
-                        ->orWhere('code', 'like', "%{$search}%")
-                        ->orWhereHas('category', fn ($category) => $category->where('name', 'like', "%{$search}%"))
-                        ->orWhereHas('units', fn ($unit) => $unit
-                            ->where('unit_name', 'like', "%{$search}%")
-                            ->orWhere('barcode', 'like', "%{$search}%")
-                            ->orWhere('part_number', 'like', "%{$search}%"));
-                });
-            })
+            ->when($search !== '', fn ($query) => $this->applyReportProductSearch($query, $search))
             ->orderBy('name');
+    }
+
+    private function applySaleItemSearch($query, string $search)
+    {
+        return $query->where(function ($inner) use ($search) {
+            $inner->whereHas('product', fn ($product) => $this->applyProductCoreSearch($product, $search))
+                ->orWhereHas('productUnit', fn ($unit) => $this->applyUnitSearch($unit, $search));
+        });
+    }
+
+    private function applyReportProductSearch($query, string $search)
+    {
+        return $query->where(function ($inner) use ($search) {
+            $this->applyProductCoreSearch($inner, $search)
+                ->orWhereHas('units', fn ($unit) => $this->applyUnitSearch($unit, $search));
+        });
+    }
+
+    private function applyProductCoreSearch($query, string $search)
+    {
+        return $query->where(function ($inner) use ($search) {
+            $inner->where('name', 'like', "%{$search}%")
+                ->orWhere('code', 'like', "%{$search}%")
+                ->orWhere('item_group', 'like', "%{$search}%")
+                ->orWhereHas('category', fn ($category) => $category->where('name', 'like', "%{$search}%"))
+                ->orWhereHas('supplier', fn ($supplier) => $supplier->where('name', 'like', "%{$search}%"));
+        });
+    }
+
+    private function applyUnitSearch($query, string $search)
+    {
+        return $query->where(function ($inner) use ($search) {
+            $inner->where('unit_name', 'like', "%{$search}%")
+                ->orWhere('barcode', 'like', "%{$search}%")
+                ->orWhere('part_number', 'like', "%{$search}%");
+        });
+    }
+
+    private function priceMarginRowMatchesSearch(object $row, string $search): bool
+    {
+        return $this->productCoreMatchesSearch($row->product, $search)
+            || $this->unitMatchesSearch($row->unit, $search);
+    }
+
+    private function productCoreMatchesSearch(Product $product, string $search): bool
+    {
+        $needle = Str::lower($search);
+
+        return collect([
+            $product->name,
+            $product->code,
+            $product->item_group,
+            $product->category?->name,
+            $product->supplier?->name,
+        ])->filter()
+            ->contains(fn ($value) => Str::contains(Str::lower((string) $value), $needle));
+    }
+
+    private function unitMatchesSearch(ProductUnit $unit, string $search): bool
+    {
+        $needle = Str::lower($search);
+
+        return collect([
+            $unit->unit_name,
+            $unit->barcode,
+            $unit->part_number,
+        ])->filter()
+            ->contains(fn ($value) => Str::contains(Str::lower((string) $value), $needle));
     }
 
     private function baseBalances(array $productIds, int $storeId = 0): Collection
