@@ -116,7 +116,7 @@ class FinancialReportsService
             'summary' => [
                 'total_product_units' => $rows->count(),
                 'missing_cost' => $rows->where('status_key', 'missing_cost')->count(),
-                'zero_selling_price' => $rows->where('status_key', 'zero_selling_price')->count(),
+                'zero_selling_price' => $rows->filter(fn ($row) => $row->selling_price <= 0)->count(),
                 'selling_below_cost' => $rows->where('status_key', 'selling_below_cost')->count(),
                 'healthy_margin' => $rows->where('status_key', 'healthy_margin')->count(),
                 'conversion_review_count' => $rows->where('conversion_review', true)->count(),
@@ -203,7 +203,7 @@ class FinancialReportsService
             ->where('row_no', 1)
             ->mapWithKeys(fn ($row) => [(int) $row->product_id => [
                 'cost' => round((float) $row->base_cost, 2),
-                'source' => 'Estimated from latest purchase',
+                'source' => 'Latest purchase cost',
             ]]);
 
         $weightedCosts = DB::table('purchase_items')
@@ -227,7 +227,7 @@ class FinancialReportsService
             ->filter(fn ($row) => (float) $row->total_base_quantity > 0)
             ->mapWithKeys(fn ($row) => [(int) $row->product_id => [
                 'cost' => round((float) $row->total_cost / (float) $row->total_base_quantity, 2),
-                'source' => 'Estimated from weighted purchase average',
+                'source' => 'Weighted purchase cost',
             ]]);
 
         $unitCosts = Product::query()
@@ -246,7 +246,7 @@ class FinancialReportsService
 
                 return [$product->id => [
                     'cost' => $this->conversionService->costPerBaseUnit((float) $unit->cost_price, $unit),
-                    'source' => 'Estimated from product unit cost',
+                    'source' => 'Configured product unit cost',
                 ]];
             });
 
@@ -260,16 +260,21 @@ class FinancialReportsService
     {
         $costPrice = (float) $unit->cost_price;
         $sellingPrice = (float) $unit->selling_price;
-        $marginAmount = round($sellingPrice - $costPrice, 2);
-        $marginPercent = $sellingPrice > 0 ? round(($marginAmount / $sellingPrice) * 100, 2) : null;
+        $hasCost = $costPrice > 0;
+        $marginAmount = $hasCost ? round($sellingPrice - $costPrice, 2) : null;
+        $marginPercent = $hasCost && $sellingPrice > 0 ? round(($marginAmount / $sellingPrice) * 100, 2) : null;
         $conversionReview = $this->isSuspiciousBulkUnit($unit);
 
         [$statusKey, $statusLabel] = match (true) {
-            $costPrice <= 0 => ['missing_cost', 'Missing cost'],
+            ! $hasCost => ['missing_cost', 'Missing cost'],
             $sellingPrice <= 0 => ['zero_selling_price', 'Zero selling price'],
             $sellingPrice < $costPrice => ['selling_below_cost', 'Selling below cost'],
             default => ['healthy_margin', 'Healthy margin'],
         };
+        $extraWarnings = collect([
+            $statusKey !== 'zero_selling_price' && $sellingPrice <= 0 ? 'Zero selling price' : null,
+            $conversionReview ? 'Possible Pack Conversion Review' : null,
+        ])->filter();
 
         return (object) [
             'product' => $product,
@@ -282,7 +287,7 @@ class FinancialReportsService
             'status_key' => $statusKey,
             'status_label' => $statusLabel,
             'conversion_review' => $conversionReview,
-            'warning_label' => collect([$statusLabel, $conversionReview ? 'Possible Pack Conversion Review' : null])->filter()->implode(' / '),
+            'warning_label' => collect([$statusLabel])->merge($extraWarnings)->implode(' / '),
         ];
     }
 
@@ -290,7 +295,7 @@ class FinancialReportsService
     {
         return match ($status) {
             'missing_cost' => $row->status_key === 'missing_cost',
-            'zero_selling_price' => $row->status_key === 'zero_selling_price',
+            'zero_selling_price' => $row->selling_price <= 0,
             'selling_below_cost' => $row->status_key === 'selling_below_cost',
             'healthy_margin' => $row->status_key === 'healthy_margin',
             'conversion_review' => $row->conversion_review,

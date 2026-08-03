@@ -45,7 +45,7 @@ class FinancialReportsTest extends TestCase
             ->assertSee('21 pieces')
             ->assertSee('UGX 1,000.00')
             ->assertSee('UGX 21,000')
-            ->assertSee('Estimated from latest purchase');
+            ->assertSee('Latest purchase cost');
     }
 
     public function test_stock_valuation_flags_missing_cost_and_filters_rows(): void
@@ -87,6 +87,19 @@ class FinancialReportsTest extends TestCase
             ->assertSee($bulkProduct->name)
             ->assertSee('Possible Pack Conversion Review')
             ->assertSee('N/A');
+    }
+
+    public function test_missing_cost_margin_is_not_displayed_as_healthy_profit(): void
+    {
+        $this->singleUnitProduct('NO COST PROFIT TRAP', 0, 5000);
+
+        $this->get('/reports/price-margins?q=NO+COST+PROFIT+TRAP')
+            ->assertOk()
+            ->assertSee('NO COST PROFIT TRAP')
+            ->assertSee('Missing cost')
+            ->assertSee('N/A')
+            ->assertDontSee('100.00%')
+            ->assertDontSee('<span class="badge success">Healthy margin</span>', false);
     }
 
     public function test_price_margin_filters_and_search_work(): void

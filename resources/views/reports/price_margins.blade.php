@@ -73,7 +73,7 @@
                             <td>{{ rtrim(rtrim(number_format($row->conversion_factor, 3, '.', ''), '0'), '.') }}</td>
                             <td>{{ $currency }} {{ number_format($row->cost_price, 0) }}</td>
                             <td>{{ $currency }} {{ number_format($row->selling_price, 0) }}</td>
-                            <td>{{ $currency }} {{ number_format($row->margin_amount, 0) }}</td>
+                            <td>{{ $row->margin_amount === null ? 'N/A' : $currency.' '.number_format($row->margin_amount, 0) }}</td>
                             <td>{{ $row->margin_percent === null ? 'N/A' : number_format($row->margin_percent, 2).'%' }}</td>
                             <td>
                                 <span class="badge {{ $row->status_key === 'healthy_margin' && ! $row->conversion_review ? 'success' : 'credit' }}">{{ $row->warning_label }}</span>

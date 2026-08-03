@@ -12,6 +12,7 @@ use App\Models\Supplier;
 use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Support\ProductUnitConversionService;
+use App\Support\ProductUnitCostSyncService;
 use App\Support\StoreAssignmentService;
 use App\Support\AccessService;
 use Carbon\Carbon;
@@ -223,7 +224,8 @@ class PurchaseController extends Controller
         DocumentNumberService $documentNumberService,
         AuditLogService $auditLogService,
         StoreAssignmentService $storeAssignmentService,
-        ProductUnitConversionService $conversionService
+        ProductUnitConversionService $conversionService,
+        ProductUnitCostSyncService $costSyncService
     ): RedirectResponse
     {
         $validated = $request->validate([
@@ -272,7 +274,7 @@ class PurchaseController extends Controller
 
         $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), app(\App\Support\AccessService::class));
 
-        $purchase = DB::transaction(function () use ($validated, $items, $productUnits, $documentNumberService, $storeId, $conversionService, $correctionSourcePurchase) {
+        $purchase = DB::transaction(function () use ($validated, $items, $productUnits, $documentNumberService, $storeId, $conversionService, $costSyncService, $correctionSourcePurchase) {
             $preparedItems = $items->map(function (array $item) use ($productUnits, $conversionService) {
                 /** @var ProductUnit|null $unit */
                 $unit = $productUnits->get((int) $item['product_unit_id']);
@@ -370,6 +372,7 @@ class PurchaseController extends Controller
                     'discount_amount' => 0,
                     'line_total' => $item['line_total'],
                 ]);
+                $costSyncService->syncFromPurchaseItem($purchaseItem);
 
                 InventoryTransaction::create([
                     'transaction_date' => $purchase->purchase_date,
