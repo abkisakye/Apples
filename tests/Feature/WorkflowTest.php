@@ -3840,21 +3840,23 @@ class WorkflowTest extends TestCase
 
         $guidance = 'Create one product, then add all selling packs/units such as piece, dozen, box, carton, sack, bundle, bottle, tin, half carton where applicable.';
         $duplicateWarning = 'Do not create separate products for carton and piece versions of the same item';
-        $fractionalGuidance = 'Allow fractional quantities for wholesale packs such as 0.5 or 0.75 carton.';
+        $fractionalGuidance = 'Allow fractional quantities for wholesale packs such as 0.25, 0.5, or 0.75 carton.';
 
         $this->get('/products/create')
             ->assertOk()
             ->assertSee($guidance)
             ->assertSee($duplicateWarning)
             ->assertSee($fractionalGuidance)
-            ->assertSee('Minimum Wholesale Qty');
+            ->assertSee('Minimum Wholesale Qty')
+            ->assertSee('Example: 0.25');
 
         $this->get('/products/'.$product->id.'/edit')
             ->assertOk()
             ->assertSee($guidance)
             ->assertSee($duplicateWarning)
             ->assertSee($fractionalGuidance)
-            ->assertSee('Minimum Wholesale Qty');
+            ->assertSee('Minimum Wholesale Qty')
+            ->assertSee('Example: 0.25');
     }
 
     public function test_product_unit_base_conversion_metadata_can_be_saved_without_changing_stock_behavior(): void
@@ -3917,7 +3919,7 @@ class WorkflowTest extends TestCase
             'conversion_factor' => 50,
             'allow_fractional_quantity' => true,
             'quantity_precision' => 2,
-            'minimum_wholesale_quantity' => 0.5,
+            'minimum_wholesale_quantity' => 0.25,
             'is_base_unit' => false,
         ]);
     }
@@ -4470,6 +4472,9 @@ class WorkflowTest extends TestCase
             'selling_price' => 114000,
             'cost_price' => 90000,
             'barcode' => '6001234567890',
+            'allow_fractional_quantity' => true,
+            'quantity_precision' => 2,
+            'minimum_wholesale_quantity' => 0.25,
             'is_active' => true,
         ]);
 
@@ -4513,6 +4518,9 @@ class WorkflowTest extends TestCase
             ->assertSee('"category_name":"BATHING SOAP"', false)
             ->assertSee('"unit_name":"box"', false)
             ->assertSee('"price":114000', false)
+            ->assertSee('"allow_fractional_quantity":true', false)
+            ->assertSee('"quantity_precision":2', false)
+            ->assertSee('"minimum_wholesale_quantity":0.25', false)
             ->assertSee('sale-search-results-table', false)
             ->assertSee('sale-search-results-head', false)
             ->assertSee('sale-search-result-name', false)
@@ -4560,8 +4568,12 @@ class WorkflowTest extends TestCase
             ->assertSee('bill-cell', false)
             ->assertSee('data-qty-minus', false)
             ->assertSee('data-qty-input', false)
+            ->assertSee('data-qty-step', false)
             ->assertSee('data-qty-plus', false)
             ->assertSee('data-price-input', false)
+            ->assertSee('function quantityIncrement(item)', false)
+            ->assertSee('minimumWholesaleQuantity > 0 ? minimumWholesaleQuantity', false)
+            ->assertSee('data-keypad-input="${item.allow_fractional_quantity ? \'decimal\' : \'integer\'}"', false)
             ->assertSee('bill-line-total', false)
             ->assertSee('data-line-total', false)
             ->assertSee('function syncCartSummary()', false)

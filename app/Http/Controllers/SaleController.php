@@ -933,7 +933,7 @@ class SaleController extends Controller
             ?: 'Pieces / retail unit';
 
         throw ValidationException::withMessages([
-            $field => 'Quantities below '.$this->formatQuantity($minimum).' '.$unitName.' should be sold using '.$retailUnit.' / retail unit.',
+            $field => 'The minimum wholesale quantity for '.$unitName.' is '.$this->formatQuantity($minimum).'. Use '.$retailUnit.' / retail unit for smaller quantities.',
         ]);
     }
 

@@ -2151,12 +2151,19 @@
 
             function quantityStep(item) {
                 const precision = quantityPrecision(item);
-                return item?.allow_fractional_quantity ? (1 / Math.pow(10, precision || 3)) : 1;
+                const minimumWholesaleQuantity = Number(item?.minimum_wholesale_quantity || 0);
+                return item?.allow_fractional_quantity
+                    ? (minimumWholesaleQuantity > 0 ? minimumWholesaleQuantity : (1 / Math.pow(10, precision || 3)))
+                    : 1;
             }
 
             function minimumQuantity(item) {
                 const minimumWholesaleQuantity = Number(item?.minimum_wholesale_quantity || 0);
                 return item?.allow_fractional_quantity ? Math.max(minimumWholesaleQuantity || quantityStep(item), quantityStep(item)) : 1;
+            }
+
+            function quantityIncrement(item) {
+                return item?.allow_fractional_quantity ? quantityStep(item) : 1;
             }
 
             function normalizeQuantity(value, item = null) {
@@ -2589,7 +2596,7 @@
                                     <div class="bill-label">Qty</div>
                                     <div class="qty-box">
                                         <button type="button" data-qty-minus="${index}">-</button>
-                                        <input type="number" min="${minimumQuantity(item)}" step="${quantityStep(item)}" value="${item.quantity}" data-qty-input="${index}" data-keypad-input="${item.allow_fractional_quantity ? 'decimal' : 'integer'}">
+                                        <input type="number" min="${minimumQuantity(item)}" step="${quantityStep(item)}" value="${item.quantity}" data-qty-input="${index}" data-qty-step="${quantityIncrement(item)}" data-keypad-input="${item.allow_fractional_quantity ? 'decimal' : 'integer'}">
                                         <button type="button" data-qty-plus="${index}">+</button>
                                     </div>
                                 </div>
@@ -2727,7 +2734,7 @@
                 const existingIndex = cart.findIndex((item) => Number(item.id) === Number(unit.id));
                 if (existingIndex >= 0) {
                     const existing = cart.splice(existingIndex, 1)[0];
-                    existing.quantity = normalizeQuantity(existing.quantity, existing) + 1;
+                    existing.quantity = normalizeQuantity(existing.quantity, existing) + quantityIncrement(existing);
                     cart.unshift(existing);
                 } else {
                     cart.unshift({
@@ -2936,7 +2943,7 @@
                 const plusButton = event.target.closest('[data-qty-plus]');
                 if (plusButton) {
                     const index = Number(plusButton.dataset.qtyPlus);
-                    cart[index].quantity = normalizeQuantity(cart[index].quantity, cart[index]) + 1;
+                    cart[index].quantity = normalizeQuantity(cart[index].quantity, cart[index]) + quantityIncrement(cart[index]);
                     renderCart();
                     return;
                 }
@@ -2944,7 +2951,7 @@
                 const minusButton = event.target.closest('[data-qty-minus]');
                 if (minusButton) {
                     const index = Number(minusButton.dataset.qtyMinus);
-                    cart[index].quantity = Math.max(normalizeQuantity(cart[index].quantity, cart[index]) - 1, minimumQuantity(cart[index]));
+                    cart[index].quantity = Math.max(normalizeQuantity(cart[index].quantity, cart[index]) - quantityIncrement(cart[index]), minimumQuantity(cart[index]));
                     renderCart();
                 }
             });

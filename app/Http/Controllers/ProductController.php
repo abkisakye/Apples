@@ -286,6 +286,11 @@ class ProductController extends Controller
                 $minimumWholesaleQuantity = $allowFractional
                     ? $this->normaliseMinimumWholesaleQuantity($unit['minimum_wholesale_quantity'] ?? null, $unitName)
                     : null;
+                $quantityPrecision = (int) ($unit['quantity_precision'] ?? 0);
+
+                if ($allowFractional && $minimumWholesaleQuantity !== null) {
+                    $quantityPrecision = max($quantityPrecision, $this->decimalPlaces($minimumWholesaleQuantity));
+                }
 
                 return [
                     'id' => $unit['id'] ?? null,
@@ -296,7 +301,7 @@ class ProductController extends Controller
                     'barcode' => blank($unit['barcode'] ?? null) ? null : trim((string) $unit['barcode']),
                     'part_number' => blank($unit['part_number'] ?? null) ? null : trim((string) $unit['part_number']),
                     'allow_fractional_quantity' => $allowFractional,
-                    'quantity_precision' => (int) ($unit['quantity_precision'] ?? 0),
+                    'quantity_precision' => $quantityPrecision,
                     'minimum_wholesale_quantity' => $minimumWholesaleQuantity,
                     'is_base_unit' => filter_var($unit['is_base_unit'] ?? false, FILTER_VALIDATE_BOOL),
                     'is_active' => filter_var($unit['is_active'] ?? true, FILTER_VALIDATE_BOOL),
@@ -422,7 +427,7 @@ class ProductController extends Controller
             return round((float) $value, 3);
         }
 
-        return $this->isWholesalePackUnit($unitName) ? 0.5 : null;
+        return $this->isWholesalePackUnit($unitName) ? 0.25 : null;
     }
 
     private function isWholesalePackUnit(string $unitName): bool
@@ -436,5 +441,16 @@ class ProductController extends Controller
         }
 
         return false;
+    }
+
+    private function decimalPlaces(float $value): int
+    {
+        $formatted = rtrim(rtrim(number_format($value, 3, '.', ''), '0'), '.');
+
+        if (! str_contains($formatted, '.')) {
+            return 0;
+        }
+
+        return strlen(substr(strrchr($formatted, '.'), 1));
     }
 }
