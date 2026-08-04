@@ -73,6 +73,8 @@ class ReportController extends Controller
             'categoryRows' => $data['categoryRows'],
             'dailyRows' => $data['dailyRows'],
             'missingCostRows' => $data['missingCostRows'],
+            'expenseRows' => $data['expenseRows'],
+            'fundingRows' => $data['fundingRows'],
             'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
         ]);

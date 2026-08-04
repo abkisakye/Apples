@@ -51,12 +51,18 @@
     </section>
 
     <section class="cards">
-        <div class="card"><div class="label">Sales Revenue</div><div class="value money">{{ $currency }} {{ number_format($summary['sales_revenue'], 0) }}</div></div>
-        <div class="card"><div class="label">Estimated COGS</div><div class="value money">{{ $currency }} {{ number_format($summary['estimated_cogs'], 0) }}</div></div>
-        <div class="card"><div class="label">Estimated Gross Profit</div><div class="value money">{{ $currency }} {{ number_format($summary['estimated_gross_profit'], 0) }}</div></div>
-        <div class="card"><div class="label">Estimated Margin %</div><div class="value">{{ $formatMargin($summary['estimated_margin_percent']) }}</div></div>
+        <div class="card"><div class="label">Gross Sales Revenue</div><div class="value money">{{ $currency }} {{ number_format($summary['sales_revenue'], 0) }}</div></div>
+        <div class="card"><div class="label">Returned / Refunded Sales</div><div class="value money">{{ $currency }} {{ number_format($summary['returned_revenue'], 0) }}</div></div>
+        <div class="card"><div class="label">Net Sales Revenue</div><div class="value money">{{ $currency }} {{ number_format($summary['net_sales_revenue'], 0) }}</div></div>
+        <div class="card"><div class="label">Gross Estimated COGS</div><div class="value money">{{ $currency }} {{ number_format($summary['estimated_cogs'], 0) }}</div></div>
+        <div class="card"><div class="label">Estimated Returned COGS</div><div class="value money">{{ $currency }} {{ number_format($summary['returned_cogs'], 0) }}</div></div>
+        <div class="card"><div class="label">Net Estimated COGS</div><div class="value money">{{ $currency }} {{ number_format($summary['net_estimated_cogs'], 0) }}</div></div>
+        <div class="card"><div class="label">Net Estimated Gross Profit</div><div class="value money">{{ $currency }} {{ number_format($summary['net_estimated_gross_profit'], 0) }}</div></div>
+        <div class="card"><div class="label">Net Margin %</div><div class="value">{{ $formatMargin($summary['net_margin_percent']) }}</div></div>
+        <div class="card"><div class="label">Expenses</div><div class="value money">{{ $currency }} {{ number_format($summary['expense_total'], 0) }}</div></div>
+        <div class="card"><div class="label">Estimated Net Profit</div><div class="value money">{{ $currency }} {{ number_format($summary['estimated_net_profit'], 0) }}</div></div>
         <div class="card"><div class="label">Number Of Sales</div><div class="value">{{ number_format($summary['sales_count']) }}</div></div>
-        <div class="card"><div class="label">Quantity / Items Sold</div><div class="value">{{ $formatQty($summary['quantity_sold']) }} / {{ number_format($summary['item_lines_sold']) }}</div></div>
+        <div class="card"><div class="label">Qty Sold / Returned</div><div class="value">{{ $formatQty($summary['quantity_sold']) }} / {{ $formatQty($summary['quantity_returned']) }}</div></div>
         <div class="card"><div class="label">Lines Missing Cost</div><div class="value">{{ number_format($summary['missing_cost_lines']) }}</div></div>
         <div class="card"><div class="label">Revenue Affected By Missing Cost</div><div class="value money">{{ $currency }} {{ number_format($summary['missing_cost_revenue'], 0) }}</div></div>
         <div class="card"><div class="label">Top Profit Product</div><div class="value" style="font-size:18px;">{{ $summary['top_profit_product'] }}</div></div>
@@ -64,16 +70,20 @@
     </section>
 
     <section class="panel" style="margin-bottom:16px;">
-        <h3>Sales Revenue vs Cost Of Goods</h3>
+        <h3>Sales Revenue vs Returns vs Cost Of Goods</h3>
         <div style="overflow:auto; margin-top:12px;">
             <table>
                 <thead>
                     <tr>
                         <th>Date Range / Summary</th>
-                        <th>Sales Revenue</th>
-                        <th>Estimated COGS</th>
-                        <th>Estimated Gross Profit</th>
-                        <th>Estimated Margin %</th>
+                        <th>Gross Sales</th>
+                        <th>Returns</th>
+                        <th>Net Sales</th>
+                        <th>Gross COGS</th>
+                        <th>Returned COGS</th>
+                        <th>Net COGS</th>
+                        <th>Net Gross Profit</th>
+                        <th>Net Margin %</th>
                         <th>Missing-Cost Lines</th>
                         <th>Warning / Status</th>
                     </tr>
@@ -83,8 +93,12 @@
                         <tr>
                             <td>{{ $row->label }}</td>
                             <td>{{ $currency }} {{ number_format($row->sales_revenue, 0) }}</td>
+                            <td>{{ $currency }} {{ number_format($row->returned_revenue, 0) }}</td>
+                            <td><strong>{{ $currency }} {{ number_format($row->net_sales_revenue, 0) }}</strong></td>
                             <td>{{ $currency }} {{ number_format($row->estimated_cogs, 0) }}</td>
-                            <td><strong>{{ $currency }} {{ number_format($row->estimated_gross_profit, 0) }}</strong></td>
+                            <td>{{ $currency }} {{ number_format($row->returned_cogs, 0) }}</td>
+                            <td>{{ $currency }} {{ number_format($row->net_estimated_cogs, 0) }}</td>
+                            <td><strong>{{ $currency }} {{ number_format($row->net_estimated_gross_profit, 0) }}</strong></td>
                             <td>{{ $formatMargin($row->estimated_margin_percent) }}</td>
                             <td>{{ number_format($row->missing_cost_lines) }}</td>
                             <td><span class="badge {{ $row->warning_label === 'OK' ? 'success' : 'credit' }}">{{ $row->warning_label }}</span></td>
@@ -96,7 +110,7 @@
     </section>
 
     <section class="panel" style="margin-bottom:16px;">
-        <h3>Profit By Product</h3>
+        <h3>Profit By Product After Returns</h3>
         <div style="overflow:auto; margin-top:12px;">
             <table>
                 <thead>
@@ -104,10 +118,13 @@
                         <th>Product</th>
                         <th>Category</th>
                         <th>Quantity Sold</th>
-                        <th>Sales Revenue</th>
-                        <th>Estimated COGS</th>
-                        <th>Estimated Gross Profit</th>
-                        <th>Estimated Margin %</th>
+                        <th>Returned Qty</th>
+                        <th>Gross Sales</th>
+                        <th>Returns</th>
+                        <th>Net Sales</th>
+                        <th>Net Estimated COGS</th>
+                        <th>Net Estimated Gross Profit</th>
+                        <th>Net Margin %</th>
                         <th>Missing-Cost Lines</th>
                         <th>Warning / Status</th>
                     </tr>
@@ -121,15 +138,18 @@
                             </td>
                             <td>{{ $row->category_name }}</td>
                             <td>{{ $formatQty($row->quantity_sold) }}</td>
+                            <td>{{ $formatQty($row->quantity_returned) }}</td>
                             <td>{{ $currency }} {{ number_format($row->sales_revenue, 0) }}</td>
-                            <td>{{ $currency }} {{ number_format($row->estimated_cogs, 0) }}</td>
-                            <td><strong>{{ $currency }} {{ number_format($row->estimated_gross_profit, 0) }}</strong></td>
-                            <td>{{ $formatMargin($row->estimated_margin_percent) }}</td>
+                            <td>{{ $currency }} {{ number_format($row->returned_revenue, 0) }}</td>
+                            <td><strong>{{ $currency }} {{ number_format($row->net_sales_revenue, 0) }}</strong></td>
+                            <td>{{ $currency }} {{ number_format($row->net_estimated_cogs, 0) }}</td>
+                            <td><strong>{{ $currency }} {{ number_format($row->net_estimated_gross_profit, 0) }}</strong></td>
+                            <td>{{ $formatMargin($row->net_margin_percent) }}</td>
                             <td>{{ number_format($row->missing_cost_lines) }}</td>
                             <td><a href="{{ route('products.edit', ['product' => $row->product_id, 'focus' => 'units']) }}" class="badge {{ $row->has_reliable_margin ? 'success' : 'credit' }}" title="Open product unit setup">{{ $row->warning_label }}</a></td>
                         </tr>
                     @empty
-                        <tr><td colspan="9" class="muted">No product profit rows matched the selected filters.</td></tr>
+                        <tr><td colspan="12" class="muted">No product profit rows matched the selected filters.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -138,7 +158,7 @@
 
     <section class="grid-two">
         <div class="panel">
-            <h3>Profit By Category</h3>
+            <h3>Profit By Category After Returns</h3>
             <div style="overflow:auto; margin-top:12px;">
                 <table>
                     <thead>
@@ -146,10 +166,13 @@
                             <th>Category</th>
                             <th>Products Sold</th>
                             <th>Quantity Sold</th>
-                            <th>Sales Revenue</th>
-                            <th>Estimated COGS</th>
-                            <th>Estimated Gross Profit</th>
-                            <th>Estimated Margin %</th>
+                            <th>Returned Qty</th>
+                            <th>Gross Sales</th>
+                            <th>Returns</th>
+                            <th>Net Sales</th>
+                            <th>Net COGS</th>
+                            <th>Net Gross Profit</th>
+                            <th>Net Margin %</th>
                             <th>Missing-Cost Lines</th>
                             <th>Warning / Status</th>
                         </tr>
@@ -160,15 +183,18 @@
                                 <td><strong>{{ $row->category_name }}</strong></td>
                                 <td>{{ number_format($row->products_sold) }}</td>
                                 <td>{{ $formatQty($row->quantity_sold) }}</td>
+                                <td>{{ $formatQty($row->quantity_returned) }}</td>
                                 <td>{{ $currency }} {{ number_format($row->sales_revenue, 0) }}</td>
-                                <td>{{ $currency }} {{ number_format($row->estimated_cogs, 0) }}</td>
-                                <td><strong>{{ $currency }} {{ number_format($row->estimated_gross_profit, 0) }}</strong></td>
-                                <td>{{ $formatMargin($row->estimated_margin_percent) }}</td>
+                                <td>{{ $currency }} {{ number_format($row->returned_revenue, 0) }}</td>
+                                <td><strong>{{ $currency }} {{ number_format($row->net_sales_revenue, 0) }}</strong></td>
+                                <td>{{ $currency }} {{ number_format($row->net_estimated_cogs, 0) }}</td>
+                                <td><strong>{{ $currency }} {{ number_format($row->net_estimated_gross_profit, 0) }}</strong></td>
+                                <td>{{ $formatMargin($row->net_margin_percent) }}</td>
                                 <td>{{ number_format($row->missing_cost_lines) }}</td>
                                 <td><span class="badge {{ $row->has_reliable_margin ? 'success' : 'credit' }}">{{ $row->warning_label }}</span></td>
                             </tr>
                         @empty
-                            <tr><td colspan="9" class="muted">No category profit rows matched the selected filters.</td></tr>
+                            <tr><td colspan="12" class="muted">No category profit rows matched the selected filters.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -176,17 +202,19 @@
         </div>
 
         <div class="panel">
-            <h3>Daily Profit</h3>
+            <h3>Daily Profit After Returns</h3>
             <div style="overflow:auto; margin-top:12px;">
                 <table>
                     <thead>
                         <tr>
                             <th>Date</th>
                             <th>Number Of Sales</th>
-                            <th>Sales Revenue</th>
-                            <th>Estimated COGS</th>
-                            <th>Estimated Gross Profit</th>
-                            <th>Estimated Margin %</th>
+                            <th>Gross Sales</th>
+                            <th>Returns</th>
+                            <th>Net Sales</th>
+                            <th>Net COGS</th>
+                            <th>Net Gross Profit</th>
+                            <th>Net Margin %</th>
                             <th>Missing-Cost Lines</th>
                         </tr>
                     </thead>
@@ -196,13 +224,75 @@
                                 <td>{{ \Illuminate\Support\Carbon::parse($row->date)->format('d M Y') }}</td>
                                 <td>{{ number_format($row->sales_count) }}</td>
                                 <td>{{ $currency }} {{ number_format($row->sales_revenue, 0) }}</td>
-                                <td>{{ $currency }} {{ number_format($row->estimated_cogs, 0) }}</td>
-                                <td><strong>{{ $currency }} {{ number_format($row->estimated_gross_profit, 0) }}</strong></td>
-                                <td>{{ $formatMargin($row->estimated_margin_percent) }}</td>
+                                <td>{{ $currency }} {{ number_format($row->returned_revenue, 0) }}</td>
+                                <td><strong>{{ $currency }} {{ number_format($row->net_sales_revenue, 0) }}</strong></td>
+                                <td>{{ $currency }} {{ number_format($row->net_estimated_cogs, 0) }}</td>
+                                <td><strong>{{ $currency }} {{ number_format($row->net_estimated_gross_profit, 0) }}</strong></td>
+                                <td>{{ $formatMargin($row->net_margin_percent) }}</td>
                                 <td>{{ number_format($row->missing_cost_lines) }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="7" class="muted">No daily profit rows matched the selected filters.</td></tr>
+                            <tr><td colspan="9" class="muted">No daily profit rows matched the selected filters.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="grid-two" style="margin-top:16px;">
+        <div class="panel">
+            <h3>Expenses Vs Gross Profit</h3>
+            <p class="list-note">Estimated net profit subtracts posted expenses in the selected date/store range from net estimated gross profit.</p>
+            <div style="overflow:auto; margin-top:12px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Expense Category</th>
+                            <th>Entries</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($expenseRows as $row)
+                            <tr>
+                                <td><strong>{{ $row->category_name }}</strong></td>
+                                <td>{{ number_format($row->expense_count) }}</td>
+                                <td>{{ $currency }} {{ number_format($row->amount, 0) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="3" class="muted">No posted expenses matched the selected date/store range.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Purchase Funding Source Summary</h3>
+            <p class="list-note">Posted purchases grouped by where the purchase money came from.</p>
+            <div style="overflow:auto; margin-top:12px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Funding Source</th>
+                            <th>Purchases</th>
+                            <th>Purchase Total</th>
+                            <th>Amount Paid</th>
+                            <th>Balance / Credit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($fundingRows as $row)
+                            <tr>
+                                <td><strong>{{ $row->funding_source }}</strong></td>
+                                <td>{{ number_format($row->purchase_count) }}</td>
+                                <td>{{ $currency }} {{ number_format($row->purchase_total, 0) }}</td>
+                                <td>{{ $currency }} {{ number_format($row->amount_paid, 0) }}</td>
+                                <td>{{ $currency }} {{ number_format($row->balance_due, 0) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="5" class="muted">No posted purchases matched the selected date/store range.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

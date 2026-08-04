@@ -4,7 +4,10 @@ namespace App\Support;
 
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\Expense;
+use App\Models\Purchase;
 use App\Models\SaleItem;
+use App\Models\SaleReturnItem;
 use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -154,20 +157,48 @@ class FinancialReportsService
             ->when($search !== '', fn ($query) => $this->applySaleItemSearch($query, $search))
             ->get();
 
-        $costMaps = $this->unitCostMaps($items->pluck('product_unit_id')->filter()->unique()->values());
-        $lineRows = $items
+        $returnItems = SaleReturnItem::query()
+            ->with([
+                'saleReturn:id,sale_id,return_no,return_date,store_id,status',
+                'saleReturn.store:id,name',
+                'saleItem:id,cost_price_snapshot,unit_price',
+                'product:id,name,code,category_id',
+                'product.category:id,name',
+                'productUnit:id,product_id,unit_name,cost_price',
+            ])
+            ->whereHas('saleReturn', function ($query) use ($fromDate, $toDate, $storeId) {
+                $query->where('status', 'posted')
+                    ->whereDate('return_date', '>=', $fromDate)
+                    ->whereDate('return_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId));
+            })
+            ->when($categoryId > 0, fn ($query) => $query->whereHas('product', fn ($product) => $product->where('category_id', $categoryId)))
+            ->when($search !== '', fn ($query) => $this->applySaleReturnItemSearch($query, $search))
+            ->get();
+
+        $costMaps = $this->unitCostMaps($items->pluck('product_unit_id')->merge($returnItems->pluck('product_unit_id'))->filter()->unique()->values());
+        $saleLineRows = $items
             ->map(fn (SaleItem $item) => $this->grossProfitLineRow($item, $costMaps))
             ->when($costStatus !== 'all', fn (Collection $rows) => $rows->filter(fn ($row) => $this->matchesGrossProfitCostStatus($row, $costStatus)))
             ->values();
+        $returnLineRows = $returnItems
+            ->map(fn (SaleReturnItem $item) => $this->grossProfitReturnLineRow($item, $costMaps))
+            ->when($costStatus !== 'all', fn (Collection $rows) => $rows->filter(fn ($row) => $this->matchesGrossProfitCostStatus($row, $costStatus)))
+            ->values();
+        $lineRows = $saleLineRows->merge($returnLineRows)->values();
 
         $summary = $this->profitSummary($lineRows, $fromDate, $toDate);
         $productRows = $this->profitByProduct($lineRows);
         $categoryRows = $this->profitByCategory($lineRows);
         $dailyRows = $this->profitByDate($lineRows);
-        $missingCostRows = $lineRows->filter(fn ($row) => ! $row->has_cost)->values();
+        $missingCostRows = $saleLineRows->filter(fn ($row) => ! $row->has_cost)->values();
+        $expenses = $this->expenseSummary($fromDate, $toDate, $storeId);
+        $fundingRows = $this->purchaseFundingSummary($fromDate, $toDate, $storeId);
 
         $summary['top_profit_product'] = $productRows->first(fn ($row) => $row->has_reliable_margin)?->product_name ?? 'N/A';
         $summary['top_profit_category'] = $categoryRows->first(fn ($row) => $row->has_reliable_margin)?->category_name ?? 'N/A';
+        $summary['expense_total'] = $expenses['total'];
+        $summary['estimated_net_profit'] = round($summary['net_estimated_gross_profit'] - $expenses['total'], 2);
 
         return [
             'fromDate' => $fromDate,
@@ -183,9 +214,14 @@ class FinancialReportsService
             'summaryRows' => collect([(object) [
                 'label' => $fromDate === $toDate ? Carbon::parse($fromDate)->format('d M Y') : Carbon::parse($fromDate)->format('d M Y').' - '.Carbon::parse($toDate)->format('d M Y'),
                 'sales_revenue' => $summary['sales_revenue'],
+                'returned_revenue' => $summary['returned_revenue'],
+                'net_sales_revenue' => $summary['net_sales_revenue'],
                 'estimated_cogs' => $summary['estimated_cogs'],
+                'returned_cogs' => $summary['returned_cogs'],
+                'net_estimated_cogs' => $summary['net_estimated_cogs'],
                 'estimated_gross_profit' => $summary['estimated_gross_profit'],
-                'estimated_margin_percent' => $summary['estimated_margin_percent'],
+                'net_estimated_gross_profit' => $summary['net_estimated_gross_profit'],
+                'estimated_margin_percent' => $summary['net_margin_percent'],
                 'missing_cost_lines' => $summary['missing_cost_lines'],
                 'warning_label' => $summary['missing_cost_lines'] > 0 ? 'Missing cost review needed' : 'OK',
             ]]),
@@ -193,6 +229,8 @@ class FinancialReportsService
             'categoryRows' => $categoryRows,
             'dailyRows' => $dailyRows,
             'missingCostRows' => $missingCostRows,
+            'expenseRows' => $expenses['rows'],
+            'fundingRows' => $fundingRows,
         ];
     }
 
@@ -221,23 +259,104 @@ class FinancialReportsService
             'product_unit_id' => (int) $item->product_unit_id,
             'unit_name' => $item->productUnit?->unit_name ?? 'Unit',
             'quantity' => $quantity,
+            'returned_quantity' => 0.0,
             'unit_price' => $unitPrice,
             'sales_revenue' => $revenue,
+            'returned_revenue' => 0.0,
+            'net_sales_revenue' => $revenue,
             'current_cost_price' => (float) ($item->productUnit?->cost_price ?? 0),
             'unit_cost' => $unitCost,
             'estimated_cogs' => $estimatedCogs,
+            'returned_cogs' => 0.0,
+            'net_estimated_cogs' => $estimatedCogs,
             'estimated_gross_profit' => $estimatedGrossProfit,
+            'net_estimated_gross_profit' => $estimatedGrossProfit,
             'estimated_margin_percent' => $hasCost && $revenue > 0 ? round(($estimatedGrossProfit / $revenue) * 100, 2) : null,
+            'net_margin_percent' => $hasCost && $revenue > 0 ? round(($estimatedGrossProfit / $revenue) * 100, 2) : null,
             'has_cost' => $hasCost,
             'has_reliable_margin' => $hasCost,
             'cost_source' => $costSource,
             'warning_label' => $hasCost ? $costSource : 'Missing cost',
+            'line_type' => 'sale',
+        ];
+    }
+
+    private function grossProfitReturnLineRow(SaleReturnItem $item, Collection $costMaps): object
+    {
+        $quantity = (float) $item->quantity;
+        $unitPrice = (float) $item->unit_price;
+        $lineTotal = (float) $item->line_total;
+        $revenue = round($lineTotal > 0 ? $lineTotal : $quantity * $unitPrice, 2);
+        [$unitCost, $costSource] = $this->resolveSaleReturnItemUnitCost($item, $costMaps);
+        $hasCost = $unitCost > 0;
+        $returnedCogs = $hasCost ? round($quantity * $unitCost, 2) : 0.0;
+        $netGrossProfit = round(0 - $revenue - (0 - $returnedCogs), 2);
+
+        return (object) [
+            'sale_id' => (int) ($item->saleReturn?->sale_id ?? 0),
+            'sale_no' => $item->saleReturn?->return_no ?? 'Unknown return',
+            'sale_date' => $item->saleReturn?->return_date?->toDateString() ?? '',
+            'store_id' => (int) ($item->saleReturn?->store_id ?? 0),
+            'store_name' => $item->saleReturn?->store?->name ?? 'Unassigned store',
+            'product_id' => (int) $item->product_id,
+            'product_name' => $item->product?->name ?? 'Unknown product',
+            'product_code' => $item->product?->code,
+            'category_id' => (int) ($item->product?->category_id ?? 0),
+            'category_name' => $item->product?->category?->name ?? 'Uncategorised',
+            'product_unit_id' => (int) $item->product_unit_id,
+            'unit_name' => $item->productUnit?->unit_name ?? 'Unit',
+            'quantity' => 0.0,
+            'returned_quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'sales_revenue' => 0.0,
+            'returned_revenue' => $revenue,
+            'net_sales_revenue' => -$revenue,
+            'current_cost_price' => (float) ($item->productUnit?->cost_price ?? 0),
+            'unit_cost' => $unitCost,
+            'estimated_cogs' => 0.0,
+            'returned_cogs' => $returnedCogs,
+            'net_estimated_cogs' => -$returnedCogs,
+            'estimated_gross_profit' => 0.0,
+            'net_estimated_gross_profit' => $netGrossProfit,
+            'estimated_margin_percent' => null,
+            'net_margin_percent' => null,
+            'has_cost' => $hasCost,
+            'has_reliable_margin' => $hasCost,
+            'cost_source' => $costSource,
+            'warning_label' => $hasCost ? $costSource : 'Missing cost',
+            'line_type' => 'return',
         ];
     }
 
     private function resolveSaleItemUnitCost(SaleItem $item, Collection $costMaps): array
     {
         $snapshot = (float) $item->cost_price_snapshot;
+        if ($snapshot > 0) {
+            return [$snapshot, 'Sale cost snapshot'];
+        }
+
+        $configuredCost = (float) ($item->productUnit?->cost_price ?? 0);
+        if ($configuredCost > 0) {
+            return [$configuredCost, 'Product unit cost'];
+        }
+
+        $unitId = (int) $item->product_unit_id;
+        $latestCost = (float) ($costMaps['latest'][$unitId] ?? 0);
+        if ($latestCost > 0) {
+            return [$latestCost, 'Latest purchase cost'];
+        }
+
+        $weightedCost = (float) ($costMaps['weighted'][$unitId] ?? 0);
+        if ($weightedCost > 0) {
+            return [$weightedCost, 'Weighted purchase cost'];
+        }
+
+        return [0.0, 'Missing cost'];
+    }
+
+    private function resolveSaleReturnItemUnitCost(SaleReturnItem $item, Collection $costMaps): array
+    {
+        $snapshot = (float) ($item->saleItem?->cost_price_snapshot ?? 0);
         if ($snapshot > 0) {
             return [$snapshot, 'Sale cost snapshot'];
         }
@@ -302,19 +421,31 @@ class FinancialReportsService
     private function profitSummary(Collection $rows, string $fromDate, string $toDate): array
     {
         $revenue = round((float) $rows->sum('sales_revenue'), 2);
+        $returnedRevenue = round((float) $rows->sum('returned_revenue'), 2);
+        $netRevenue = round($revenue - $returnedRevenue, 2);
         $cogs = round((float) $rows->sum('estimated_cogs'), 2);
+        $returnedCogs = round((float) $rows->sum('returned_cogs'), 2);
+        $netCogs = round($cogs - $returnedCogs, 2);
         $grossProfit = round($revenue - $cogs, 2);
+        $netGrossProfit = round($netRevenue - $netCogs, 2);
         $missingCostLines = $rows->filter(fn ($row) => ! $row->has_cost)->count();
 
         return [
             'from_date' => $fromDate,
             'to_date' => $toDate,
             'sales_revenue' => $revenue,
+            'returned_revenue' => $returnedRevenue,
+            'net_sales_revenue' => $netRevenue,
             'estimated_cogs' => $cogs,
+            'returned_cogs' => $returnedCogs,
+            'net_estimated_cogs' => $netCogs,
             'estimated_gross_profit' => $grossProfit,
+            'net_estimated_gross_profit' => $netGrossProfit,
             'estimated_margin_percent' => $missingCostLines > 0 || $revenue <= 0 ? null : round(($grossProfit / $revenue) * 100, 2),
-            'sales_count' => $rows->pluck('sale_id')->unique()->count(),
+            'net_margin_percent' => $missingCostLines > 0 || $netRevenue <= 0 ? null : round(($netGrossProfit / $netRevenue) * 100, 2),
+            'sales_count' => $rows->where('line_type', 'sale')->pluck('sale_id')->unique()->count(),
             'quantity_sold' => round((float) $rows->sum('quantity'), 3),
+            'quantity_returned' => round((float) $rows->sum('returned_quantity'), 3),
             'item_lines_sold' => $rows->count(),
             'missing_cost_lines' => $missingCostLines,
             'missing_cost_revenue' => round((float) $rows->filter(fn ($row) => ! $row->has_cost)->sum('sales_revenue'), 2),
@@ -337,7 +468,7 @@ class FinancialReportsService
                     'category_name' => $first->category_name,
                 ]);
             })
-            ->sortByDesc('estimated_gross_profit')
+            ->sortByDesc('net_estimated_gross_profit')
             ->values();
     }
 
@@ -355,7 +486,7 @@ class FinancialReportsService
 
                 return $row;
             })
-            ->sortByDesc('estimated_gross_profit')
+            ->sortByDesc('net_estimated_gross_profit')
             ->values();
     }
 
@@ -366,7 +497,7 @@ class FinancialReportsService
             ->map(function (Collection $group, string $date) {
                 $row = $this->profitGroupRow($group, [
                     'date' => $date,
-                    'sales_count' => $group->pluck('sale_id')->unique()->count(),
+                    'sales_count' => $group->where('line_type', 'sale')->pluck('sale_id')->unique()->count(),
                 ]);
 
                 return $row;
@@ -378,19 +509,31 @@ class FinancialReportsService
     private function profitGroupRow(Collection $group, array $attributes): object
     {
         $revenue = round((float) $group->sum('sales_revenue'), 2);
+        $returnedRevenue = round((float) $group->sum('returned_revenue'), 2);
+        $netRevenue = round($revenue - $returnedRevenue, 2);
         $cogs = round((float) $group->sum('estimated_cogs'), 2);
+        $returnedCogs = round((float) $group->sum('returned_cogs'), 2);
+        $netCogs = round($cogs - $returnedCogs, 2);
         $grossProfit = round($revenue - $cogs, 2);
+        $netGrossProfit = round($netRevenue - $netCogs, 2);
         $missingCostLines = $group->filter(fn ($row) => ! $row->has_cost)->count();
         $costSources = $group->pluck('cost_source')->filter(fn ($source) => $source !== 'Missing cost')->unique()->values();
 
         return (object) array_merge($attributes, [
             'quantity_sold' => round((float) $group->sum('quantity'), 3),
+            'quantity_returned' => round((float) $group->sum('returned_quantity'), 3),
             'sales_revenue' => $revenue,
+            'returned_revenue' => $returnedRevenue,
+            'net_sales_revenue' => $netRevenue,
             'estimated_cogs' => $cogs,
+            'returned_cogs' => $returnedCogs,
+            'net_estimated_cogs' => $netCogs,
             'estimated_gross_profit' => $grossProfit,
+            'net_estimated_gross_profit' => $netGrossProfit,
             'estimated_margin_percent' => $missingCostLines > 0 || $revenue <= 0 ? null : round(($grossProfit / $revenue) * 100, 2),
+            'net_margin_percent' => $missingCostLines > 0 || $netRevenue <= 0 ? null : round(($netGrossProfit / $netRevenue) * 100, 2),
             'missing_cost_lines' => $missingCostLines,
-            'has_reliable_margin' => $missingCostLines === 0 && $revenue > 0,
+            'has_reliable_margin' => $missingCostLines === 0 && $netRevenue > 0,
             'warning_label' => $missingCostLines > 0
                 ? 'Missing cost review needed'
                 : ($costSources->count() === 1 ? $costSources->first() : 'Mixed cost sources'),
@@ -445,6 +588,14 @@ class FinancialReportsService
     }
 
     private function applySaleItemSearch($query, string $search)
+    {
+        return $query->where(function ($inner) use ($search) {
+            $inner->whereHas('product', fn ($product) => $this->applyProductCoreSearch($product, $search))
+                ->orWhereHas('productUnit', fn ($unit) => $this->applyUnitSearch($unit, $search));
+        });
+    }
+
+    private function applySaleReturnItemSearch($query, string $search)
     {
         return $query->where(function ($inner) use ($search) {
             $inner->whereHas('product', fn ($product) => $this->applyProductCoreSearch($product, $search))
@@ -679,5 +830,55 @@ class FinancialReportsService
         $name = Str::lower(trim($unit->unit_name));
 
         return collect(self::BULK_UNIT_KEYWORDS)->contains(fn (string $keyword) => $name === $keyword || Str::contains($name, $keyword));
+    }
+
+    private function expenseSummary(string $fromDate, string $toDate, int $storeId): array
+    {
+        $rows = Expense::query()
+            ->with('expenseCategory:id,name')
+            ->posted()
+            ->whereDate('expense_date', '>=', $fromDate)
+            ->whereDate('expense_date', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->get()
+            ->groupBy(fn (Expense $expense) => $expense->categoryName() ?: 'Uncategorised')
+            ->map(fn (Collection $group, string $category) => (object) [
+                'category_name' => $category,
+                'expense_count' => $group->count(),
+                'amount' => round((float) $group->sum('amount'), 2),
+            ])
+            ->sortByDesc('amount')
+            ->values();
+
+        return [
+            'rows' => $rows,
+            'total' => round((float) $rows->sum('amount'), 2),
+        ];
+    }
+
+    private function purchaseFundingSummary(string $fromDate, string $toDate, int $storeId): Collection
+    {
+        return Purchase::query()
+            ->with('fundingSource:id,name,sort_order')
+            ->posted()
+            ->whereDate('purchase_date', '>=', $fromDate)
+            ->whereDate('purchase_date', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->get()
+            ->groupBy(fn (Purchase $purchase) => $purchase->fundingSource?->name ?: 'Unspecified')
+            ->map(function (Collection $group, string $sourceName) {
+                $first = $group->first();
+
+                return (object) [
+                    'funding_source' => $sourceName,
+                    'sort_order' => (int) ($first?->fundingSource?->sort_order ?? 9999),
+                    'purchase_count' => $group->count(),
+                    'purchase_total' => round((float) $group->sum('total_amount'), 2),
+                    'amount_paid' => round((float) $group->sum('amount_paid'), 2),
+                    'balance_due' => round((float) $group->sum('balance_due'), 2),
+                ];
+            })
+            ->sortBy('sort_order')
+            ->values();
     }
 }

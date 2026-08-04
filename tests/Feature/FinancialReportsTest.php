@@ -3,13 +3,17 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
+use App\Models\Expense;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\Purchase;
+use App\Models\PurchaseFundingSource;
 use App\Models\PurchaseItem;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SaleReturn;
+use App\Models\SaleReturnItem;
 use App\Models\Store;
 use App\Models\Supplier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -376,6 +380,75 @@ class FinancialReportsTest extends TestCase
             ->assertSee('UGX 13,500');
     }
 
+    public function test_gross_profit_report_nets_returns_expenses_and_purchase_funding_sources(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('RETURN PROFIT SOAP', 600, 1000);
+        $saleItem = $this->postSaleLine($product, $unit, '2026-07-10', 10, 1000, 10000, 600);
+        $this->postSaleReturnLine($saleItem, '2026-07-12', 2, 1000, 2000);
+        $this->postSaleReturnLine($saleItem, '2026-07-13', 3, 1000, 3000, 'cancelled');
+        $this->postExpense('2026-07-14', 'Transport', 700);
+        $this->postExpense('2026-08-01', 'Outside Period Expense', 999);
+        $this->postExpense('2026-07-14', 'Draft Expense', 888, 'draft');
+        $this->postFundedPurchase('2026-07-15', 'Business Cash / Shop Cash', 5000, 5000, 0);
+        $this->postFundedPurchase('2026-07-16', 'Supplier Credit / Not Paid Yet', 3000, 0, 3000);
+        $this->postFundedPurchase('2026-08-01', 'Other', 999, 999, 0);
+
+        $countsBefore = [
+            'sales' => Sale::query()->count(),
+            'sale_items' => SaleItem::query()->count(),
+            'sale_returns' => SaleReturn::query()->count(),
+            'sale_return_items' => SaleReturnItem::query()->count(),
+            'purchases' => Purchase::query()->count(),
+            'expenses' => Expense::query()->count(),
+            'inventory_transactions' => InventoryTransaction::query()->count(),
+            'product_units' => ProductUnit::query()->count(),
+        ];
+        $pricesBefore = ProductUnit::query()->pluck('selling_price', 'id')->all();
+
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&q=RETURN+PROFIT+SOAP')
+            ->assertOk()
+            ->assertSee('Gross Sales Revenue')
+            ->assertSee('Returned / Refunded Sales')
+            ->assertSee('Net Sales Revenue')
+            ->assertSee('Estimated Returned COGS')
+            ->assertSee('Net Estimated Gross Profit')
+            ->assertSee('Expenses Vs Gross Profit')
+            ->assertSee('Estimated Net Profit')
+            ->assertSee('Purchase Funding Source Summary')
+            ->assertSee('RETURN PROFIT SOAP')
+            ->assertSee('BATHING SOAP')
+            ->assertSee('12 Jul 2026')
+            ->assertSee('Transport')
+            ->assertSee('Business Cash / Shop Cash')
+            ->assertSee('Supplier Credit / Not Paid Yet')
+            ->assertSee('UGX 10,000')
+            ->assertSee('UGX 2,000')
+            ->assertSee('UGX 8,000')
+            ->assertSee('UGX 6,000')
+            ->assertSee('UGX 1,200')
+            ->assertSee('UGX 4,800')
+            ->assertSee('UGX 3,200')
+            ->assertSee('UGX 700')
+            ->assertSee('UGX 2,500')
+            ->assertSee('UGX 5,000')
+            ->assertSee('UGX 3,000')
+            ->assertDontSee('Cancelled')
+            ->assertDontSee('Outside Period Expense')
+            ->assertDontSee('Draft Expense')
+            ->assertDontSee('UGX 999')
+            ->assertDontSee('UGX 888');
+
+        $this->assertSame($countsBefore['sales'], Sale::query()->count());
+        $this->assertSame($countsBefore['sale_items'], SaleItem::query()->count());
+        $this->assertSame($countsBefore['sale_returns'], SaleReturn::query()->count());
+        $this->assertSame($countsBefore['sale_return_items'], SaleReturnItem::query()->count());
+        $this->assertSame($countsBefore['purchases'], Purchase::query()->count());
+        $this->assertSame($countsBefore['expenses'], Expense::query()->count());
+        $this->assertSame($countsBefore['inventory_transactions'], InventoryTransaction::query()->count());
+        $this->assertSame($countsBefore['product_units'], ProductUnit::query()->count());
+        $this->assertEquals($pricesBefore, ProductUnit::query()->pluck('selling_price', 'id')->all());
+    }
+
     public function test_gross_profit_report_is_read_only(): void
     {
         [$product, $unit] = $this->singleUnitProduct('READ ONLY PROFIT SOAP', 500, 1000);
@@ -386,8 +459,11 @@ class FinancialReportsTest extends TestCase
         $countsBefore = [
             'sales' => Sale::query()->count(),
             'sale_items' => SaleItem::query()->count(),
+            'sale_returns' => SaleReturn::query()->count(),
+            'sale_return_items' => SaleReturnItem::query()->count(),
             'purchases' => Purchase::query()->count(),
             'purchase_items' => PurchaseItem::query()->count(),
+            'expenses' => Expense::query()->count(),
             'inventory_transactions' => InventoryTransaction::query()->count(),
             'product_units' => ProductUnit::query()->count(),
         ];
@@ -397,8 +473,11 @@ class FinancialReportsTest extends TestCase
 
         $this->assertSame($countsBefore['sales'], Sale::query()->count());
         $this->assertSame($countsBefore['sale_items'], SaleItem::query()->count());
+        $this->assertSame($countsBefore['sale_returns'], SaleReturn::query()->count());
+        $this->assertSame($countsBefore['sale_return_items'], SaleReturnItem::query()->count());
         $this->assertSame($countsBefore['purchases'], Purchase::query()->count());
         $this->assertSame($countsBefore['purchase_items'], PurchaseItem::query()->count());
+        $this->assertSame($countsBefore['expenses'], Expense::query()->count());
         $this->assertSame($countsBefore['inventory_transactions'], InventoryTransaction::query()->count());
         $this->assertSame($countsBefore['product_units'], ProductUnit::query()->count());
         $this->assertEquals($pricesBefore, ProductUnit::query()->pluck('cost_price', 'id')->all());
@@ -527,6 +606,70 @@ class FinancialReportsTest extends TestCase
             'base_quantity_out' => $baseOut,
             'conversion_factor_snapshot' => (float) $unit->conversion_factor,
             'unit_cost' => $unit->cost_price,
+        ]);
+    }
+
+    private function postSaleReturnLine(SaleItem $saleItem, string $date, float $quantity, float $unitPrice, float $lineTotal, string $status = 'posted'): SaleReturnItem
+    {
+        $saleReturn = SaleReturn::create([
+            'return_no' => sprintf('RET-REPORT-%04d', SaleReturn::query()->count() + 1),
+            'return_date' => $date,
+            'sale_id' => $saleItem->sale_id,
+            'customer_id' => null,
+            'store_id' => $this->store->id,
+            'return_type' => 'refund',
+            'returned_total' => $lineTotal,
+            'refund_amount' => $status === 'posted' ? $lineTotal : 0,
+            'store_credit_amount' => 0,
+            'status' => $status,
+        ]);
+
+        $unit = ProductUnit::query()->findOrFail($saleItem->product_unit_id);
+
+        return SaleReturnItem::create([
+            'sale_return_id' => $saleReturn->id,
+            'sale_item_id' => $saleItem->id,
+            'product_id' => $saleItem->product_id,
+            'product_unit_id' => $saleItem->product_unit_id,
+            'quantity' => $quantity,
+            'base_quantity' => $quantity * (float) $unit->conversion_factor,
+            'conversion_factor_snapshot' => (float) $unit->conversion_factor,
+            'unit_price' => $unitPrice,
+            'line_total' => $lineTotal,
+        ]);
+    }
+
+    private function postExpense(string $date, string $category, float $amount, string $status = 'posted'): Expense
+    {
+        return Expense::create([
+            'expense_no' => sprintf('EXP-REPORT-%04d', Expense::query()->count() + 1),
+            'expense_date' => $date,
+            'store_id' => $this->store->id,
+            'category' => $category,
+            'amount' => $amount,
+            'status' => $status,
+        ]);
+    }
+
+    private function postFundedPurchase(string $date, string $sourceName, float $total, float $paid, float $balance): Purchase
+    {
+        $fundingSource = PurchaseFundingSource::query()->firstOrCreate(
+            ['name' => $sourceName],
+            ['is_active' => true, 'sort_order' => PurchaseFundingSource::query()->count() * 10 + 10]
+        );
+
+        return Purchase::create([
+            'purchase_no' => sprintf('PUR-FUNDING-%04d', Purchase::query()->count() + 1),
+            'purchase_date' => $date,
+            'supplier_id' => Supplier::query()->firstOrCreate(['name' => 'Funding Report Supplier'], ['is_active' => true])->id,
+            'store_id' => $this->store->id,
+            'purchase_type' => $balance > 0 ? 'credit' : 'cash',
+            'purchase_funding_source_id' => $fundingSource->id,
+            'subtotal' => $total,
+            'total_amount' => $total,
+            'amount_paid' => $paid,
+            'balance_due' => $balance,
+            'status' => 'posted',
         ]);
     }
 
