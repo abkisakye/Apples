@@ -11,6 +11,7 @@ class EnableFractionalWholesaleProductUnits extends Command
     protected $signature = 'product-units:enable-fractional-wholesale
         {--dry-run : Preview changes without writing}
         {--commit : Write fractional wholesale settings}
+        {--rollback-excluded : Revert excluded units that were accidentally set to fractional 0.25 precision 2}
         {--min=0.25 : Minimum wholesale quantity to apply where blank}
         {--precision=2 : Minimum quantity precision to apply}
         {--include= : Comma-separated extra unit names to include}
@@ -18,34 +19,26 @@ class EnableFractionalWholesaleProductUnits extends Command
 
     protected $description = 'Safely enable fractional selling settings for likely wholesale product units.';
 
-    private const PACK_KEYWORDS = [
+    private const DEFAULT_INCLUDED_UNITS = [
         'box',
         'boxes',
         'carton',
         'cartons',
         'dozen',
         'dozens',
+    ];
+
+    private const DEFAULT_EXCLUDED_UNITS = [
         'bag',
         'bags',
         'sack',
         'sacks',
-        'packet',
-        'packets',
-        'pack',
-        'packs',
-        'crate',
-        'crates',
-        'case',
-        'cases',
-        'bundle',
-        'bundles',
-        'jerrican',
-        'jerricans',
         'tin',
         'tins',
-    ];
-
-    private const RETAIL_UNITS = [
+        'jerrican',
+        'jerricans',
+        'bottle',
+        'bottles',
         'piece',
         'pieces',
         'pc',
@@ -63,6 +56,7 @@ class EnableFractionalWholesaleProductUnits extends Command
         }
 
         $commit = (bool) $this->option('commit');
+        $rollbackExcluded = (bool) $this->option('rollback-excluded');
         $minimum = round(max((float) $this->option('min'), 0), 3);
         $precision = max((int) $this->option('precision'), 0);
         $includeNames = $this->optionNames('include');
@@ -79,19 +73,29 @@ class EnableFractionalWholesaleProductUnits extends Command
             ->orderBy('id')
             ->get();
 
-        $retailExcluded = 0;
+        $excluded = 0;
         $candidates = collect();
+        $excludedRows = collect();
 
         foreach ($units as $unit) {
             $unitName = (string) $unit->unit_name;
-            $normalized = $this->normalizeName($unitName);
+            $explicitlyIncluded = $this->matchesAnyName($unitName, $includeNames);
+            $explicitlyExcluded = $this->matchesAnyName($unitName, $excludeNames);
+            $defaultExcluded = $this->isDefaultExcludedUnit($unitName);
 
-            if (in_array($normalized, $excludeNames, true) || $this->isRetailUnit($unitName)) {
-                $retailExcluded++;
+            if ($explicitlyExcluded || ($defaultExcluded && ($rollbackExcluded || ! $explicitlyIncluded))) {
+                $excluded++;
+
+                if ($rollbackExcluded) {
+                    $candidates->push($unit);
+                } else {
+                    $excludedRows->push($unit);
+                }
+
                 continue;
             }
 
-            if ($this->isPackUnit($unitName) || in_array($normalized, $includeNames, true)) {
+            if (! $rollbackExcluded && ($this->isDefaultIncludedUnit($unitName) || $explicitlyIncluded)) {
                 $candidates->push($unit);
             }
         }
@@ -101,15 +105,13 @@ class EnableFractionalWholesaleProductUnits extends Command
         $skipped = 0;
 
         foreach ($candidates as $unit) {
-            $newFractional = true;
-            $newPrecision = max((int) $unit->quantity_precision, $precision);
             $oldMinimum = $unit->minimum_wholesale_quantity === null ? null : (float) $unit->minimum_wholesale_quantity;
-            $newMinimum = $oldMinimum !== null && $oldMinimum > 0 ? $oldMinimum : $minimum;
-
-            $shouldUpdate = ! (bool) $unit->allow_fractional_quantity
-                || (int) $unit->quantity_precision < $precision
-                || $oldMinimum === null
-                || $oldMinimum <= 0;
+            $newFractional = $rollbackExcluded ? false : true;
+            $newPrecision = $rollbackExcluded ? 0 : max((int) $unit->quantity_precision, $precision);
+            $newMinimum = $rollbackExcluded ? null : ($oldMinimum !== null && $oldMinimum > 0 ? $oldMinimum : $minimum);
+            $shouldUpdate = $rollbackExcluded
+                ? $this->shouldRollbackExcludedUnit($unit, $oldMinimum)
+                : $this->shouldEnableUnit($unit, $precision, $oldMinimum);
 
             if ($shouldUpdate) {
                 $wouldUpdate++;
@@ -126,37 +128,63 @@ class EnableFractionalWholesaleProductUnits extends Command
                 (string) $newPrecision,
                 $this->formatNullableQuantity($oldMinimum),
                 $this->formatNullableQuantity($newMinimum),
-                $shouldUpdate ? ($commit ? 'Updated' : 'Would Update') : 'Skipped',
+                $shouldUpdate
+                    ? ($rollbackExcluded ? ($commit ? 'Rolled Back' : 'Would Rollback') : ($commit ? 'Updated' : 'Would Update'))
+                    : 'Skipped',
+            ];
+        }
+
+        foreach ($excludedRows as $unit) {
+            $oldMinimum = $unit->minimum_wholesale_quantity === null ? null : (float) $unit->minimum_wholesale_quantity;
+            $rows[] = [
+                $unit->product?->name ?? 'Unknown product',
+                $unit->unit_name,
+                $unit->allow_fractional_quantity ? 'Yes' : 'No',
+                $unit->allow_fractional_quantity ? 'Yes' : 'No',
+                (string) (int) $unit->quantity_precision,
+                (string) (int) $unit->quantity_precision,
+                $this->formatNullableQuantity($oldMinimum),
+                $this->formatNullableQuantity($oldMinimum),
+                'Excluded',
             ];
         }
 
         if ($commit) {
-            DB::transaction(function () use ($candidates, $precision, $minimum): void {
+            DB::transaction(function () use ($candidates, $precision, $minimum, $rollbackExcluded): void {
                 foreach ($candidates as $unit) {
                     $oldMinimum = $unit->minimum_wholesale_quantity === null ? null : (float) $unit->minimum_wholesale_quantity;
-                    $newPrecision = max((int) $unit->quantity_precision, $precision);
-                    $newMinimum = $oldMinimum !== null && $oldMinimum > 0 ? $oldMinimum : $minimum;
-                    $shouldUpdate = ! (bool) $unit->allow_fractional_quantity
-                        || (int) $unit->quantity_precision < $precision
-                        || $oldMinimum === null
-                        || $oldMinimum <= 0;
+                    $shouldUpdate = $rollbackExcluded
+                        ? $this->shouldRollbackExcludedUnit($unit, $oldMinimum)
+                        : $this->shouldEnableUnit($unit, $precision, $oldMinimum);
 
                     if (! $shouldUpdate) {
                         continue;
                     }
 
+                    $attributes = $rollbackExcluded
+                        ? [
+                            'allow_fractional_quantity' => false,
+                            'quantity_precision' => 0,
+                            'minimum_wholesale_quantity' => null,
+                        ]
+                        : [
+                            'allow_fractional_quantity' => true,
+                            'quantity_precision' => max((int) $unit->quantity_precision, $precision),
+                            'minimum_wholesale_quantity' => $oldMinimum !== null && $oldMinimum > 0 ? $oldMinimum : $minimum,
+                        ];
+
                     ProductUnit::query()
                         ->whereKey($unit->id)
-                        ->update([
-                            'allow_fractional_quantity' => true,
-                            'quantity_precision' => $newPrecision,
-                            'minimum_wholesale_quantity' => $newMinimum,
-                        ]);
+                        ->update($attributes);
                 }
             });
         }
 
-        $this->info($commit ? 'Fractional wholesale settings committed.' : 'Dry-run only. No product units were changed.');
+        if ($rollbackExcluded) {
+            $this->info($commit ? 'Excluded unit fractional settings rolled back.' : 'Dry-run only. No excluded product units were changed.');
+        } else {
+            $this->info($commit ? 'Fractional wholesale settings committed.' : 'Dry-run only. No product units were changed.');
+        }
         $this->table([
             'Product',
             'Unit',
@@ -169,9 +197,9 @@ class EnableFractionalWholesaleProductUnits extends Command
             'Action',
         ], $rows);
         $this->line('Rows considered: '.$candidates->count());
-        $this->line(($commit ? 'Updated' : 'Would update').': '.$wouldUpdate);
+        $this->line($rollbackExcluded ? (($commit ? 'Rolled back' : 'Would rollback').': '.$wouldUpdate) : (($commit ? 'Updated' : 'Would update').': '.$wouldUpdate));
         $this->line('Skipped: '.$skipped);
-        $this->line('Excluded retail units: '.$retailExcluded);
+        $this->line('Excluded units: '.$excluded);
         $this->line('Conversion factors changed: 0');
         $this->line('Selling prices changed: 0');
         $this->line('Cost prices changed: 0');
@@ -198,22 +226,14 @@ class EnableFractionalWholesaleProductUnits extends Command
             ->all();
     }
 
-    private function isPackUnit(string $unitName): bool
+    private function isDefaultIncludedUnit(string $unitName): bool
     {
-        $normalized = $this->normalizeName($unitName);
-
-        foreach (self::PACK_KEYWORDS as $keyword) {
-            if (preg_match('/\b'.preg_quote($keyword, '/').'\b/', $normalized) === 1) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->matchesAnyName($unitName, self::DEFAULT_INCLUDED_UNITS);
     }
 
-    private function isRetailUnit(string $unitName): bool
+    private function isDefaultExcludedUnit(string $unitName): bool
     {
-        return in_array($this->normalizeName($unitName), self::RETAIL_UNITS, true);
+        return $this->matchesAnyName($unitName, self::DEFAULT_EXCLUDED_UNITS);
     }
 
     private function normalizeName(string $name): string
@@ -228,5 +248,34 @@ class EnableFractionalWholesaleProductUnits extends Command
         }
 
         return rtrim(rtrim(number_format($quantity, 3, '.', ''), '0'), '.') ?: '0';
+    }
+
+    private function shouldEnableUnit(ProductUnit $unit, int $precision, ?float $oldMinimum): bool
+    {
+        return ! (bool) $unit->allow_fractional_quantity
+            || (int) $unit->quantity_precision < $precision
+            || $oldMinimum === null
+            || $oldMinimum <= 0;
+    }
+
+    private function shouldRollbackExcludedUnit(ProductUnit $unit, ?float $oldMinimum): bool
+    {
+        return (bool) $unit->allow_fractional_quantity
+            && (int) $unit->quantity_precision === 2
+            && $oldMinimum !== null
+            && abs($oldMinimum - 0.25) < 0.0005;
+    }
+
+    private function matchesAnyName(string $unitName, array $names): bool
+    {
+        $normalized = $this->normalizeName($unitName);
+
+        foreach ($names as $name) {
+            if (preg_match('/\b'.preg_quote($name, '/').'\b/', $normalized) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
