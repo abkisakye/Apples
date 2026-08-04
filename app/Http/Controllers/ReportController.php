@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Customer;
 use App\Models\CustomerPayment;
 use App\Models\Expense;
+use App\Models\PaymentMode;
 use App\Models\Purchase;
 use App\Models\SaleItem;
 use App\Models\SaleReturn;
@@ -24,6 +25,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
@@ -58,9 +60,13 @@ class ReportController extends Controller
         ]);
     }
 
-    public function grossProfit(Request $request, FinancialReportsService $financialReportsService): View
+    public function grossProfit(Request $request, FinancialReportsService $financialReportsService): View|StreamedResponse
     {
         $data = $financialReportsService->grossProfitReport($request);
+
+        if ($request->query('export') === 'csv') {
+            return $this->grossProfitCsv($data);
+        }
 
         return view('reports.gross_profit', [
             'fromDate' => $data['fromDate'],
@@ -78,6 +84,61 @@ class ReportController extends Controller
             'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
         ]);
+    }
+
+    public function cashSalesSummary(Request $request): View|StreamedResponse
+    {
+        $data = $this->dailySalesSummaryData($request);
+        $data['title'] = 'Cash Sales Summary';
+        $data['reportTitle'] = 'Summary Cash Sales/Income by Shop Report';
+
+        if ($request->query('export') === 'csv') {
+            return $this->cashSalesSummaryCsv($data);
+        }
+
+        return view('reports.cash_sales_summary', $data);
+    }
+
+    public function incomeExpenditure(Request $request): View|StreamedResponse
+    {
+        $data = $this->incomeExpenditureData($request);
+
+        if ($request->query('export') === 'csv') {
+            return $this->incomeExpenditureCsv($data);
+        }
+
+        return view('reports.income_expenditure', $data);
+    }
+
+    public function grossMarginSummary(Request $request, FinancialReportsService $financialReportsService): View|StreamedResponse
+    {
+        $data = $financialReportsService->grossProfitReport($request);
+
+        if ($request->query('export') === 'csv') {
+            return $this->grossMarginSummaryCsv($data);
+        }
+
+        return view('reports.gross_margin_summary', [
+            'fromDate' => $data['fromDate'],
+            'toDate' => $data['toDate'],
+            'period' => $data['period'],
+            'filters' => $data['filters'],
+            'summary' => $data['summary'],
+            'productRows' => $data['productRows'],
+            'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+        ]);
+    }
+
+    public function consolidatedSalesDetail(Request $request): View|StreamedResponse
+    {
+        $data = $this->consolidatedSalesDetailData($request);
+
+        if ($request->query('export') === 'csv') {
+            return $this->consolidatedSalesDetailCsv($data);
+        }
+
+        return view('reports.consolidated_sales_detail', $data);
     }
 
     public function financialSummary(Request $request): View
@@ -625,6 +686,309 @@ class ReportController extends Controller
             'shopGroups' => $shopGroups,
             'grandTotal' => (float) $rows->sum('total_amount'),
         ];
+    }
+
+    private function incomeExpenditureData(Request $request): array
+    {
+        [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'today');
+        $storeId = (int) $request->integer('store_id');
+        $paymentModeId = (int) $request->integer('payment_mode_id');
+
+        $sales = SaleItem::query()
+            ->with([
+                'sale:id,sale_no,sale_date,store_id,payment_mode_id,status',
+                'sale.store:id,name',
+                'sale.paymentMode:id,name',
+                'product:id,name',
+                'productUnit:id,unit_name',
+            ])
+            ->whereHas('sale', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId): void {
+                $query->posted()
+                    ->whereDate('sale_date', '>=', $fromDate)
+                    ->whereDate('sale_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId));
+            })
+            ->get()
+            ->map(fn (SaleItem $item) => (object) [
+                'date' => $item->sale?->sale_date?->toDateString() ?? '',
+                'reference' => $item->sale?->sale_no ?? 'Sale',
+                'reference_url' => $item->sale ? route('sales.show', $item->sale, false) : null,
+                'store_name' => $item->sale?->store?->name ?? 'Unassigned store',
+                'account_name' => $item->sale?->paymentMode?->name ?? 'Unassigned',
+                'section' => 'Cash Sales / Income',
+                'item' => trim(($item->product?->name ?? 'Unknown product').' - '.($item->productUnit?->unit_name ?? 'Unit')),
+                'quantity' => (float) $item->quantity,
+                'rate' => (float) $item->unit_price,
+                'income' => (float) $item->line_total,
+                'expenditure' => 0.0,
+            ]);
+
+        $expenses = Expense::query()
+            ->with(['store:id,name', 'paymentMode:id,name', 'expenseCategory:id,name'])
+            ->posted()
+            ->whereDate('expense_date', '>=', $fromDate)
+            ->whereDate('expense_date', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->when($paymentModeId > 0, fn ($query) => $query->where('payment_mode_id', $paymentModeId))
+            ->get()
+            ->map(fn (Expense $expense) => (object) [
+                'date' => $expense->expense_date?->toDateString() ?? '',
+                'reference' => $expense->expense_no,
+                'reference_url' => route('expenses.show', $expense, false),
+                'store_name' => $expense->store?->name ?? 'Unassigned store',
+                'account_name' => $expense->paymentMode?->name ?? 'Unassigned',
+                'section' => 'Cash Expenses',
+                'item' => $expense->categoryName() ?: 'Expense',
+                'quantity' => null,
+                'rate' => null,
+                'income' => 0.0,
+                'expenditure' => (float) $expense->amount,
+            ]);
+
+        $rows = $sales
+            ->merge($expenses)
+            ->sortBy([
+                ['date', 'asc'],
+                ['section', 'desc'],
+                ['reference', 'asc'],
+            ])
+            ->values();
+
+        $incomeTotal = round((float) $rows->sum('income'), 2);
+        $expenditureTotal = round((float) $rows->sum('expenditure'), 2);
+
+        return [
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
+            'period' => $period,
+            'filters' => [
+                'store_id' => $storeId,
+                'payment_mode_id' => $paymentModeId,
+            ],
+            'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'rows' => $rows,
+            'incomeRows' => $rows->where('section', 'Cash Sales / Income')->values(),
+            'expenseRows' => $rows->where('section', 'Cash Expenses')->values(),
+            'bfAvailable' => false,
+            'bfAmount' => null,
+            'totalIncome' => $incomeTotal,
+            'totalExpenditure' => $expenditureTotal,
+            'netMovement' => round($incomeTotal - $expenditureTotal, 2),
+        ];
+    }
+
+    private function consolidatedSalesDetailData(Request $request): array
+    {
+        [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'today');
+        $storeId = (int) $request->integer('store_id');
+        $paymentModeId = (int) $request->integer('payment_mode_id');
+        $saleType = trim((string) $request->string('sale_type'));
+
+        $rows = SaleItem::query()
+            ->with([
+                'sale:id,sale_no,sale_date,store_id,payment_mode_id,sale_type,status',
+                'sale.store:id,name',
+                'sale.paymentMode:id,name',
+                'product:id,name',
+                'productUnit:id,unit_name',
+            ])
+            ->whereHas('sale', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId, $saleType): void {
+                $query->posted()
+                    ->whereDate('sale_date', '>=', $fromDate)
+                    ->whereDate('sale_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId))
+                    ->when($saleType !== '' && $saleType !== 'all', fn ($inner) => $inner->where('sale_type', $saleType));
+            })
+            ->get()
+            ->map(fn (SaleItem $item) => (object) [
+                'date' => $item->sale?->sale_date?->toDateString() ?? '',
+                'reference' => $item->sale?->sale_no ?? 'Sale',
+                'reference_url' => $item->sale ? route('sales.show', $item->sale, false) : null,
+                'store_id' => (int) ($item->sale?->store_id ?? 0),
+                'store_name' => $item->sale?->store?->name ?? 'Unassigned store',
+                'payment_mode' => $item->sale?->paymentMode?->name ?? 'Unassigned',
+                'sale_type' => $item->sale?->sale_type ?? 'cash',
+                'item' => trim(($item->product?->name ?? 'Unknown product').' - '.($item->productUnit?->unit_name ?? 'Unit')),
+                'quantity' => (float) $item->quantity,
+                'rate' => (float) $item->unit_price,
+                'total_amount' => (float) $item->line_total,
+            ])
+            ->sortBy([
+                ['store_name', 'asc'],
+                ['date', 'asc'],
+                ['reference', 'asc'],
+                ['item', 'asc'],
+            ])
+            ->values();
+
+        $shopGroups = $rows
+            ->groupBy('store_id')
+            ->map(fn (Collection $storeRows) => [
+                'store_name' => $storeRows->first()->store_name,
+                'rows' => $storeRows->values(),
+                'total' => round((float) $storeRows->sum('total_amount'), 2),
+            ])
+            ->values();
+
+        return [
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
+            'period' => $period,
+            'filters' => [
+                'store_id' => $storeId,
+                'payment_mode_id' => $paymentModeId,
+                'sale_type' => $saleType,
+            ],
+            'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'rows' => $rows,
+            'shopGroups' => $shopGroups,
+            'grandTotal' => round((float) $rows->sum('total_amount'), 2),
+        ];
+    }
+
+    private function cashSalesSummaryCsv(array $data): StreamedResponse
+    {
+        $rows = collect();
+
+        foreach ($data['shopGroups'] as $shopGroup) {
+            foreach ($shopGroup['saleGroups'] as $saleGroup) {
+                foreach ($saleGroup['rows'] as $index => $row) {
+                    $rows->push([
+                        $shopGroup['store_name'],
+                        $saleGroup['label'],
+                        $index + 1,
+                        $row->item_label,
+                        (float) $row->quantity,
+                        round((float) $row->average_rate, 2),
+                        round((float) $row->total_amount, 2),
+                    ]);
+                }
+            }
+        }
+
+        return $this->streamCsv('cash-sales-summary.csv', [
+            'Shop',
+            'Sale Group',
+            'S/N',
+            'Item',
+            'Qty',
+            'Av. rate',
+            'Total Amount',
+        ], $rows);
+    }
+
+    private function incomeExpenditureCsv(array $data): StreamedResponse
+    {
+        return $this->streamCsv('income-expenditure.csv', [
+            'Date',
+            'Reference',
+            'Section',
+            'Item',
+            'Qty',
+            'Rate',
+            'Income',
+            'Expenditure',
+        ], $data['rows']->map(fn ($row) => [
+            $row->date,
+            $row->reference,
+            $row->section,
+            $row->item,
+            $row->quantity,
+            $row->rate,
+            $row->income,
+            $row->expenditure,
+        ]));
+    }
+
+    private function grossMarginSummaryCsv(array $data): StreamedResponse
+    {
+        return $this->streamCsv('gross-margin-summary.csv', [
+            'Item',
+            'Qty',
+            'Sales Amount',
+            'Cost Amount',
+            'Returns/Adjustment',
+            'Gross Profit',
+            'Gross Profit %',
+            'Warning',
+        ], $data['productRows']->map(fn ($row) => [
+            $row->product_name,
+            $row->quantity_sold,
+            $row->sales_revenue,
+            $row->net_estimated_cogs,
+            $row->returned_revenue,
+            $row->has_reliable_margin ? $row->net_estimated_gross_profit : 'N/A',
+            $row->has_reliable_margin ? $row->net_margin_percent : 'N/A',
+            $row->warning_label,
+        ]));
+    }
+
+    private function grossProfitCsv(array $data): StreamedResponse
+    {
+        return $this->streamCsv('gross-profit.csv', [
+            'Product',
+            'Category',
+            'Qty Sold',
+            'Returned Qty',
+            'Gross Sales',
+            'Returns',
+            'Net Sales',
+            'Net COGS',
+            'Net Gross Profit',
+            'Net Margin %',
+            'Warning',
+        ], $data['productRows']->map(fn ($row) => [
+            $row->product_name,
+            $row->category_name,
+            $row->quantity_sold,
+            $row->quantity_returned,
+            $row->sales_revenue,
+            $row->returned_revenue,
+            $row->net_sales_revenue,
+            $row->net_estimated_cogs,
+            $row->has_reliable_margin ? $row->net_estimated_gross_profit : 'N/A',
+            $row->has_reliable_margin ? $row->net_margin_percent : 'N/A',
+            $row->warning_label,
+        ]));
+    }
+
+    private function consolidatedSalesDetailCsv(array $data): StreamedResponse
+    {
+        return $this->streamCsv('consolidated-sales-detail.csv', [
+            'Store',
+            'Date',
+            'Reference',
+            'Item',
+            'Qty',
+            'Rate',
+            'Total Amount',
+        ], $data['rows']->map(fn ($row) => [
+            $row->store_name,
+            $row->date,
+            $row->reference,
+            $row->item,
+            $row->quantity,
+            $row->rate,
+            $row->total_amount,
+        ]));
+    }
+
+    private function streamCsv(string $filename, array $headers, iterable $rows): StreamedResponse
+    {
+        return response()->streamDownload(function () use ($headers, $rows): void {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, $headers);
+
+            foreach ($rows as $row) {
+                fputcsv($handle, (array) $row);
+            }
+
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     private function saleGroupLabel(string $saleType, string $paymentModeName): string

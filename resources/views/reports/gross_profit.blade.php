@@ -4,12 +4,17 @@
     @php($currency = config('business.currency', 'UGX'))
     @php($formatQty = fn ($value) => rtrim(rtrim(number_format((float) $value, 3, '.', ''), '0'), '.') ?: '0')
     @php($formatMargin = fn ($value) => $value === null ? 'N/A' : number_format((float) $value, 2).'%')
+    @include('reports.partials.owner_print_styles')
     <div class="page-head">
         <div>
             <h2>Estimated Gross Profit</h2>
             <p>Compare posted sales revenue against estimated cost of goods by product, category, and date.</p>
         </div>
         <div class="actions">
+            <button type="button" class="button-link" onclick="window.print()">Print</button>
+            <a href="{{ request()->fullUrlWithQuery(['export' => 'csv']) }}" class="button-link">Export CSV</a>
+            <a href="{{ route('reports.gross-margin-summary', request()->query()) }}" class="button-link">Gross Margin Summary</a>
+            <a href="{{ route('reports.cash-sales-summary', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Cash Sales Summary</a>
             <a href="{{ route('reports.financial-summary', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Financial Summary</a>
             <a href="{{ route('reports.daily-sales-summary', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Daily Sales Summary</a>
             <a href="{{ route('reports.price-margins') }}" class="button-link">Cost vs Selling Price</a>
@@ -285,7 +290,7 @@
                     <tbody>
                         @forelse ($fundingRows as $row)
                             <tr>
-                                <td><strong>{{ $row->funding_source }}</strong></td>
+                                <td><a href="{{ route('purchases.index', ['q' => $row->funding_source, 'date_from' => $fromDate, 'date_to' => $toDate]) }}"><strong>{{ $row->funding_source }}</strong></a></td>
                                 <td>{{ number_format($row->purchase_count) }}</td>
                                 <td>{{ $currency }} {{ number_format($row->purchase_total, 0) }}</td>
                                 <td>{{ $currency }} {{ number_format($row->amount_paid, 0) }}</td>

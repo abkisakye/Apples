@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\Expense;
 use App\Models\InventoryTransaction;
+use App\Models\PaymentMode;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\Purchase;
@@ -449,6 +450,170 @@ class FinancialReportsTest extends TestCase
         $this->assertEquals($pricesBefore, ProductUnit::query()->pluck('selling_price', 'id')->all());
     }
 
+    public function test_cash_sales_summary_page_and_csv_group_posted_sales_by_shop_and_payment_type(): void
+    {
+        $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        [$product, $unit] = $this->singleUnitProduct('OWNER CASH SOAP', 600, 1000);
+        $saleItem = $this->postSaleLine($product, $unit, '2026-07-10', 0.25, 1000, 250, 600, 'posted', $cash->id);
+        $this->postSaleLine($product, $unit, '2026-07-10', 3, 1000, 3000, 600, 'void', $cash->id);
+
+        $response = $this->get('/reports/cash-sales-summary?date_from=2026-07-01&date_to=2026-07-31&payment_mode_id='.$cash->id);
+
+        $response->assertOk()
+            ->assertSee('Summary Cash Sales/Income by Shop Report')
+            ->assertSee('SHOP: Main Shop')
+            ->assertSee('Cash Sale')
+            ->assertSee('OWNER CASH SOAP - Pieces')
+            ->assertSee('0.25')
+            ->assertSee('UGX 250')
+            ->assertSee('Grand Total')
+            ->assertSee(route('reports.consolidated-sales-detail', [
+                'date_from' => '2026-07-01',
+                'date_to' => '2026-07-31',
+                'payment_mode_id' => $cash->id,
+            ], false))
+            ->assertDontSee('UGX 3,000');
+
+        $csv = $this->get('/reports/cash-sales-summary?date_from=2026-07-01&date_to=2026-07-31&payment_mode_id='.$cash->id.'&export=csv');
+
+        $csv->assertOk();
+        $this->assertStringContainsString('Shop,"Sale Group",S/N,Item,Qty', $csv->streamedContent());
+        $this->assertStringContainsString('OWNER CASH SOAP - Pieces', $csv->streamedContent());
+        $this->assertStringContainsString('0.25', $csv->streamedContent());
+    }
+
+    public function test_income_expenditure_report_includes_sales_income_expenses_and_links(): void
+    {
+        $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        [$product, $unit] = $this->singleUnitProduct('INCOME SOAP', 600, 1000);
+        $saleItem = $this->postSaleLine($product, $unit, '2026-07-10', 2, 1000, 2000, 600, 'posted', $cash->id);
+        $expense = $this->postExpense('2026-07-11', 'Transport', 700, 'posted', $cash->id);
+        $this->postExpense('2026-08-01', 'Outside Period', 999, 'posted', $cash->id);
+
+        $response = $this->get('/reports/income-expenditure?date_from=2026-07-01&date_to=2026-07-31&payment_mode_id='.$cash->id);
+
+        $response->assertOk()
+            ->assertSee('Income and Expenditure by Account Detailed Report')
+            ->assertSee('B/F not available in this system yet')
+            ->assertSee('Cash Sales / Income')
+            ->assertSee('Cash Expenses')
+            ->assertSee('INCOME SOAP - Pieces')
+            ->assertSee('Transport')
+            ->assertSee('UGX 2,000')
+            ->assertSee('UGX 700')
+            ->assertSee('UGX 1,300')
+            ->assertSee(route('sales.show', $saleItem->sale, false), false)
+            ->assertSee(route('expenses.show', $expense, false), false)
+            ->assertDontSee('Outside Period')
+            ->assertDontSee('UGX 999');
+
+        $csv = $this->get('/reports/income-expenditure?date_from=2026-07-01&date_to=2026-07-31&payment_mode_id='.$cash->id.'&export=csv');
+
+        $csv->assertOk();
+        $this->assertStringContainsString('Date,Reference,Section,Item,Qty,Rate,Income,Expenditure', $csv->streamedContent());
+        $this->assertStringContainsString('INCOME SOAP - Pieces', $csv->streamedContent());
+        $this->assertStringContainsString('Transport', $csv->streamedContent());
+    }
+
+    public function test_gross_margin_summary_uses_net_returns_and_avoids_fake_missing_cost_profit(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('MARGIN SOAP', 600, 1000);
+        $saleItem = $this->postSaleLine($product, $unit, '2026-07-10', 5, 1000, 5000, 600);
+        $this->postSaleReturnLine($saleItem, '2026-07-12', 1, 1000, 1000);
+        [$missingProduct, $missingUnit] = $this->singleUnitProduct('MARGIN MISSING COST', 0, 1500);
+        $this->postSaleLine($missingProduct, $missingUnit, '2026-07-10', 1, 1500, 1500, 0);
+
+        $response = $this->get('/reports/gross-margin-summary?date_from=2026-07-01&date_to=2026-07-31');
+
+        $response->assertOk()
+            ->assertSee('Consolidated Sales Summary with Gross Margins')
+            ->assertSee('MARGIN SOAP')
+            ->assertSee('UGX 5,000')
+            ->assertSee('UGX 2,400')
+            ->assertSee('UGX 1,000')
+            ->assertSee('UGX 1,600')
+            ->assertSee('40.00%')
+            ->assertSee('MARGIN MISSING COST')
+            ->assertSee('N/A')
+            ->assertSee(route('products.edit', ['product' => $product->id, 'focus' => 'units'], false), false)
+            ->assertDontSee('100.00%');
+
+        $csv = $this->get('/reports/gross-margin-summary?date_from=2026-07-01&date_to=2026-07-31&export=csv');
+
+        $csv->assertOk();
+        $this->assertStringContainsString('Item,Qty,"Sales Amount","Cost Amount"', $csv->streamedContent());
+        $this->assertStringContainsString('MARGIN SOAP', $csv->streamedContent());
+    }
+
+    public function test_consolidated_sales_detail_page_and_csv_show_receipt_lines_and_fractional_quantities(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('DETAIL SOAP', 600, 1000);
+        $saleItem = $this->postSaleLine($product, $unit, '2026-07-10', 0.5, 1000, 500, 600);
+        $this->postSaleLine($product, $unit, '2026-07-10', 2, 1000, 2000, 600, 'void');
+
+        $response = $this->get('/reports/consolidated-sales-detail?date_from=2026-07-01&date_to=2026-07-31');
+
+        $response->assertOk()
+            ->assertSee('Consolidated Cash Sales/Income Report')
+            ->assertSee('DETAIL SOAP - Pieces')
+            ->assertSee('0.5')
+            ->assertSee('UGX 500')
+            ->assertSee('Total Cash Collected')
+            ->assertSee(route('sales.show', $saleItem->sale, false), false)
+            ->assertDontSee('UGX 2,000');
+
+        $csv = $this->get('/reports/consolidated-sales-detail?date_from=2026-07-01&date_to=2026-07-31&export=csv');
+
+        $csv->assertOk();
+        $this->assertStringContainsString('Store,Date,Reference,Item,Qty,Rate,"Total Amount"', $csv->streamedContent());
+        $this->assertStringContainsString('DETAIL SOAP - Pieces', $csv->streamedContent());
+        $this->assertStringContainsString('0.5', $csv->streamedContent());
+    }
+
+    public function test_owner_print_reports_are_read_only_and_linked_from_management_centre(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('OWNER READ ONLY SOAP', 500, 1000);
+        $saleItem = $this->postSaleLine($product, $unit, '2026-07-10', 1, 1000, 1000, 500);
+        $this->postSaleReturnLine($saleItem, '2026-07-11', 0.5, 1000, 500);
+        $this->postExpense('2026-07-12', 'Rent', 300);
+
+        $countsBefore = [
+            'sales' => Sale::query()->count(),
+            'sale_items' => SaleItem::query()->count(),
+            'sale_returns' => SaleReturn::query()->count(),
+            'sale_return_items' => SaleReturnItem::query()->count(),
+            'purchases' => Purchase::query()->count(),
+            'expenses' => Expense::query()->count(),
+            'inventory_transactions' => InventoryTransaction::query()->count(),
+            'product_units' => ProductUnit::query()->count(),
+        ];
+        $pricesBefore = ProductUnit::query()->pluck('selling_price', 'id')->all();
+
+        $this->get('/reports/cash-sales-summary?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
+        $this->get('/reports/income-expenditure?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
+        $this->get('/reports/gross-margin-summary?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
+        $this->get('/reports/consolidated-sales-detail?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
+        $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&export=csv')->assertOk();
+
+        $this->get('/management-centre')
+            ->assertOk()
+            ->assertSee('Cash Sales Summary')
+            ->assertSee('Income &amp; Expenditure', false)
+            ->assertSee('Gross Margin Summary')
+            ->assertSee('Consolidated Sales Detail')
+            ->assertSee(route('reports.cash-sales-summary', [], false), false);
+
+        $this->assertSame($countsBefore['sales'], Sale::query()->count());
+        $this->assertSame($countsBefore['sale_items'], SaleItem::query()->count());
+        $this->assertSame($countsBefore['sale_returns'], SaleReturn::query()->count());
+        $this->assertSame($countsBefore['sale_return_items'], SaleReturnItem::query()->count());
+        $this->assertSame($countsBefore['purchases'], Purchase::query()->count());
+        $this->assertSame($countsBefore['expenses'], Expense::query()->count());
+        $this->assertSame($countsBefore['inventory_transactions'], InventoryTransaction::query()->count());
+        $this->assertSame($countsBefore['product_units'], ProductUnit::query()->count());
+        $this->assertEquals($pricesBefore, ProductUnit::query()->pluck('selling_price', 'id')->all());
+    }
+
     public function test_gross_profit_report_is_read_only(): void
     {
         [$product, $unit] = $this->singleUnitProduct('READ ONLY PROFIT SOAP', 500, 1000);
@@ -639,12 +804,13 @@ class FinancialReportsTest extends TestCase
         ]);
     }
 
-    private function postExpense(string $date, string $category, float $amount, string $status = 'posted'): Expense
+    private function postExpense(string $date, string $category, float $amount, string $status = 'posted', ?int $paymentModeId = null): Expense
     {
         return Expense::create([
             'expense_no' => sprintf('EXP-REPORT-%04d', Expense::query()->count() + 1),
             'expense_date' => $date,
             'store_id' => $this->store->id,
+            'payment_mode_id' => $paymentModeId,
             'category' => $category,
             'amount' => $amount,
             'status' => $status,
@@ -673,13 +839,14 @@ class FinancialReportsTest extends TestCase
         ]);
     }
 
-    private function postSaleLine(Product $product, ProductUnit $unit, string $date, float $quantity, float $unitPrice, float $lineTotal, float $costSnapshot = 0, string $status = 'posted'): SaleItem
+    private function postSaleLine(Product $product, ProductUnit $unit, string $date, float $quantity, float $unitPrice, float $lineTotal, float $costSnapshot = 0, string $status = 'posted', ?int $paymentModeId = null): SaleItem
     {
         $sale = Sale::create([
             'sale_no' => sprintf('SALE-REPORT-%04d', Sale::query()->count() + 1),
             'sale_date' => $date,
             'store_id' => $this->store->id,
             'sale_type' => 'cash',
+            'payment_mode_id' => $paymentModeId,
             'subtotal' => $lineTotal,
             'total_amount' => $lineTotal,
             'amount_paid' => $status === 'posted' ? $lineTotal : 0,

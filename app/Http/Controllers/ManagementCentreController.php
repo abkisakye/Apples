@@ -55,6 +55,10 @@ class ManagementCentreController extends Controller
                 'title' => 'Reports',
                 'summary' => 'Management reports for trading, cashiers, daily closing, and credit control.',
                 'items' => [
+                    ['label' => 'Cash Sales Summary', 'route' => 'reports.cash-sales-summary', 'ability' => 'reports.view', 'description' => 'Old-style owner sales/income summary by shop and payment type.'],
+                    ['label' => 'Income & Expenditure', 'route' => 'reports.income-expenditure', 'ability' => 'reports.view', 'description' => 'Compare posted sales income against posted expenses by account.'],
+                    ['label' => 'Gross Margin Summary', 'route' => 'reports.gross-margin-summary', 'ability' => 'reports.view', 'description' => 'Consolidated sales, returns, estimated cost, profit, and margin.'],
+                    ['label' => 'Consolidated Sales Detail', 'route' => 'reports.consolidated-sales-detail', 'ability' => 'reports.view', 'description' => 'Detailed receipt-level sales lines for owner review and printing.'],
                     ['label' => 'Daily Sales Summary', 'route' => 'reports.daily-sales-summary', 'ability' => 'reports.view', 'description' => 'Item-level sales and income by shop, payment type, quantity, and average rate.'],
                     ['label' => 'Stock Valuation', 'route' => 'reports.stock-valuation', 'ability' => 'reports.view', 'description' => 'Estimate current stock value by base stock and cost source warnings.'],
                     ['label' => 'Cost vs Selling Price', 'route' => 'reports.price-margins', 'ability' => 'reports.view', 'description' => 'Review product unit costs, selling prices, margins, and conversion warnings.'],
