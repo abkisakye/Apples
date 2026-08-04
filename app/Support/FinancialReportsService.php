@@ -136,6 +136,8 @@ class FinancialReportsService
         [$fromDate, $toDate, $period] = $this->resolveDateRange($request);
         $storeId = $request->integer('store_id');
         $categoryId = $request->integer('category_id');
+        $paymentModeId = $request->integer('payment_mode_id');
+        $userId = $request->integer('user_id');
         $search = trim((string) $request->query('q', $request->query('search', '')));
         $costStatus = (string) $request->query('cost_status', 'all');
 
@@ -147,11 +149,13 @@ class FinancialReportsService
                 'product.category:id,name',
                 'productUnit:id,product_id,unit_name,cost_price',
             ])
-            ->whereHas('sale', function ($query) use ($fromDate, $toDate, $storeId) {
+            ->whereHas('sale', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId, $userId) {
                 $query->posted()
                     ->whereDate('sale_date', '>=', $fromDate)
                     ->whereDate('sale_date', '<=', $toDate)
-                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId));
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId))
+                    ->when($userId > 0, fn ($inner) => $inner->where('created_by', $userId));
             })
             ->when($categoryId > 0, fn ($query) => $query->whereHas('product', fn ($product) => $product->where('category_id', $categoryId)))
             ->when($search !== '', fn ($query) => $this->applySaleItemSearch($query, $search))
@@ -166,12 +170,14 @@ class FinancialReportsService
                 'product.category:id,name',
                 'productUnit:id,product_id,unit_name,cost_price',
             ])
-            ->whereHas('saleReturn', function ($query) use ($fromDate, $toDate, $storeId) {
+            ->whereHas('saleReturn', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId) {
                 $query->where('status', 'posted')
                     ->whereDate('return_date', '>=', $fromDate)
                     ->whereDate('return_date', '<=', $toDate)
-                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId));
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId));
             })
+            ->when($userId > 0, fn ($query) => $query->whereHas('saleReturn.sale', fn ($sale) => $sale->where('created_by', $userId)))
             ->when($categoryId > 0, fn ($query) => $query->whereHas('product', fn ($product) => $product->where('category_id', $categoryId)))
             ->when($search !== '', fn ($query) => $this->applySaleReturnItemSearch($query, $search))
             ->get();
@@ -207,6 +213,8 @@ class FinancialReportsService
             'filters' => [
                 'store_id' => $storeId,
                 'category_id' => $categoryId,
+                'payment_mode_id' => $paymentModeId,
+                'user_id' => $userId,
                 'q' => $search,
                 'cost_status' => $costStatus,
             ],

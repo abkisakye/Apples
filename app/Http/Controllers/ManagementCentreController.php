@@ -55,6 +55,7 @@ class ManagementCentreController extends Controller
                 'title' => 'Reports',
                 'summary' => 'Management reports for trading, cashiers, daily closing, and credit control.',
                 'items' => [
+                    ['label' => 'Monthly Management Pack', 'route' => 'reports.monthly-management-pack', 'ability' => 'reports.view', 'description' => 'Owner decision report for profit direction, stock alerts, expenses, collections, and purchase funding.'],
                     ['label' => 'Daily Closing Pack', 'route' => 'reports.daily-closing-pack', 'ability' => 'reports.view', 'description' => 'Owner daily closing pack for sales, returns, expenses, profit, cashier accountability, and purchase funding.'],
                     ['label' => 'Cash Sales Summary', 'route' => 'reports.cash-sales-summary', 'ability' => 'reports.view', 'description' => 'Old-style owner sales/income summary by shop and payment type.'],
                     ['label' => 'Income & Expenditure', 'route' => 'reports.income-expenditure', 'ability' => 'reports.view', 'description' => 'Compare posted sales income against posted expenses by account.'],

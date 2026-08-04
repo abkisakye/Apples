@@ -592,6 +592,160 @@ class FinancialReportsTest extends TestCase
         }
     }
 
+    public function test_monthly_management_pack_summarizes_business_health_and_decision_alerts(): void
+    {
+        $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $mobileMoney = PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
+
+        [$profitProduct, $profitUnit] = $this->singleUnitProduct('MONTHLY PROFIT SOAP', 600, 1000);
+        $profitSaleItem = $this->postSaleLine($profitProduct, $profitUnit, '2026-07-10', 5, 1000, 5000, 600, 'posted', $cash->id);
+        $this->postSaleReturnLine($profitSaleItem, '2026-07-11', 1, 1000, 1000);
+
+        [$lowMarginProduct, $lowMarginUnit] = $this->singleUnitProduct('MONTHLY LOW MARGIN SOAP', 980, 1000);
+        $this->postSaleLine($lowMarginProduct, $lowMarginUnit, '2026-07-12', 1, 1000, 1000, 980, 'posted', $cash->id);
+
+        [$missingCostProduct, $missingCostUnit] = $this->singleUnitProduct('MONTHLY MISSING COST SOAP', 0, 1500);
+        $this->postSaleLine($missingCostProduct, $missingCostUnit, '2026-07-13', 1, 1500, 1500, 0, 'posted', $mobileMoney->id);
+        $this->postSaleLine($missingCostProduct, $missingCostUnit, '2026-08-01', 1, 1500, 1500, 0, 'posted', $mobileMoney->id);
+
+        $conversionProduct = Product::create(['name' => 'MONTHLY CONVERSION BOX SOAP', 'category_id' => $this->category->id, 'is_active' => true]);
+        ProductUnit::create([
+            'product_id' => $conversionProduct->id,
+            'unit_name' => 'Boxes',
+            'conversion_factor' => 1,
+            'cost_price' => 1000,
+            'selling_price' => 1500,
+            'is_active' => true,
+        ]);
+
+        [$slowProduct, $slowUnit] = $this->singleUnitProduct('MONTHLY SLOW STOCK SOAP', 100, 200);
+        $this->stockMovement($slowProduct, $slowUnit, 10, 0, 10, 0, 'opening_stock');
+
+        $this->postExpense('2026-07-14', 'Transport', 700, 'posted', $cash->id);
+        $this->postExpense('2026-08-01', 'Outside Period', 999, 'posted', $cash->id);
+        $this->postFundedPurchase('2026-07-15', 'Business Cash / Shop Cash', 5000, 5000, 0);
+        $this->postFundedPurchase('2026-07-16', 'Supplier Credit / Not Paid Yet', 3000, 0, 3000);
+        $this->postFundedPurchase('2026-08-01', 'Other', 999, 999, 0);
+
+        $countsBefore = [
+            'sales' => Sale::query()->count(),
+            'sale_items' => SaleItem::query()->count(),
+            'sale_returns' => SaleReturn::query()->count(),
+            'sale_return_items' => SaleReturnItem::query()->count(),
+            'purchases' => Purchase::query()->count(),
+            'expenses' => Expense::query()->count(),
+            'cash_shifts' => CashShift::query()->count(),
+            'inventory_transactions' => InventoryTransaction::query()->count(),
+            'product_units' => ProductUnit::query()->count(),
+        ];
+
+        $response = $this->get('/reports/monthly-management-pack?date_from=2026-07-01&date_to=2026-07-31');
+
+        $response->assertOk()
+            ->assertSee('Monthly Management Pack')
+            ->assertSee('Executive Summary')
+            ->assertSee('Daily Trend Table')
+            ->assertSee('Top Profitable Products')
+            ->assertSee('Top Selling Products By Revenue')
+            ->assertSee('Top Selling Products By Quantity')
+            ->assertSee('Low Margin Products')
+            ->assertSee('Missing Cost Products Sold')
+            ->assertSee('Category Performance')
+            ->assertSee('Expense Intelligence')
+            ->assertSee('Payment Collection Summary')
+            ->assertSee('Funding Source Summary')
+            ->assertSee('Stock & Margin Alerts', false)
+            ->assertSee('Fast Moving')
+            ->assertSee('Slow Moving')
+            ->assertSee('MONTHLY PROFIT SOAP - Pieces')
+            ->assertSee('MONTHLY LOW MARGIN SOAP - Pieces')
+            ->assertSee('MONTHLY MISSING COST SOAP - Pieces')
+            ->assertSee('MONTHLY CONVERSION BOX SOAP')
+            ->assertSee('MONTHLY SLOW STOCK SOAP')
+            ->assertSee('Products missing cost price')
+            ->assertSee('Products with sales but missing cost')
+            ->assertSee('Products with low margin')
+            ->assertSee('Possible pack conversion review')
+            ->assertSee('High stock value but low sales')
+            ->assertSee('Watch stock / reorder soon')
+            ->assertSee('Review price / promotion / stock level')
+            ->assertSee('Business Cash / Shop Cash')
+            ->assertSee('Supplier Credit / Not Paid Yet')
+            ->assertSee('Cash')
+            ->assertSee('Mobile Money')
+            ->assertSee('Transport')
+            ->assertSee('UGX 7,500')
+            ->assertSee('UGX 1,000')
+            ->assertSee('UGX 6,500')
+            ->assertSee('UGX 3,380')
+            ->assertSee('UGX 3,120')
+            ->assertSee('UGX 700')
+            ->assertSee('UGX 2,420')
+            ->assertSee('UGX 8,000')
+            ->assertSee('UGX 1,000')
+            ->assertSee(route('products.edit', ['product' => $profitProduct->id, 'focus' => 'units'], false), false)
+            ->assertSee('/sales?date_from=2026-07-10', false)
+            ->assertSee('/purchases?q=Business%20Cash%20%2F%20Shop%20Cash', false)
+            ->assertDontSee('Outside Period')
+            ->assertDontSee('UGX 999');
+
+        $csv = $this->get('/reports/monthly-management-pack?date_from=2026-07-01&date_to=2026-07-31&export=csv');
+
+        $csv->assertOk();
+        $csvContent = $csv->streamedContent();
+        $this->assertStringContainsString('Section,Name,"Value 1"', $csvContent);
+        $this->assertStringContainsString('"Executive Summary","gross sales",7500', $csvContent);
+        $this->assertStringContainsString('"Daily Trend",2026-07-10', $csvContent);
+        $this->assertStringContainsString('"Top Profitable Products","MONTHLY PROFIT SOAP - Pieces"', $csvContent);
+        $this->assertStringContainsString('Alerts,"MONTHLY CONVERSION BOX SOAP - Boxes","Possible pack conversion review"', $csvContent);
+        $this->assertStringContainsString('"Slow Moving","MONTHLY SLOW STOCK SOAP - Pieces"', $csvContent);
+
+        $this->assertSame($countsBefore['sales'], Sale::query()->count());
+        $this->assertSame($countsBefore['sale_items'], SaleItem::query()->count());
+        $this->assertSame($countsBefore['sale_returns'], SaleReturn::query()->count());
+        $this->assertSame($countsBefore['sale_return_items'], SaleReturnItem::query()->count());
+        $this->assertSame($countsBefore['purchases'], Purchase::query()->count());
+        $this->assertSame($countsBefore['expenses'], Expense::query()->count());
+        $this->assertSame($countsBefore['cash_shifts'], CashShift::query()->count());
+        $this->assertSame($countsBefore['inventory_transactions'], InventoryTransaction::query()->count());
+        $this->assertSame($countsBefore['product_units'], ProductUnit::query()->count());
+    }
+
+    public function test_monthly_management_pack_defaults_to_current_month_and_applies_filters(): void
+    {
+        Carbon::setTestNow('2026-07-20 09:00:00');
+
+        try {
+            $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+            $mobile = PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
+            $otherCategory = Category::create(['name' => 'FOODS']);
+            [$soapProduct, $soapUnit] = $this->singleUnitProduct('FILTERED MONTH SOAP', 500, 1000);
+            $foodProduct = Product::create(['name' => 'FILTERED FOOD RICE', 'category_id' => $otherCategory->id, 'is_active' => true]);
+            $foodUnit = ProductUnit::create([
+                'product_id' => $foodProduct->id,
+                'unit_name' => 'Pieces',
+                'conversion_factor' => 1,
+                'cost_price' => 200,
+                'selling_price' => 500,
+                'is_active' => true,
+            ]);
+
+            $this->postSaleLine($soapProduct, $soapUnit, '2026-07-05', 1, 1000, 1000, 500, 'posted', $cash->id);
+            $this->postSaleLine($foodProduct, $foodUnit, '2026-07-06', 1, 500, 500, 200, 'posted', $mobile->id);
+            $this->postSaleLine($soapProduct, $soapUnit, '2026-06-30', 1, 1000, 1000, 500, 'posted', $cash->id);
+
+            $this->get('/reports/monthly-management-pack?category_id='.$this->category->id.'&payment_mode_id='.$cash->id)
+                ->assertOk()
+                ->assertSee('Period: 01 Jul 2026 to 31 Jul 2026')
+                ->assertSee('FILTERED MONTH SOAP')
+                ->assertSee('UGX 1,000')
+                ->assertDontSee('FILTERED FOOD RICE')
+                ->assertDontSee('30 Jun 2026');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_cash_sales_summary_page_and_csv_group_posted_sales_by_shop_and_payment_type(): void
     {
         $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
@@ -736,15 +890,18 @@ class FinancialReportsTest extends TestCase
         $this->get('/reports/gross-margin-summary?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
         $this->get('/reports/consolidated-sales-detail?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
         $this->get('/reports/daily-closing-pack?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
+        $this->get('/reports/monthly-management-pack?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
         $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&export=csv')->assertOk();
 
         $this->get('/management-centre')
             ->assertOk()
+            ->assertSee('Monthly Management Pack')
             ->assertSee('Daily Closing Pack')
             ->assertSee('Cash Sales Summary')
             ->assertSee('Income &amp; Expenditure', false)
             ->assertSee('Gross Margin Summary')
             ->assertSee('Consolidated Sales Detail')
+            ->assertSee(route('reports.monthly-management-pack', [], false), false)
             ->assertSee(route('reports.daily-closing-pack', [], false), false)
             ->assertSee(route('reports.cash-sales-summary', [], false), false);
 

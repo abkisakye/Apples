@@ -153,6 +153,17 @@ class ReportController extends Controller
         return view('reports.daily_closing_pack', $data);
     }
 
+    public function monthlyManagementPack(Request $request, FinancialReportsService $financialReportsService): View|StreamedResponse
+    {
+        $data = $this->monthlyManagementPackData($request, $financialReportsService);
+
+        if ($request->query('export') === 'csv') {
+            return $this->monthlyManagementPackCsv($data);
+        }
+
+        return view('reports.monthly_management_pack', $data);
+    }
+
     public function financialSummary(Request $request): View
     {
         [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'month');
@@ -987,6 +998,528 @@ class ReportController extends Controller
             $row->rate,
             $row->total_amount,
         ]));
+    }
+
+    private function monthlyManagementPackData(Request $request, FinancialReportsService $financialReportsService): array
+    {
+        [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'month');
+        $storeId = (int) $request->integer('store_id');
+        $categoryId = (int) $request->integer('category_id');
+        $paymentModeId = (int) $request->integer('payment_mode_id');
+        $userId = (int) $request->integer('user_id');
+
+        $sharedFilters = array_filter([
+            'date_from' => $fromDate,
+            'date_to' => $toDate,
+            'store_id' => $storeId ?: null,
+            'category_id' => $categoryId ?: null,
+            'payment_mode_id' => $paymentModeId ?: null,
+            'user_id' => $userId ?: null,
+        ], fn ($value) => $value !== null && $value !== '');
+
+        $profitData = $financialReportsService->grossProfitReport(Request::create('/reports/gross-profit', 'GET', $sharedFilters));
+        $stockData = $financialReportsService->stockValuation(Request::create('/reports/stock-valuation', 'GET', array_filter([
+            'store_id' => $storeId ?: null,
+            'category_id' => $categoryId ?: null,
+            'include_zero_stock' => true,
+        ], fn ($value) => $value !== null && $value !== '')));
+        $marginData = $financialReportsService->priceMargins(Request::create('/reports/price-margins', 'GET', array_filter([
+            'category_id' => $categoryId ?: null,
+            'status' => 'all',
+        ], fn ($value) => $value !== null && $value !== '')));
+
+        $expenseRows = $this->monthlyExpenseCategoryRows($fromDate, $toDate, $storeId, $paymentModeId, $userId);
+        $expenseDailyRows = $this->monthlyExpenseDailyRows($fromDate, $toDate, $storeId, $paymentModeId, $userId);
+        $largestExpenses = $this->monthlyLargestExpenses($fromDate, $toDate, $storeId, $paymentModeId, $userId);
+        $paymentRows = $this->monthlyPaymentRows($fromDate, $toDate, $storeId, $categoryId, $paymentModeId, $userId);
+        $productUnitRows = $this->monthlyProductUnitPerformanceRows($fromDate, $toDate, $storeId, $categoryId, $paymentModeId, $userId);
+        $dailyRows = $this->monthlyDailyTrendRows($fromDate, $toDate, $profitData['dailyRows'], $expenseDailyRows);
+        $fundingRows = $profitData['fundingRows'];
+        $stockRows = $stockData['rows'];
+        $marginRows = $marginData['rows'];
+        $alerts = $this->monthlyStockMarginAlerts($marginRows, $stockRows, $productUnitRows);
+        $slowMovingRows = $this->monthlySlowMovingRows($stockRows, $productUnitRows);
+        $fastMovingRows = $productUnitRows
+            ->sortByDesc(fn ($row) => [$row->revenue, $row->quantity_sold])
+            ->take(12)
+            ->map(function ($row) {
+                $row->suggested_action = 'Watch stock / reorder soon';
+
+                return $row;
+            })
+            ->values();
+
+        $summary = $profitData['summary'];
+        $totalPurchases = round((float) $fundingRows->sum('purchase_total'), 2);
+        $supplierCredit = round((float) $fundingRows
+            ->filter(fn ($row) => str_contains(strtolower((string) $row->funding_source), 'supplier credit'))
+            ->sum('balance_due'), 2);
+        $ownerMoneyUsed = round((float) $fundingRows
+            ->filter(fn ($row) => str_contains(strtolower((string) $row->funding_source), 'owner'))
+            ->sum('amount_paid'), 2);
+        $loanMoneyUsed = round((float) $fundingRows
+            ->filter(fn ($row) => str_contains(strtolower((string) $row->funding_source), 'loan') || str_contains(strtolower((string) $row->funding_source), 'borrow'))
+            ->sum('amount_paid'), 2);
+
+        return [
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
+            'period' => $period,
+            'filters' => [
+                'store_id' => $storeId,
+                'category_id' => $categoryId,
+                'payment_mode_id' => $paymentModeId,
+                'user_id' => $userId,
+            ],
+            'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'users' => User::query()->orderBy('name')->get(['id', 'name', 'username']),
+            'summary' => [
+                'gross_sales' => $summary['sales_revenue'],
+                'returns' => $summary['returned_revenue'],
+                'net_sales' => $summary['net_sales_revenue'],
+                'estimated_cogs' => $summary['net_estimated_cogs'],
+                'estimated_gross_profit' => $summary['net_estimated_gross_profit'],
+                'expenses' => $summary['expense_total'],
+                'estimated_net_profit' => $summary['estimated_net_profit'],
+                'overall_margin_percent' => $summary['net_margin_percent'],
+                'total_purchases' => $totalPurchases,
+                'total_stock_value' => $stockData['summary']['total_estimated_stock_value'],
+                'missing_cost_count' => $stockData['summary']['products_missing_cost'],
+                'conversion_review_count' => $stockData['summary']['conversion_review_count'],
+                'supplier_credit_increase' => $supplierCredit,
+                'owner_money_used' => $ownerMoneyUsed,
+                'loan_money_used' => $loanMoneyUsed,
+                'expense_to_sales_percent' => (float) $summary['net_sales_revenue'] > 0
+                    ? round(((float) $summary['expense_total'] / (float) $summary['net_sales_revenue']) * 100, 2)
+                    : null,
+            ],
+            'dailyRows' => $dailyRows,
+            'topProfitableRows' => $productUnitRows->filter(fn ($row) => ! $row->missing_cost)->sortByDesc('profit')->take(12)->values(),
+            'topRevenueRows' => $productUnitRows->sortByDesc('revenue')->take(12)->values(),
+            'topQuantityRows' => $productUnitRows->sortByDesc('quantity_sold')->take(12)->values(),
+            'lowMarginRows' => $productUnitRows->filter(fn ($row) => $row->margin_percent !== null && $row->margin_percent < 5)->sortBy('margin_percent')->values(),
+            'missingCostRows' => $productUnitRows->filter(fn ($row) => $row->missing_cost)->values(),
+            'categoryRows' => $profitData['categoryRows'],
+            'expenseRows' => $expenseRows,
+            'expenseDailyRows' => $expenseDailyRows,
+            'largestExpenses' => $largestExpenses,
+            'paymentRows' => $paymentRows,
+            'fundingRows' => $fundingRows,
+            'alertRows' => $alerts,
+            'fastMovingRows' => $fastMovingRows,
+            'slowMovingRows' => $slowMovingRows,
+        ];
+    }
+
+    private function monthlyExpenseCategoryRows(string $fromDate, string $toDate, int $storeId, int $paymentModeId, int $userId): Collection
+    {
+        $expenses = $this->monthlyExpenseQuery($fromDate, $toDate, $storeId, $paymentModeId, $userId)->get();
+        $total = (float) $expenses->sum('amount');
+
+        return $expenses
+            ->groupBy(fn (Expense $expense) => $expense->categoryName() ?: 'Uncategorised')
+            ->map(fn (Collection $group, string $category) => (object) [
+                'category_name' => $category,
+                'expense_count' => $group->count(),
+                'amount' => round((float) $group->sum('amount'), 2),
+                'expense_percent' => $total > 0 ? round(((float) $group->sum('amount') / $total) * 100, 2) : null,
+            ])
+            ->sortByDesc('amount')
+            ->values();
+    }
+
+    private function monthlyExpenseDailyRows(string $fromDate, string $toDate, int $storeId, int $paymentModeId, int $userId): Collection
+    {
+        return $this->monthlyExpenseQuery($fromDate, $toDate, $storeId, $paymentModeId, $userId)
+            ->get()
+            ->groupBy(fn (Expense $expense) => $expense->expense_date?->toDateString() ?? '')
+            ->map(fn (Collection $group, string $date) => (object) [
+                'date' => $date,
+                'expense_count' => $group->count(),
+                'amount' => round((float) $group->sum('amount'), 2),
+            ])
+            ->sortBy('date')
+            ->values();
+    }
+
+    private function monthlyLargestExpenses(string $fromDate, string $toDate, int $storeId, int $paymentModeId, int $userId): Collection
+    {
+        return $this->monthlyExpenseQuery($fromDate, $toDate, $storeId, $paymentModeId, $userId)
+            ->orderByDesc('amount')
+            ->limit(12)
+            ->get()
+            ->map(fn (Expense $expense) => (object) [
+                'expense_id' => $expense->id,
+                'expense_no' => $expense->expense_no,
+                'expense_date' => $expense->expense_date?->toDateString(),
+                'category_name' => $expense->categoryName() ?: 'Uncategorised',
+                'amount' => (float) $expense->amount,
+                'notes' => $expense->notes,
+            ]);
+    }
+
+    private function monthlyExpenseQuery(string $fromDate, string $toDate, int $storeId, int $paymentModeId, int $userId)
+    {
+        return Expense::query()
+            ->with(['expenseCategory:id,name'])
+            ->posted()
+            ->whereDate('expense_date', '>=', $fromDate)
+            ->whereDate('expense_date', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->when($paymentModeId > 0, fn ($query) => $query->where('payment_mode_id', $paymentModeId))
+            ->when($userId > 0, fn ($query) => $query->where('created_by', $userId));
+    }
+
+    private function monthlyPaymentRows(string $fromDate, string $toDate, int $storeId, int $categoryId, int $paymentModeId, int $userId): Collection
+    {
+        $saleItems = SaleItem::query()
+            ->with(['sale:id,sale_date,store_id,payment_mode_id,created_by,status', 'sale.paymentMode:id,name', 'product:id,category_id'])
+            ->whereHas('sale', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId, $userId): void {
+                $query->posted()
+                    ->whereDate('sale_date', '>=', $fromDate)
+                    ->whereDate('sale_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId))
+                    ->when($userId > 0, fn ($inner) => $inner->where('created_by', $userId));
+            })
+            ->when($categoryId > 0, fn ($query) => $query->whereHas('product', fn ($product) => $product->where('category_id', $categoryId)))
+            ->get();
+        $returnItems = SaleReturnItem::query()
+            ->with(['saleReturn:id,sale_id,return_date,store_id,payment_mode_id,status', 'saleReturn.paymentMode:id,name', 'saleReturn.sale:id,created_by', 'product:id,category_id'])
+            ->whereHas('saleReturn', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId): void {
+                $query->where('status', 'posted')
+                    ->whereDate('return_date', '>=', $fromDate)
+                    ->whereDate('return_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId));
+            })
+            ->when($categoryId > 0, fn ($query) => $query->whereHas('product', fn ($product) => $product->where('category_id', $categoryId)))
+            ->when($userId > 0, fn ($query) => $query->whereHas('saleReturn.sale', fn ($sale) => $sale->where('created_by', $userId)))
+            ->get();
+
+        $salesByMode = $saleItems->groupBy(fn (SaleItem $item) => (int) ($item->sale?->payment_mode_id ?? 0));
+        $returnsByMode = $returnItems->groupBy(fn (SaleReturnItem $item) => (int) ($item->saleReturn?->payment_mode_id ?? 0));
+        $modeIds = $salesByMode->keys()->merge($returnsByMode->keys())->unique()->values();
+        $modeNames = PaymentMode::query()->whereIn('id', $modeIds)->pluck('name', 'id');
+
+        return $modeIds
+            ->map(function ($modeId) use ($salesByMode, $returnsByMode, $modeNames) {
+                $salesGroup = $salesByMode->get($modeId, collect());
+                $returnsGroup = $returnsByMode->get($modeId, collect());
+                $grossAmount = round((float) $salesGroup->sum('line_total'), 2);
+                $returnedAmount = round((float) $returnsGroup->sum('line_total'), 2);
+
+                return (object) [
+                    'payment_mode_id' => (int) $modeId,
+                    'payment_mode' => $modeNames[$modeId] ?? 'Unassigned',
+                    'transaction_count' => $salesGroup->pluck('sale_id')->unique()->count(),
+                    'gross_amount' => $grossAmount,
+                    'returns_amount' => $returnedAmount,
+                    'net_amount' => round($grossAmount - $returnedAmount, 2),
+                ];
+            })
+            ->sortByDesc('net_amount')
+            ->values();
+    }
+
+    private function monthlyProductUnitPerformanceRows(string $fromDate, string $toDate, int $storeId, int $categoryId, int $paymentModeId, int $userId): Collection
+    {
+        $saleItems = SaleItem::query()
+            ->with([
+                'sale:id,sale_no,sale_date,store_id,payment_mode_id,created_by,status',
+                'product:id,name,code,category_id',
+                'product.category:id,name',
+                'productUnit:id,product_id,unit_name,cost_price',
+            ])
+            ->whereHas('sale', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId, $userId): void {
+                $query->posted()
+                    ->whereDate('sale_date', '>=', $fromDate)
+                    ->whereDate('sale_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId))
+                    ->when($userId > 0, fn ($inner) => $inner->where('created_by', $userId));
+            })
+            ->when($categoryId > 0, fn ($query) => $query->whereHas('product', fn ($product) => $product->where('category_id', $categoryId)))
+            ->get();
+        $returnItems = SaleReturnItem::query()
+            ->with([
+                'saleReturn:id,sale_id,return_date,store_id,payment_mode_id,status',
+                'saleReturn.sale:id,created_by',
+                'saleItem:id,cost_price_snapshot,unit_price',
+                'product:id,name,code,category_id',
+                'product.category:id,name',
+                'productUnit:id,product_id,unit_name,cost_price',
+            ])
+            ->whereHas('saleReturn', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId): void {
+                $query->where('status', 'posted')
+                    ->whereDate('return_date', '>=', $fromDate)
+                    ->whereDate('return_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId));
+            })
+            ->when($categoryId > 0, fn ($query) => $query->whereHas('product', fn ($product) => $product->where('category_id', $categoryId)))
+            ->when($userId > 0, fn ($query) => $query->whereHas('saleReturn.sale', fn ($sale) => $sale->where('created_by', $userId)))
+            ->get();
+
+        $saleGroups = $saleItems->groupBy(fn (SaleItem $item) => $item->product_id.'-'.$item->product_unit_id);
+        $returnGroups = $returnItems->groupBy(fn (SaleReturnItem $item) => $item->product_id.'-'.$item->product_unit_id);
+
+        return $saleGroups->keys()
+            ->merge($returnGroups->keys())
+            ->unique()
+            ->map(function (string $key) use ($saleGroups, $returnGroups) {
+                $salesGroup = $saleGroups->get($key, collect());
+                $returnsGroup = $returnGroups->get($key, collect());
+                $first = $salesGroup->first() ?: $returnsGroup->first();
+                $qtySold = round((float) $salesGroup->sum('quantity'), 3);
+                $qtyReturned = round((float) $returnsGroup->sum('quantity'), 3);
+                $revenue = round((float) $salesGroup->sum('line_total'), 2);
+                $returns = round((float) $returnsGroup->sum('line_total'), 2);
+                $cost = round((float) $salesGroup->sum(function (SaleItem $item) {
+                    $unitCost = $this->dailyClosingSaleItemUnitCost($item);
+
+                    return $unitCost > 0 ? (float) $item->quantity * $unitCost : 0;
+                }), 2);
+                $returnedCost = round((float) $returnsGroup->sum(function (SaleReturnItem $item) {
+                    $unitCost = $this->dailyClosingSaleReturnItemUnitCost($item);
+
+                    return $unitCost > 0 ? (float) $item->quantity * $unitCost : 0;
+                }), 2);
+                $netRevenue = round($revenue - $returns, 2);
+                $netCost = round($cost - $returnedCost, 2);
+                $profit = round($netRevenue - $netCost, 2);
+                $missingCost = $salesGroup->contains(fn (SaleItem $item) => $this->dailyClosingSaleItemUnitCost($item) <= 0)
+                    || $returnsGroup->contains(fn (SaleReturnItem $item) => $this->dailyClosingSaleReturnItemUnitCost($item) <= 0);
+                $margin = ! $missingCost && $netRevenue > 0 ? round(($profit / $netRevenue) * 100, 2) : null;
+
+                [$status, $suggestedAction] = match (true) {
+                    $missingCost => ['Missing cost', 'Update cost price'],
+                    $profit < 0 => ['Selling below cost', 'Review selling price or buying cost'],
+                    $margin !== null && $margin < 5 => ['Low margin under 5%', 'Review margin and pricing'],
+                    default => ['OK', 'Watch stock / reorder soon'],
+                };
+
+                return (object) [
+                    'product_id' => (int) $first->product_id,
+                    'product_unit_id' => (int) $first->product_unit_id,
+                    'product_name' => $first->product?->name ?? 'Unknown product',
+                    'product_code' => $first->product?->code,
+                    'category_id' => (int) ($first->product?->category_id ?? 0),
+                    'category_name' => $first->product?->category?->name ?? 'Uncategorised',
+                    'unit_name' => $first->productUnit?->unit_name ?? 'Unit',
+                    'quantity_sold' => $qtySold,
+                    'quantity_returned' => $qtyReturned,
+                    'revenue' => $revenue,
+                    'returns' => $returns,
+                    'net_revenue' => $netRevenue,
+                    'cost' => $netCost,
+                    'profit' => $profit,
+                    'margin_percent' => $margin,
+                    'missing_cost' => $missingCost,
+                    'status' => $status,
+                    'suggested_action' => $suggestedAction,
+                ];
+            })
+            ->sortByDesc('net_revenue')
+            ->values();
+    }
+
+    private function monthlyDailyTrendRows(string $fromDate, string $toDate, Collection $profitRows, Collection $expenseDailyRows): Collection
+    {
+        $profitByDate = $profitRows->keyBy('date');
+        $expensesByDate = $expenseDailyRows->keyBy('date');
+        $rows = collect();
+        $day = Carbon::parse($fromDate);
+        $lastDay = Carbon::parse($toDate);
+
+        while ($day <= $lastDay) {
+            $date = $day->toDateString();
+            $profit = $profitByDate->get($date);
+            $expense = $expensesByDate->get($date);
+            $expenseAmount = (float) ($expense?->amount ?? 0);
+            $netGrossProfit = (float) ($profit?->net_estimated_gross_profit ?? 0);
+
+            $rows->push((object) [
+                'date' => $date,
+                'sales' => (float) ($profit?->sales_revenue ?? 0),
+                'returns' => (float) ($profit?->returned_revenue ?? 0),
+                'net_sales' => (float) ($profit?->net_sales_revenue ?? 0),
+                'estimated_gross_profit' => $netGrossProfit,
+                'expenses' => $expenseAmount,
+                'estimated_net_profit' => round($netGrossProfit - $expenseAmount, 2),
+                'margin_percent' => $profit?->net_margin_percent,
+                'sales_count' => (int) ($profit?->sales_count ?? 0),
+            ]);
+
+            $day->addDay();
+        }
+
+        return $rows;
+    }
+
+    private function monthlyStockMarginAlerts(Collection $marginRows, Collection $stockRows, Collection $productUnitRows): Collection
+    {
+        $alerts = collect();
+        $salesByProduct = $productUnitRows->groupBy('product_id')
+            ->map(fn (Collection $rows) => (object) [
+                'quantity_sold' => round((float) $rows->sum('quantity_sold'), 3),
+                'revenue' => round((float) $rows->sum('revenue'), 2),
+            ]);
+
+        foreach ($marginRows as $row) {
+            $product = $row->product;
+            $unit = $row->unit;
+            $issues = collect();
+
+            if ($row->status_key === 'missing_cost') {
+                $issues->push(['Products missing cost price', 'Update cost price']);
+            }
+            if ($row->status_key === 'selling_below_cost') {
+                $issues->push(['Products selling below cost', 'Review selling price or buying cost']);
+            }
+            if ($row->margin_percent !== null && $row->margin_percent < 5) {
+                $issues->push(['Products with low margin', 'Review margin and pricing']);
+            }
+            if ($row->selling_price <= 0) {
+                $issues->push(['Products with zero selling price', 'Update selling price']);
+            }
+            if ($row->conversion_review) {
+                $issues->push(['Possible pack conversion review', 'Review pack conversion']);
+            }
+
+            foreach ($issues as [$issue, $action]) {
+                $alerts->push((object) [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'unit_name' => $unit->unit_name,
+                    'issue' => $issue,
+                    'suggested_action' => $action,
+                    'amount' => null,
+                ]);
+            }
+        }
+
+        foreach ($productUnitRows->where('missing_cost', true) as $row) {
+            $alerts->push((object) [
+                'product_id' => $row->product_id,
+                'product_name' => $row->product_name,
+                'unit_name' => $row->unit_name,
+                'issue' => 'Products with sales but missing cost',
+                'suggested_action' => 'Update cost price',
+                'amount' => $row->revenue,
+            ]);
+        }
+
+        foreach ($stockRows as $row) {
+            $productId = (int) $row->product->id;
+            $sales = $salesByProduct->get($productId);
+
+            if ((float) $row->estimated_stock_value > 0 && (float) ($sales?->revenue ?? 0) <= 0) {
+                $alerts->push((object) [
+                    'product_id' => $productId,
+                    'product_name' => $row->product->name,
+                    'unit_name' => $row->base_unit_label,
+                    'issue' => 'High stock value but low sales',
+                    'suggested_action' => 'Review price / promotion / stock level',
+                    'amount' => $row->estimated_stock_value,
+                ]);
+            }
+        }
+
+        return $alerts
+            ->unique(fn ($row) => $row->product_id.'|'.$row->unit_name.'|'.$row->issue)
+            ->take(30)
+            ->values();
+    }
+
+    private function monthlySlowMovingRows(Collection $stockRows, Collection $productUnitRows): Collection
+    {
+        $salesByProduct = $productUnitRows->groupBy('product_id')
+            ->map(fn (Collection $rows) => (object) [
+                'quantity_sold' => round((float) $rows->sum('quantity_sold'), 3),
+                'revenue' => round((float) $rows->sum('revenue'), 2),
+            ]);
+
+        return $stockRows
+            ->filter(fn ($row) => (float) $row->base_balance > 0)
+            ->map(function ($row) use ($salesByProduct) {
+                $sales = $salesByProduct->get((int) $row->product->id);
+
+                return (object) [
+                    'product_id' => (int) $row->product->id,
+                    'product_name' => $row->product->name,
+                    'unit_name' => $row->base_unit_label,
+                    'current_stock' => $row->base_stock_label,
+                    'quantity_sold' => (float) ($sales?->quantity_sold ?? 0),
+                    'revenue' => (float) ($sales?->revenue ?? 0),
+                    'estimated_stock_value' => (float) $row->estimated_stock_value,
+                    'suggested_action' => 'Review price / promotion / stock level',
+                ];
+            })
+            ->filter(fn ($row) => $row->quantity_sold <= 0 || $row->revenue <= 0)
+            ->sortByDesc('estimated_stock_value')
+            ->take(12)
+            ->values();
+    }
+
+    private function monthlyManagementPackCsv(array $data): StreamedResponse
+    {
+        $rows = collect();
+
+        foreach ($data['summary'] as $label => $value) {
+            $rows->push(['Executive Summary', str_replace('_', ' ', $label), $value]);
+        }
+
+        foreach ($data['dailyRows'] as $row) {
+            $rows->push(['Daily Trend', $row->date, $row->sales, $row->returns, $row->net_sales, $row->estimated_gross_profit, $row->expenses, $row->estimated_net_profit, $row->margin_percent, $row->sales_count]);
+        }
+
+        foreach ($data['topProfitableRows'] as $row) {
+            $rows->push(['Top Profitable Products', $row->product_name.' - '.$row->unit_name, $row->quantity_sold, $row->revenue, $row->cost, $row->profit, $row->margin_percent, $row->status]);
+        }
+
+        foreach ($data['categoryRows'] as $row) {
+            $rows->push(['Category Performance', $row->category_name, $row->net_sales_revenue, $row->net_estimated_cogs, $row->net_estimated_gross_profit, $row->net_margin_percent, $row->products_sold, $row->warning_label]);
+        }
+
+        foreach ($data['expenseRows'] as $row) {
+            $rows->push(['Expenses', $row->category_name, $row->expense_count, $row->amount, $row->expense_percent]);
+        }
+
+        foreach ($data['paymentRows'] as $row) {
+            $rows->push(['Payment Collection', $row->payment_mode, $row->transaction_count, $row->gross_amount, $row->returns_amount, $row->net_amount]);
+        }
+
+        foreach ($data['fundingRows'] as $row) {
+            $rows->push(['Purchase Funding', $row->funding_source, $row->purchase_count, $row->purchase_total, $row->amount_paid, $row->balance_due]);
+        }
+
+        foreach ($data['alertRows'] as $row) {
+            $rows->push(['Alerts', $row->product_name.' - '.$row->unit_name, $row->issue, $row->suggested_action, $row->amount]);
+        }
+
+        foreach ($data['fastMovingRows'] as $row) {
+            $rows->push(['Fast Moving', $row->product_name.' - '.$row->unit_name, $row->quantity_sold, $row->revenue, $row->suggested_action]);
+        }
+
+        foreach ($data['slowMovingRows'] as $row) {
+            $rows->push(['Slow Moving', $row->product_name.' - '.$row->unit_name, $row->current_stock, $row->quantity_sold, $row->revenue, $row->estimated_stock_value, $row->suggested_action]);
+        }
+
+        return $this->streamCsv('monthly-management-pack.csv', [
+            'Section',
+            'Name',
+            'Value 1',
+            'Value 2',
+            'Value 3',
+            'Value 4',
+            'Value 5',
+            'Value 6',
+            'Value 7',
+            'Value 8',
+        ], $rows);
     }
 
     private function dailyClosingPackData(Request $request, FinancialReportsService $financialReportsService): array

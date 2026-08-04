@@ -9,6 +9,7 @@
             <p>This report shows sales, discounts, cost of goods sold, expenses, and profit for the selected period.</p>
         </div>
         <div class="actions">
+            <a href="{{ route('reports.monthly-management-pack', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Monthly Management Pack</a>
             <a href="{{ route('reports.daily-closing-pack', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Daily Closing Pack</a>
             <a href="{{ route('reports.cash-sales-summary', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Cash Sales Summary</a>
             <a href="{{ route('reports.income-expenditure', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Income & Expenditure</a>
