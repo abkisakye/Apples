@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
+use App\Models\CashShift;
 use App\Models\Expense;
 use App\Models\InventoryTransaction;
 use App\Models\PaymentMode;
@@ -17,6 +18,7 @@ use App\Models\SaleReturn;
 use App\Models\SaleReturnItem;
 use App\Models\Store;
 use App\Models\Supplier;
+use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -450,6 +452,146 @@ class FinancialReportsTest extends TestCase
         $this->assertEquals($pricesBefore, ProductUnit::query()->pluck('selling_price', 'id')->all());
     }
 
+    public function test_daily_closing_pack_summarizes_returns_expenses_profit_cashiers_and_funding_sources(): void
+    {
+        $cashier = auth()->user();
+        $cashier->update(['name' => 'Cashier Allan']);
+        $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $mobileMoney = PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
+
+        [$soapProduct, $soapUnit] = $this->singleUnitProduct('CLOSING SOAP', 600, 1000);
+        $soapSaleItem = $this->postSaleLine($soapProduct, $soapUnit, '2026-07-10', 2, 1000, 2000, 600, 'posted', $cash->id);
+        $soapSaleItem->sale->update(['created_by' => $cashier->id]);
+        $this->postSaleReturnLine($soapSaleItem, '2026-07-10', 0.5, 1000, 500);
+
+        [$lowMarginProduct, $lowMarginUnit] = $this->singleUnitProduct('LOW MARGIN CLOSING SOAP', 980, 1000);
+        $lowMarginSaleItem = $this->postSaleLine($lowMarginProduct, $lowMarginUnit, '2026-07-10', 1, 1000, 1000, 980, 'posted', $cash->id);
+        $lowMarginSaleItem->sale->update(['created_by' => $cashier->id]);
+
+        [$missingCostProduct, $missingCostUnit] = $this->singleUnitProduct('MISSING COST CLOSING SOAP', 0, 1500);
+        $missingCostSaleItem = $this->postSaleLine($missingCostProduct, $missingCostUnit, '2026-07-10', 0.25, 1500, 375, 0, 'posted', $cash->id);
+        $missingCostSaleItem->sale->update(['created_by' => $cashier->id]);
+
+        [$mobileProduct, $mobileUnit] = $this->singleUnitProduct('MOBILE CLOSING SOAP', 300, 500);
+        $mobileSaleItem = $this->postSaleLine($mobileProduct, $mobileUnit, '2026-07-10', 1, 500, 500, 300, 'posted', $mobileMoney->id);
+        $mobileSaleItem->sale->update(['created_by' => $cashier->id]);
+        $this->postSaleLine($mobileProduct, $mobileUnit, '2026-07-10', 9, 9999, 9999, 300, 'void', $cash->id);
+
+        $expense = $this->postExpense('2026-07-10', 'Transport', 300, 'posted', $cash->id);
+        $expense->update(['created_by' => $cashier->id]);
+        $this->postExpense('2026-08-01', 'Outside Period', 999, 'posted', $cash->id);
+        $this->postFundedPurchase('2026-07-10', 'Business Cash / Shop Cash', 1000, 1000, 0);
+        $this->postFundedPurchase('2026-07-10', 'Supplier Credit / Not Paid Yet', 2000, 0, 2000);
+
+        CashShift::create([
+            'shift_no' => 'SHIFT-DAILY-0001',
+            'store_id' => $this->store->id,
+            'user_id' => $cashier->id,
+            'opened_at' => '2026-07-10 08:00:00',
+            'closed_at' => '2026-07-10 20:00:00',
+            'opening_balance' => 100,
+            'cash_sales_total' => 3375,
+            'cash_expenses_total' => 300,
+            'expected_cash' => 1800,
+            'counted_cash' => 1750,
+            'shortage_overage' => -50,
+            'status' => 'closed',
+        ]);
+
+        $countsBefore = [
+            'sales' => Sale::query()->count(),
+            'sale_items' => SaleItem::query()->count(),
+            'sale_returns' => SaleReturn::query()->count(),
+            'sale_return_items' => SaleReturnItem::query()->count(),
+            'purchases' => Purchase::query()->count(),
+            'expenses' => Expense::query()->count(),
+            'cash_shifts' => CashShift::query()->count(),
+            'inventory_transactions' => InventoryTransaction::query()->count(),
+            'product_units' => ProductUnit::query()->count(),
+        ];
+
+        $response = $this->get('/reports/daily-closing-pack?date_from=2026-07-10&date_to=2026-07-10');
+
+        $response->assertOk()
+            ->assertSee('Daily Owner Closing Pack / Cashier Accountability Report')
+            ->assertSee('Cashier / User Summary')
+            ->assertSee('Payment Mode Summary')
+            ->assertSee('Income and Expenditure Summary')
+            ->assertSee('Profit Summary')
+            ->assertSee('Top Items Sold')
+            ->assertSee('Low Margin / Warning Items')
+            ->assertSee('Purchases Funding Summary')
+            ->assertSee('Cash handover data available')
+            ->assertSee('Cashier Allan')
+            ->assertSee('Cash')
+            ->assertSee('Mobile Money')
+            ->assertSee('CLOSING SOAP - Pieces')
+            ->assertSee('LOW MARGIN CLOSING SOAP - Pieces')
+            ->assertSee('MISSING COST CLOSING SOAP - Pieces')
+            ->assertSee('0.25')
+            ->assertSee('Low margin under 5%')
+            ->assertSee('Missing cost')
+            ->assertSee('Business Cash / Shop Cash')
+            ->assertSee('Supplier Credit / Not Paid Yet')
+            ->assertSee('B/F not available in this system yet')
+            ->assertSee('UGX 3,875')
+            ->assertSee('UGX 500')
+            ->assertSee('UGX 3,375')
+            ->assertSee('UGX 1,800')
+            ->assertSee('UGX 1,750')
+            ->assertSee('UGX -50')
+            ->assertSee('UGX 300')
+            ->assertSee('UGX 1,195')
+            ->assertSee('UGX 895')
+            ->assertSee('/sales?q=Cashier%20Allan', false)
+            ->assertSee('/purchases?q=Business%20Cash%20%2F%20Shop%20Cash', false)
+            ->assertDontSee('Outside Period')
+            ->assertDontSee('UGX 9,999');
+
+        $csv = $this->get('/reports/daily-closing-pack?date_from=2026-07-10&date_to=2026-07-10&export=csv');
+
+        $csv->assertOk();
+        $csvContent = $csv->streamedContent();
+        $this->assertStringContainsString('Section,Name,"Value 1"', $csvContent);
+        $this->assertStringContainsString('"Payment Mode",Cash', $csvContent);
+        $this->assertStringContainsString('Cashier,"Cashier Allan"', $csvContent);
+        $this->assertStringContainsString('"Top Item","CLOSING SOAP - Pieces"', $csvContent);
+        $this->assertStringContainsString('"Purchase Funding","Business Cash / Shop Cash"', $csvContent);
+
+        $this->assertSame($countsBefore['sales'], Sale::query()->count());
+        $this->assertSame($countsBefore['sale_items'], SaleItem::query()->count());
+        $this->assertSame($countsBefore['sale_returns'], SaleReturn::query()->count());
+        $this->assertSame($countsBefore['sale_return_items'], SaleReturnItem::query()->count());
+        $this->assertSame($countsBefore['purchases'], Purchase::query()->count());
+        $this->assertSame($countsBefore['expenses'], Expense::query()->count());
+        $this->assertSame($countsBefore['cash_shifts'], CashShift::query()->count());
+        $this->assertSame($countsBefore['inventory_transactions'], InventoryTransaction::query()->count());
+        $this->assertSame($countsBefore['product_units'], ProductUnit::query()->count());
+    }
+
+    public function test_daily_closing_pack_defaults_to_today_and_reports_missing_cash_handover_data(): void
+    {
+        Carbon::setTestNow('2026-07-10 09:00:00');
+
+        try {
+            $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+            [$todayProduct, $todayUnit] = $this->singleUnitProduct('TODAY CLOSING SOAP', 500, 1000);
+            [$oldProduct, $oldUnit] = $this->singleUnitProduct('YESTERDAY CLOSING SOAP', 500, 1000);
+
+            $this->postSaleLine($todayProduct, $todayUnit, '2026-07-10', 1, 1000, 1000, 500, 'posted', $cash->id);
+            $this->postSaleLine($oldProduct, $oldUnit, '2026-07-09', 1, 1000, 1000, 500, 'posted', $cash->id);
+
+            $this->get('/reports/daily-closing-pack')
+                ->assertOk()
+                ->assertSee('Period: 10 Jul 2026 to 10 Jul 2026')
+                ->assertSee('TODAY CLOSING SOAP')
+                ->assertSee('Cash handover data not available.')
+                ->assertDontSee('YESTERDAY CLOSING SOAP');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_cash_sales_summary_page_and_csv_group_posted_sales_by_shop_and_payment_type(): void
     {
         $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
@@ -593,14 +735,17 @@ class FinancialReportsTest extends TestCase
         $this->get('/reports/income-expenditure?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
         $this->get('/reports/gross-margin-summary?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
         $this->get('/reports/consolidated-sales-detail?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
+        $this->get('/reports/daily-closing-pack?date_from=2026-07-01&date_to=2026-07-31')->assertOk();
         $this->get('/reports/gross-profit?date_from=2026-07-01&date_to=2026-07-31&export=csv')->assertOk();
 
         $this->get('/management-centre')
             ->assertOk()
+            ->assertSee('Daily Closing Pack')
             ->assertSee('Cash Sales Summary')
             ->assertSee('Income &amp; Expenditure', false)
             ->assertSee('Gross Margin Summary')
             ->assertSee('Consolidated Sales Detail')
+            ->assertSee(route('reports.daily-closing-pack', [], false), false)
             ->assertSee(route('reports.cash-sales-summary', [], false), false);
 
         $this->assertSame($countsBefore['sales'], Sale::query()->count());

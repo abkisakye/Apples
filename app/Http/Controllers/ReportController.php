@@ -11,6 +11,7 @@ use App\Models\PaymentMode;
 use App\Models\Purchase;
 use App\Models\SaleItem;
 use App\Models\SaleReturn;
+use App\Models\SaleReturnItem;
 use App\Models\Sale;
 use App\Models\Store;
 use App\Models\Supplier;
@@ -139,6 +140,17 @@ class ReportController extends Controller
         }
 
         return view('reports.consolidated_sales_detail', $data);
+    }
+
+    public function dailyClosingPack(Request $request, FinancialReportsService $financialReportsService): View|StreamedResponse
+    {
+        $data = $this->dailyClosingPackData($request, $financialReportsService);
+
+        if ($request->query('export') === 'csv') {
+            return $this->dailyClosingPackCsv($data);
+        }
+
+        return view('reports.daily_closing_pack', $data);
     }
 
     public function financialSummary(Request $request): View
@@ -975,6 +987,347 @@ class ReportController extends Controller
             $row->rate,
             $row->total_amount,
         ]));
+    }
+
+    private function dailyClosingPackData(Request $request, FinancialReportsService $financialReportsService): array
+    {
+        [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'today');
+        $storeId = (int) $request->integer('store_id');
+        $paymentModeId = (int) $request->integer('payment_mode_id');
+        $userId = (int) $request->integer('user_id');
+
+        $sales = Sale::query()
+            ->with(['paymentMode:id,name', 'createdBy:id,name,username', 'store:id,name'])
+            ->posted()
+            ->whereDate('sale_date', '>=', $fromDate)
+            ->whereDate('sale_date', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->when($paymentModeId > 0, fn ($query) => $query->where('payment_mode_id', $paymentModeId))
+            ->when($userId > 0, fn ($query) => $query->where('created_by', $userId))
+            ->get();
+
+        $saleItems = SaleItem::query()
+            ->with([
+                'sale:id,sale_no,sale_date,store_id,payment_mode_id,sale_type,status,created_by',
+                'sale.paymentMode:id,name',
+                'sale.createdBy:id,name,username',
+                'product:id,name,code,category_id',
+                'productUnit:id,product_id,unit_name,cost_price',
+            ])
+            ->whereHas('sale', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId, $userId): void {
+                $query->posted()
+                    ->whereDate('sale_date', '>=', $fromDate)
+                    ->whereDate('sale_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId))
+                    ->when($userId > 0, fn ($inner) => $inner->where('created_by', $userId));
+            })
+            ->get();
+
+        $returnItems = SaleReturnItem::query()
+            ->with([
+                'saleReturn:id,sale_id,return_no,return_date,store_id,payment_mode_id,status',
+                'saleReturn.sale:id,created_by',
+                'saleReturn.paymentMode:id,name',
+                'saleReturn.sale.createdBy:id,name,username',
+                'saleItem:id,cost_price_snapshot,unit_price',
+                'product:id,name,code',
+                'productUnit:id,product_id,unit_name,cost_price',
+            ])
+            ->whereHas('saleReturn', function ($query) use ($fromDate, $toDate, $storeId, $paymentModeId): void {
+                $query->where('status', 'posted')
+                    ->whereDate('return_date', '>=', $fromDate)
+                    ->whereDate('return_date', '<=', $toDate)
+                    ->when($storeId > 0, fn ($inner) => $inner->where('store_id', $storeId))
+                    ->when($paymentModeId > 0, fn ($inner) => $inner->where('payment_mode_id', $paymentModeId));
+            })
+            ->when($userId > 0, fn ($query) => $query->whereHas('saleReturn.sale', fn ($sale) => $sale->where('created_by', $userId)))
+            ->get();
+
+        $expenses = Expense::query()
+            ->with(['store:id,name', 'paymentMode:id,name', 'expenseCategory:id,name', 'creator:id,name,username'])
+            ->posted()
+            ->whereDate('expense_date', '>=', $fromDate)
+            ->whereDate('expense_date', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->when($paymentModeId > 0, fn ($query) => $query->where('payment_mode_id', $paymentModeId))
+            ->when($userId > 0, fn ($query) => $query->where('created_by', $userId))
+            ->get();
+
+        $shiftRows = CashShift::query()
+            ->with(['user:id,name,username', 'store:id,name'])
+            ->whereDate('opened_at', '>=', $fromDate)
+            ->whereDate('opened_at', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->when($userId > 0, fn ($query) => $query->where('user_id', $userId))
+            ->get();
+
+        $profitRequest = Request::create('/reports/gross-profit', 'GET', array_filter([
+            'date_from' => $fromDate,
+            'date_to' => $toDate,
+            'store_id' => $storeId ?: null,
+        ], fn ($value) => $value !== null));
+        $profitData = $financialReportsService->grossProfitReport($profitRequest);
+        $fundingRows = $profitData['fundingRows'];
+
+        $grossSales = round((float) $saleItems->sum('line_total'), 2);
+        $returnedSales = round((float) $returnItems->sum('line_total'), 2);
+        $netSales = round($grossSales - $returnedSales, 2);
+        $expenseTotal = round((float) $expenses->sum('amount'), 2);
+        $profitSummary = $this->dailyClosingProfitSummary($saleItems, $returnItems, $grossSales, $returnedSales);
+
+        $saleItemsByPayment = $saleItems->groupBy(fn (SaleItem $item) => (int) ($item->sale?->payment_mode_id ?? 0));
+        $returnItemsByPayment = $returnItems->groupBy(fn (SaleReturnItem $item) => (int) ($item->saleReturn?->payment_mode_id ?? 0));
+        $modeIds = $saleItemsByPayment->keys()->merge($returnItemsByPayment->keys())->filter()->unique()->values();
+        $modeNames = PaymentMode::query()->whereIn('id', $modeIds)->pluck('name', 'id');
+
+        $paymentRows = $modeIds
+            ->map(function ($modeId) use ($saleItemsByPayment, $returnItemsByPayment, $modeNames) {
+                $salesGroup = $saleItemsByPayment->get($modeId, collect());
+                $returnsGroup = $returnItemsByPayment->get($modeId, collect());
+                $salesAmount = round((float) $salesGroup->sum('line_total'), 2);
+                $returnsAmount = round((float) $returnsGroup->sum('line_total'), 2);
+
+                return (object) [
+                    'payment_mode_id' => (int) $modeId,
+                    'payment_mode' => $modeNames[$modeId] ?? 'Unassigned',
+                    'transaction_count' => $salesGroup->pluck('sale_id')->unique()->count(),
+                    'total_amount' => $salesAmount,
+                    'returned_amount' => $returnsAmount,
+                    'net_amount' => round($salesAmount - $returnsAmount, 2),
+                ];
+            })
+            ->sortByDesc('net_amount')
+            ->values();
+
+        $cashSales = $this->sumSalesByPaymentKeyword($saleItems, ['cash']);
+        $mobileMoneySales = $this->sumSalesByPaymentKeyword($saleItems, ['mobile', 'momo', 'money']);
+        $bankCardSales = $this->sumSalesByPaymentKeyword($saleItems, ['bank', 'card', 'visa', 'master']);
+        $creditSales = round((float) $saleItems->filter(fn (SaleItem $item) => ($item->sale?->sale_type ?? '') === 'credit')->sum('line_total'), 2);
+
+        $cashierRows = $this->dailyClosingCashierRows($saleItems, $returnItems, $expenses, $shiftRows);
+        $topItems = $this->dailyClosingTopItems($saleItems);
+        $warningItems = $topItems
+            ->filter(fn ($row) => $row->warning_key !== 'ok')
+            ->values();
+
+        return [
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
+            'period' => $period,
+            'filters' => [
+                'store_id' => $storeId,
+                'payment_mode_id' => $paymentModeId,
+                'user_id' => $userId,
+            ],
+            'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'users' => User::query()->orderBy('name')->get(['id', 'name', 'username']),
+            'summary' => [
+                'gross_sales' => $grossSales,
+                'returned_sales' => $returnedSales,
+                'net_sales' => $netSales,
+                'cash_sales' => $cashSales,
+                'mobile_money_sales' => $mobileMoneySales,
+                'bank_card_sales' => $bankCardSales,
+                'credit_sales' => $creditSales,
+                'expenses' => $expenseTotal,
+                'estimated_gross_profit' => $profitSummary['net_estimated_gross_profit'],
+                'estimated_net_profit' => round((float) $profitSummary['net_estimated_gross_profit'] - $expenseTotal, 2),
+                'net_estimated_cogs' => $profitSummary['net_estimated_cogs'],
+                'margin_percent' => $profitSummary['net_margin_percent'],
+                'expected_cash' => round((float) $shiftRows->sum('expected_cash'), 2),
+                'handover_amount' => round((float) $shiftRows->sum(fn (CashShift $shift) => (float) ($shift->counted_cash ?? 0)), 2),
+                'cash_difference' => round((float) $shiftRows->sum(fn (CashShift $shift) => (float) ($shift->shortage_overage ?? 0)), 2),
+                'cash_handover_available' => $shiftRows->isNotEmpty(),
+                'brought_forward_available' => false,
+                'net_movement' => round($netSales - $expenseTotal, 2),
+            ],
+            'paymentRows' => $paymentRows,
+            'cashierRows' => $cashierRows,
+            'topItems' => $topItems->take(12)->values(),
+            'warningItems' => $warningItems,
+            'expenseRows' => $expenses,
+            'fundingRows' => $fundingRows,
+        ];
+    }
+
+    private function dailyClosingProfitSummary(Collection $saleItems, Collection $returnItems, float $grossSales, float $returnedSales): array
+    {
+        $estimatedCogs = round((float) $saleItems->sum(function (SaleItem $item) {
+            $unitCost = $this->dailyClosingSaleItemUnitCost($item);
+
+            return $unitCost > 0 ? (float) $item->quantity * $unitCost : 0;
+        }), 2);
+        $returnedCogs = round((float) $returnItems->sum(function (SaleReturnItem $item) {
+            $unitCost = $this->dailyClosingSaleReturnItemUnitCost($item);
+
+            return $unitCost > 0 ? (float) $item->quantity * $unitCost : 0;
+        }), 2);
+        $netRevenue = round($grossSales - $returnedSales, 2);
+        $netCogs = round($estimatedCogs - $returnedCogs, 2);
+        $netGrossProfit = round($netRevenue - $netCogs, 2);
+        $hasMissingCost = $saleItems->contains(fn (SaleItem $item) => $this->dailyClosingSaleItemUnitCost($item) <= 0)
+            || $returnItems->contains(fn (SaleReturnItem $item) => $this->dailyClosingSaleReturnItemUnitCost($item) <= 0);
+
+        return [
+            'estimated_cogs' => $estimatedCogs,
+            'returned_cogs' => $returnedCogs,
+            'net_estimated_cogs' => $netCogs,
+            'net_estimated_gross_profit' => $netGrossProfit,
+            'net_margin_percent' => $hasMissingCost || $netRevenue <= 0 ? null : round(($netGrossProfit / $netRevenue) * 100, 2),
+            'missing_cost_lines' => $saleItems->filter(fn (SaleItem $item) => $this->dailyClosingSaleItemUnitCost($item) <= 0)->count()
+                + $returnItems->filter(fn (SaleReturnItem $item) => $this->dailyClosingSaleReturnItemUnitCost($item) <= 0)->count(),
+        ];
+    }
+
+    private function dailyClosingSaleItemUnitCost(SaleItem $item): float
+    {
+        $snapshot = (float) $item->cost_price_snapshot;
+
+        return $snapshot > 0 ? $snapshot : (float) ($item->productUnit?->cost_price ?? 0);
+    }
+
+    private function dailyClosingSaleReturnItemUnitCost(SaleReturnItem $item): float
+    {
+        $snapshot = (float) ($item->saleItem?->cost_price_snapshot ?? 0);
+
+        return $snapshot > 0 ? $snapshot : (float) ($item->productUnit?->cost_price ?? 0);
+    }
+
+    private function dailyClosingCashierRows(Collection $saleItems, Collection $returnItems, Collection $expenses, Collection $shiftRows): Collection
+    {
+        $userIds = $saleItems->pluck('sale.created_by')
+            ->merge($returnItems->pluck('saleReturn.sale.created_by'))
+            ->merge($expenses->pluck('created_by'))
+            ->merge($shiftRows->pluck('user_id'))
+            ->filter()
+            ->unique()
+            ->values();
+        $users = User::query()->whereIn('id', $userIds)->get(['id', 'name', 'username'])->keyBy('id');
+
+        return $userIds->map(function ($userId) use ($users, $saleItems, $returnItems, $expenses, $shiftRows) {
+            $userSaleItems = $saleItems->filter(fn (SaleItem $item) => (int) ($item->sale?->created_by ?? 0) === (int) $userId);
+            $userReturnItems = $returnItems->filter(fn (SaleReturnItem $item) => (int) ($item->saleReturn?->sale?->created_by ?? 0) === (int) $userId);
+            $userExpenses = $expenses->where('created_by', $userId);
+            $userShifts = $shiftRows->where('user_id', $userId);
+            $user = $users[$userId] ?? null;
+
+            return (object) [
+                'user_id' => (int) $userId,
+                'cashier' => $user?->name ?? $user?->username ?? 'Unassigned',
+                'sales_count' => $userSaleItems->pluck('sale_id')->unique()->count(),
+                'cash_sales' => $this->sumSalesByPaymentKeyword($userSaleItems, ['cash']),
+                'mobile_money_sales' => $this->sumSalesByPaymentKeyword($userSaleItems, ['mobile', 'momo', 'money']),
+                'credit_sales' => round((float) $userSaleItems->filter(fn (SaleItem $item) => ($item->sale?->sale_type ?? '') === 'credit')->sum('line_total'), 2),
+                'returns' => round((float) $userReturnItems->sum('line_total'), 2),
+                'expenses' => round((float) $userExpenses->sum('amount'), 2),
+                'expected_cash' => round((float) $userShifts->sum('expected_cash'), 2),
+                'handover_amount' => round((float) $userShifts->sum(fn (CashShift $shift) => (float) ($shift->counted_cash ?? 0)), 2),
+                'difference' => round((float) $userShifts->sum(fn (CashShift $shift) => (float) ($shift->shortage_overage ?? 0)), 2),
+                'handover_available' => $userShifts->isNotEmpty(),
+            ];
+        })->sortBy('cashier')->values();
+    }
+
+    private function dailyClosingTopItems(Collection $saleItems): Collection
+    {
+        return $saleItems
+            ->groupBy(fn (SaleItem $item) => $item->product_id.'-'.$item->product_unit_id)
+            ->map(function (Collection $group) {
+                $first = $group->first();
+                $qty = round((float) $group->sum('quantity'), 3);
+                $salesAmount = round((float) $group->sum('line_total'), 2);
+                $costAmount = round((float) $group->sum(function (SaleItem $item) {
+                    $unitCost = $this->dailyClosingSaleItemUnitCost($item);
+
+                    return $unitCost > 0 ? (float) $item->quantity * $unitCost : 0;
+                }), 2);
+                $hasMissingCost = $group->contains(fn (SaleItem $item) => $this->dailyClosingSaleItemUnitCost($item) <= 0);
+                $profit = round($salesAmount - $costAmount, 2);
+                $margin = ! $hasMissingCost && $salesAmount > 0 ? round(($profit / $salesAmount) * 100, 2) : null;
+
+                [$warningKey, $warningLabel] = match (true) {
+                    $hasMissingCost => ['missing_cost', 'Missing cost'],
+                    $profit < 0 => ['below_cost', 'Selling below cost'],
+                    $margin !== null && $margin < 5 => ['low_margin', 'Low margin under 5%'],
+                    default => ['ok', 'OK'],
+                };
+
+                return (object) [
+                    'product_id' => (int) $first->product_id,
+                    'product_unit_id' => (int) $first->product_unit_id,
+                    'item' => trim(($first->product?->name ?? 'Unknown product').' - '.($first->productUnit?->unit_name ?? 'Unit')),
+                    'quantity' => $qty,
+                    'average_rate' => $qty != 0.0 ? round($salesAmount / $qty, 2) : 0.0,
+                    'sales_amount' => $salesAmount,
+                    'cost_amount' => $costAmount,
+                    'estimated_gross_profit' => $hasMissingCost ? null : $profit,
+                    'margin_percent' => $margin,
+                    'warning_key' => $warningKey,
+                    'warning_label' => $warningLabel,
+                ];
+            })
+            ->sortByDesc('sales_amount')
+            ->values();
+    }
+
+    private function sumSalesByPaymentKeyword(Collection $saleItems, array $keywords): float
+    {
+        return round((float) $saleItems
+            ->filter(function (SaleItem $item) use ($keywords) {
+                $mode = strtolower((string) ($item->sale?->paymentMode?->name ?? ''));
+
+                return collect($keywords)->contains(fn (string $keyword) => str_contains($mode, $keyword));
+            })
+            ->sum('line_total'), 2);
+    }
+
+    private function dailyClosingPackCsv(array $data): StreamedResponse
+    {
+        $rows = collect();
+
+        foreach ($data['summary'] as $label => $value) {
+            if (is_bool($value)) {
+                $value = $value ? 'Yes' : 'No';
+            }
+
+            $rows->push(['Summary', str_replace('_', ' ', $label), $value]);
+        }
+
+        foreach ($data['paymentRows'] as $row) {
+            $rows->push(['Payment Mode', $row->payment_mode, $row->transaction_count, $row->total_amount, $row->returned_amount, $row->net_amount]);
+        }
+
+        foreach ($data['cashierRows'] as $row) {
+            $rows->push(['Cashier', $row->cashier, $row->sales_count, $row->cash_sales, $row->mobile_money_sales, $row->credit_sales, $row->returns, $row->expenses, $row->expected_cash, $row->handover_amount, $row->difference]);
+        }
+
+        foreach ($data['topItems'] as $row) {
+            $rows->push(['Top Item', $row->item, $row->quantity, $row->average_rate, $row->sales_amount, $row->estimated_gross_profit ?? 'N/A', $row->margin_percent ?? 'N/A']);
+        }
+
+        foreach ($data['warningItems'] as $row) {
+            $rows->push(['Warning Item', $row->item, $row->quantity, $row->sales_amount, $row->cost_amount, $row->estimated_gross_profit ?? 'N/A', $row->margin_percent ?? 'N/A', $row->warning_label]);
+        }
+
+        foreach ($data['fundingRows'] as $row) {
+            $rows->push(['Purchase Funding', $row->funding_source, $row->purchase_count, $row->purchase_total, $row->amount_paid, $row->balance_due]);
+        }
+
+        return $this->streamCsv('daily-closing-pack.csv', [
+            'Section',
+            'Name',
+            'Value 1',
+            'Value 2',
+            'Value 3',
+            'Value 4',
+            'Value 5',
+            'Value 6',
+            'Value 7',
+            'Value 8',
+            'Value 9',
+        ], $rows);
     }
 
     private function streamCsv(string $filename, array $headers, iterable $rows): StreamedResponse
