@@ -3848,7 +3848,8 @@ class WorkflowTest extends TestCase
             ->assertSee($duplicateWarning)
             ->assertSee($fractionalGuidance)
             ->assertSee('Minimum Wholesale Qty')
-            ->assertSee('Example: 0.25');
+            ->assertSee('Example: 0.25')
+            ->assertSee('php artisan product-units:enable-fractional-wholesale --dry-run');
 
         $this->get('/products/'.$product->id.'/edit')
             ->assertOk()
@@ -3856,7 +3857,8 @@ class WorkflowTest extends TestCase
             ->assertSee($duplicateWarning)
             ->assertSee($fractionalGuidance)
             ->assertSee('Minimum Wholesale Qty')
-            ->assertSee('Example: 0.25');
+            ->assertSee('Example: 0.25')
+            ->assertSee('php artisan product-units:enable-fractional-wholesale --dry-run');
     }
 
     public function test_product_unit_base_conversion_metadata_can_be_saved_without_changing_stock_behavior(): void

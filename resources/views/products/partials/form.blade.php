@@ -196,6 +196,7 @@
                         <h3 class="form-section-title">Units & Selling Packs</h3>
                         <p class="list-note">Create one product, then add all selling packs/units such as piece, dozen, box, carton, sack, bundle, bottle, tin, half carton where applicable.</p>
                         <p class="list-note">Allow fractional quantities for wholesale packs such as 0.25, 0.5, or 0.75 carton. Use minimum wholesale quantity to prevent selling very small fractions at wholesale price.</p>
+                        <p class="list-note">To apply fractional wholesale to all pack units, run <code>php artisan product-units:enable-fractional-wholesale --dry-run</code>, review the rows, then run with <code>--commit</code>.</p>
                     </div>
                     <button type="button" class="button-link" id="add-unit-row">Add Another Unit</button>
                 </div>
