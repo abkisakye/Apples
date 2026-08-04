@@ -119,6 +119,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/reports/consolidated-sales-detail', [ReportController::class, 'consolidatedSalesDetail'])->middleware('ability:reports.view')->name('reports.consolidated-sales-detail');
     Route::get('/reports/daily-closing-pack', [ReportController::class, 'dailyClosingPack'])->middleware('ability:reports.view')->name('reports.daily-closing-pack');
     Route::get('/reports/monthly-management-pack', [ReportController::class, 'monthlyManagementPack'])->middleware('ability:reports.view')->name('reports.monthly-management-pack');
+    Route::get('/reports/owner-dashboard', [ReportController::class, 'ownerDashboard'])->middleware('ability:reports.view')->name('reports.owner-dashboard');
     Route::get('/reports/financial-summary', [ReportController::class, 'financialSummary'])->middleware('ability:reports.view')->name('reports.financial-summary');
     Route::get('/reports/payment-methods', [ReportController::class, 'paymentMethods'])->middleware('ability:reports.view')->name('reports.payment-methods');
     Route::get('/reports/cashier-performance', [ReportController::class, 'cashierPerformance'])->middleware('ability:reports.view')->name('reports.cashier-performance');

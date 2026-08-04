@@ -746,6 +746,192 @@ class FinancialReportsTest extends TestCase
         }
     }
 
+    public function test_owner_dashboard_shows_visual_health_alerts_exports_and_is_read_only(): void
+    {
+        $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $mobile = PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
+
+        [$profitProduct, $profitUnit] = $this->singleUnitProduct('OWNER DASH PROFIT SOAP', 500, 1000);
+        $profitSaleItem = $this->postSaleLine($profitProduct, $profitUnit, '2026-07-10', 5, 1000, 5000, 500, 'posted', $cash->id);
+        $this->postSaleReturnLine($profitSaleItem, '2026-07-11', 3, 1000, 3000);
+
+        [$lowMarginProduct, $lowMarginUnit] = $this->singleUnitProduct('OWNER DASH LOW MARGIN SOAP', 960, 1000);
+        $this->postSaleLine($lowMarginProduct, $lowMarginUnit, '2026-07-10', 1, 1000, 1000, 960, 'posted', $cash->id);
+
+        [$belowCostProduct, $belowCostUnit] = $this->singleUnitProduct('OWNER DASH BELOW COST SOAP', 1200, 1000);
+        $this->postSaleLine($belowCostProduct, $belowCostUnit, '2026-07-10', 1, 1000, 1000, 1200, 'posted', $cash->id);
+
+        [$missingProduct, $missingUnit] = $this->singleUnitProduct('OWNER DASH MISSING COST SOAP', 0, 1500);
+        $this->postSaleLine($missingProduct, $missingUnit, '2026-07-10', 1, 1500, 1500, 0, 'posted', $mobile->id);
+
+        [$fastProduct, $fastUnit] = $this->singleUnitProduct('OWNER DASH FAST LOW STOCK SOAP', 500, 1000);
+        $fastProduct->update(['reorder_level' => 10]);
+        $this->stockMovement($fastProduct, $fastUnit, 4, 0, 4, 0, 'opening_stock');
+        $this->postSaleLine($fastProduct, $fastUnit, '2026-07-10', 5, 1000, 5000, 500, 'posted', $cash->id);
+
+        $conversionProduct = Product::create(['name' => 'OWNER DASH CONVERSION BOX SOAP', 'category_id' => $this->category->id, 'is_active' => true]);
+        ProductUnit::create([
+            'product_id' => $conversionProduct->id,
+            'unit_name' => 'Boxes',
+            'conversion_factor' => 1,
+            'cost_price' => 1000,
+            'selling_price' => 1500,
+            'is_active' => true,
+        ]);
+
+        $zeroProduct = Product::create(['name' => 'OWNER DASH ZERO PRICE SOAP', 'category_id' => $this->category->id, 'is_active' => true]);
+        ProductUnit::create([
+            'product_id' => $zeroProduct->id,
+            'unit_name' => 'Pieces',
+            'conversion_factor' => 1,
+            'cost_price' => 1000,
+            'selling_price' => 0,
+            'is_active' => true,
+        ]);
+
+        [$slowProduct, $slowUnit] = $this->singleUnitProduct('OWNER DASH SLOW STOCK SOAP', 100, 150);
+        $this->stockMovement($slowProduct, $slowUnit, 100, 0, 100, 0, 'opening_stock');
+
+        $this->postExpense('2026-07-12', 'Rent', 7000, 'posted', $cash->id);
+        $this->postFundedPurchase('2026-07-13', 'Supplier Credit / Not Paid Yet', 3000, 0, 3000);
+        $this->postFundedPurchase('2026-07-14', 'Loan / Borrowed Money', 4000, 4000, 0);
+
+        CashShift::create([
+            'shift_no' => 'SHIFT-OWNER-001',
+            'store_id' => $this->store->id,
+            'user_id' => auth()->id(),
+            'status' => 'closed',
+            'opened_at' => '2026-07-10 08:00:00',
+            'closed_at' => '2026-07-10 18:00:00',
+            'opening_balance' => 0,
+            'cash_sales_total' => 1000,
+            'cash_customer_payments_total' => 0,
+            'cash_expenses_total' => 0,
+            'expected_cash' => 1000,
+            'counted_cash' => 950,
+            'shortage_overage' => -50,
+        ]);
+
+        $countsBefore = [
+            'sales' => Sale::query()->count(),
+            'sale_items' => SaleItem::query()->count(),
+            'sale_returns' => SaleReturn::query()->count(),
+            'sale_return_items' => SaleReturnItem::query()->count(),
+            'purchases' => Purchase::query()->count(),
+            'expenses' => Expense::query()->count(),
+            'cash_shifts' => CashShift::query()->count(),
+            'inventory_transactions' => InventoryTransaction::query()->count(),
+            'product_units' => ProductUnit::query()->count(),
+        ];
+        $pricesBefore = ProductUnit::query()->pluck('selling_price', 'id')->all();
+
+        $response = $this->get('/reports/owner-dashboard?date_from=2026-07-01&date_to=2026-07-31');
+
+        $response->assertOk()
+            ->assertSee('Owner Dashboard / Business Health Dashboard')
+            ->assertSee('Owner Health Score')
+            ->assertSee('Needs Attention')
+            ->assertSee('Owner Health Summary Cards')
+            ->assertSee('Sales vs Expenses vs Estimated Net Profit Trend')
+            ->assertSee('Net Sales by Payment Mode')
+            ->assertSee('Top 10 Products by Profit')
+            ->assertSee('Top 10 Products by Revenue')
+            ->assertSee('Expense Breakdown')
+            ->assertSee('Owner Alerts Panel')
+            ->assertSee('Profit by Product after Returns')
+            ->assertSee('Profit by Category after Returns')
+            ->assertSee('Purchase Funding Source Summary')
+            ->assertSee('Cash')
+            ->assertSee('Mobile Money')
+            ->assertSee('Missing cost on sold items')
+            ->assertSee('Selling below cost')
+            ->assertSee('Low margin below 5%')
+            ->assertSee('Zero selling price')
+            ->assertSee('Possible pack conversion review')
+            ->assertSee('High returns/refunds')
+            ->assertSee('Expenses too high vs sales')
+            ->assertSee('Negative net profit')
+            ->assertSee('Cash shortage/excess')
+            ->assertSee('Supplier credit / unpaid purchases increasing')
+            ->assertSee('Loan / borrowed money used')
+            ->assertSee('Fast-moving low stock')
+            ->assertSee('Slow-moving item with high stock value')
+            ->assertSee(route('products.edit', ['product' => $belowCostProduct->id, 'focus' => 'units'], false), false)
+            ->assertSee(route('cash-shifts.index', [], false), false)
+            ->assertSee('Export Dashboard CSV')
+            ->assertSee('Export Alerts CSV');
+
+        $dashboardCsv = $this->get('/reports/owner-dashboard?date_from=2026-07-01&date_to=2026-07-31&export=csv');
+        $dashboardCsv->assertOk();
+        $dashboardCsvContent = $dashboardCsv->streamedContent();
+        $this->assertStringContainsString('Health Score', $dashboardCsvContent);
+        $this->assertStringContainsString('Trend,2026-07-10', $dashboardCsvContent);
+        $this->assertStringContainsString('Purchase Funding Source', $dashboardCsvContent);
+
+        $alertsCsv = $this->get('/reports/owner-dashboard?date_from=2026-07-01&date_to=2026-07-31&export=alerts_csv');
+        $alertsCsv->assertOk();
+        $alertsCsvContent = $alertsCsv->streamedContent();
+        $this->assertStringContainsString('Severity,Issue,"Business Meaning"', $alertsCsvContent);
+        $this->assertStringContainsString('Selling below cost', $alertsCsvContent);
+        $this->assertStringContainsString('Cash shortage/excess', $alertsCsvContent);
+
+        $this->get('/management-centre')
+            ->assertOk()
+            ->assertSee('Owner Dashboard')
+            ->assertSee(route('reports.owner-dashboard', [], false), false);
+
+        $this->get('/reports/financial-summary?date_from=2026-07-01&date_to=2026-07-31')
+            ->assertOk()
+            ->assertSee('Owner Dashboard')
+            ->assertSee(route('reports.owner-dashboard', [], false), false);
+
+        $this->assertSame($countsBefore['sales'], Sale::query()->count());
+        $this->assertSame($countsBefore['sale_items'], SaleItem::query()->count());
+        $this->assertSame($countsBefore['sale_returns'], SaleReturn::query()->count());
+        $this->assertSame($countsBefore['sale_return_items'], SaleReturnItem::query()->count());
+        $this->assertSame($countsBefore['purchases'], Purchase::query()->count());
+        $this->assertSame($countsBefore['expenses'], Expense::query()->count());
+        $this->assertSame($countsBefore['cash_shifts'], CashShift::query()->count());
+        $this->assertSame($countsBefore['inventory_transactions'], InventoryTransaction::query()->count());
+        $this->assertSame($countsBefore['product_units'], ProductUnit::query()->count());
+        $this->assertEquals($pricesBefore, ProductUnit::query()->pluck('selling_price', 'id')->all());
+    }
+
+    public function test_owner_dashboard_defaults_to_current_month_and_applies_filters(): void
+    {
+        Carbon::setTestNow('2026-07-20 09:00:00');
+
+        try {
+            $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+            $mobile = PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
+            $foodCategory = Category::create(['name' => 'FOODS']);
+            [$soapProduct, $soapUnit] = $this->singleUnitProduct('OWNER FILTERED SOAP', 500, 1000);
+            $foodProduct = Product::create(['name' => 'OWNER FILTERED RICE', 'category_id' => $foodCategory->id, 'is_active' => true]);
+            $foodUnit = ProductUnit::create([
+                'product_id' => $foodProduct->id,
+                'unit_name' => 'Pieces',
+                'conversion_factor' => 1,
+                'cost_price' => 200,
+                'selling_price' => 500,
+                'is_active' => true,
+            ]);
+
+            $this->postSaleLine($soapProduct, $soapUnit, '2026-07-05', 1, 1000, 1000, 500, 'posted', $cash->id);
+            $this->postSaleLine($foodProduct, $foodUnit, '2026-07-06', 1, 500, 500, 200, 'posted', $mobile->id);
+            $this->postSaleLine($soapProduct, $soapUnit, '2026-06-30', 1, 1000, 1000, 500, 'posted', $cash->id);
+
+            $this->get('/reports/owner-dashboard?category_id='.$this->category->id.'&payment_mode_id='.$cash->id)
+                ->assertOk()
+                ->assertSee('Period: 01 Jul 2026 to 31 Jul 2026')
+                ->assertSee('OWNER FILTERED SOAP')
+                ->assertSee('UGX 1,000')
+                ->assertDontSee('OWNER FILTERED RICE')
+                ->assertDontSee('30 Jun 2026');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_cash_sales_summary_page_and_csv_group_posted_sales_by_shop_and_payment_type(): void
     {
         $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);

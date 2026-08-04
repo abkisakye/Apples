@@ -164,6 +164,21 @@ class ReportController extends Controller
         return view('reports.monthly_management_pack', $data);
     }
 
+    public function ownerDashboard(Request $request, FinancialReportsService $financialReportsService): View|StreamedResponse
+    {
+        $data = $this->ownerDashboardData($request, $financialReportsService);
+
+        if ($request->query('export') === 'alerts_csv') {
+            return $this->ownerDashboardAlertsCsv($data);
+        }
+
+        if ($request->query('export') === 'csv') {
+            return $this->ownerDashboardCsv($data);
+        }
+
+        return view('reports.owner_dashboard', $data);
+    }
+
     public function financialSummary(Request $request): View
     {
         [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'month');
@@ -1000,6 +1015,262 @@ class ReportController extends Controller
         ]));
     }
 
+    private function ownerDashboardData(Request $request, FinancialReportsService $financialReportsService): array
+    {
+        $data = $this->monthlyManagementPackData($request, $financialReportsService);
+        $cashSummary = $this->ownerDashboardCashSummary(
+            $data['fromDate'],
+            $data['toDate'],
+            (int) $data['filters']['store_id'],
+            (int) $data['filters']['user_id']
+        );
+        $alerts = $this->ownerDashboardAlerts($data, $cashSummary);
+        $score = $this->ownerDashboardHealthScore($data['summary'], $alerts, $cashSummary);
+
+        $data['cashSummary'] = $cashSummary;
+        $data['ownerAlerts'] = $alerts;
+        $data['healthScore'] = $score;
+        $data['healthCards'] = $this->ownerDashboardHealthCards($data['summary'], $cashSummary);
+        $data['chartMaxes'] = [
+            'trend' => max(1, (float) $data['dailyRows']->max(fn ($row) => max((float) $row->net_sales, (float) $row->expenses, abs((float) $row->estimated_net_profit)))),
+            'payment' => max(1, (float) $data['paymentRows']->max('net_amount')),
+            'profit' => max(1, (float) $data['topProfitableRows']->max('profit')),
+            'revenue' => max(1, (float) $data['topRevenueRows']->max('revenue')),
+            'expenses' => max(1, (float) $data['expenseRows']->max('amount')),
+        ];
+
+        return $data;
+    }
+
+    private function ownerDashboardCashSummary(string $fromDate, string $toDate, int $storeId, int $userId): array
+    {
+        $rows = CashShift::query()
+            ->whereDate('opened_at', '>=', $fromDate)
+            ->whereDate('opened_at', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->when($userId > 0, fn ($query) => $query->where('user_id', $userId))
+            ->get();
+
+        return [
+            'shift_count' => $rows->count(),
+            'closed_shift_count' => $rows->where('status', 'closed')->count(),
+            'expected_cash' => round((float) $rows->sum('expected_cash'), 2),
+            'counted_cash' => round((float) $rows->sum(fn (CashShift $shift) => (float) ($shift->counted_cash ?? 0)), 2),
+            'difference' => round((float) $rows->sum(fn (CashShift $shift) => (float) ($shift->shortage_overage ?? 0)), 2),
+        ];
+    }
+
+    private function ownerDashboardHealthCards(array $summary, array $cashSummary): Collection
+    {
+        return collect([
+            (object) ['label' => 'Net Sales', 'value' => $summary['net_sales'], 'type' => 'money', 'status' => $summary['net_sales'] > 0 ? 'good' : 'watch', 'helper' => 'Sales after returns/refunds.'],
+            (object) ['label' => 'Estimated Gross Profit', 'value' => $summary['estimated_gross_profit'], 'type' => 'money', 'status' => $summary['estimated_gross_profit'] >= 0 ? 'good' : 'danger', 'helper' => 'Profit before expenses, estimated where costs are missing.'],
+            (object) ['label' => 'Expenses', 'value' => $summary['expenses'], 'type' => 'money', 'status' => $this->ownerDashboardPercentStatus($summary['expense_to_sales_percent'], 30, 50, false), 'helper' => 'Posted expenses in the selected period.'],
+            (object) ['label' => 'Estimated Net Profit', 'value' => $summary['estimated_net_profit'], 'type' => 'money', 'status' => $summary['estimated_net_profit'] >= 0 ? 'good' : 'danger', 'helper' => 'Estimated gross profit less expenses.'],
+            (object) ['label' => 'Margin %', 'value' => $summary['overall_margin_percent'], 'type' => 'percent', 'status' => $summary['overall_margin_percent'] === null ? 'watch' : ($summary['overall_margin_percent'] < 5 ? 'danger' : ($summary['overall_margin_percent'] < 15 ? 'watch' : 'good')), 'helper' => 'Net estimated margin after returns.'],
+            (object) ['label' => 'Returns / Refunds', 'value' => $summary['returns'], 'type' => 'money', 'status' => $this->ownerDashboardPercentStatus($summary['net_sales'] > 0 ? ($summary['returns'] / $summary['net_sales']) * 100 : 0, 10, 20, false), 'helper' => 'Returned/refunded sales value.'],
+            (object) ['label' => 'Total Purchases', 'value' => $summary['total_purchases'], 'type' => 'money', 'status' => 'good', 'helper' => 'Posted purchases by selected funding source period.'],
+            (object) ['label' => 'Supplier Credit / Unpaid Purchases', 'value' => $summary['supplier_credit_increase'], 'type' => 'money', 'status' => $summary['supplier_credit_increase'] > 0 ? 'watch' : 'good', 'helper' => 'Purchase balances under supplier credit.'],
+            (object) ['label' => 'Missing Cost Items Sold', 'value' => $summary['missing_cost_items_sold'] ?? $summary['missing_cost_count'], 'type' => 'count', 'status' => ($summary['missing_cost_items_sold'] ?? $summary['missing_cost_count']) > 0 ? 'danger' : 'good', 'helper' => 'Cost gaps reduce profit confidence.'],
+            (object) ['label' => 'Low Margin Items', 'value' => $summary['low_margin_count'] ?? 0, 'type' => 'count', 'status' => ($summary['low_margin_count'] ?? 0) > 0 ? 'watch' : 'good', 'helper' => 'Sold units below the target margin.'],
+            (object) ['label' => 'Cash Shortage / Excess', 'value' => $cashSummary['difference'], 'type' => 'money', 'status' => abs((float) $cashSummary['difference']) > 0 ? 'watch' : 'good', 'helper' => 'Closed shift cash difference.'],
+        ]);
+    }
+
+    private function ownerDashboardAlerts(array $data, array $cashSummary): Collection
+    {
+        $alerts = collect();
+        $summary = $data['summary'];
+
+        foreach ($data['alertRows'] as $row) {
+            [$severity, $issue, $meaning] = $this->ownerDashboardAlertPresentation((string) $row->issue);
+            $alerts->push((object) [
+                'severity' => $severity,
+                'issue' => $issue,
+                'business_meaning' => $meaning,
+                'amount_label' => $row->amount !== null ? config('business.currency', 'UGX').' '.number_format((float) $row->amount, 0) : $row->product_name.' - '.$row->unit_name,
+                'suggested_action' => $row->suggested_action,
+                'link' => route('products.edit', ['product' => $row->product_id, 'focus' => 'units']),
+            ]);
+        }
+
+        $returnRate = (float) $summary['net_sales'] > 0 ? round(((float) $summary['returns'] / (float) $summary['net_sales']) * 100, 2) : 0.0;
+        if ($returnRate >= 10) {
+            $alerts->push((object) [
+                'severity' => $returnRate >= 20 ? 'danger' : 'watch',
+                'issue' => 'High returns/refunds',
+                'business_meaning' => 'Returns are taking a noticeable share of sales.',
+                'amount_label' => number_format($returnRate, 2).'%',
+                'suggested_action' => 'Review return reasons and cashier handling.',
+                'link' => route('reports.gross-profit', ['date_from' => $data['fromDate'], 'date_to' => $data['toDate']]),
+            ]);
+        }
+
+        $expenseRatio = $summary['expense_to_sales_percent'];
+        if ($expenseRatio !== null && (float) $expenseRatio >= 30) {
+            $alerts->push((object) [
+                'severity' => (float) $expenseRatio >= 50 ? 'danger' : 'watch',
+                'issue' => 'Expenses too high vs sales',
+                'business_meaning' => 'Expenses are consuming a high share of sales.',
+                'amount_label' => number_format((float) $expenseRatio, 2).'%',
+                'suggested_action' => 'Review expense categories and largest expenses.',
+                'link' => route('expenses.index', ['date_from' => $data['fromDate'], 'date_to' => $data['toDate']]),
+            ]);
+        }
+
+        if ((float) $summary['estimated_net_profit'] < 0) {
+            $alerts->push((object) [
+                'severity' => 'danger',
+                'issue' => 'Negative net profit',
+                'business_meaning' => 'The selected period is estimated to have made a loss.',
+                'amount_label' => config('business.currency', 'UGX').' '.number_format((float) $summary['estimated_net_profit'], 0),
+                'suggested_action' => 'Review costs, prices, expenses, and returns.',
+                'link' => route('reports.gross-profit', ['date_from' => $data['fromDate'], 'date_to' => $data['toDate']]),
+            ]);
+        }
+
+        if (abs((float) $cashSummary['difference']) > 0.009) {
+            $alerts->push((object) [
+                'severity' => (float) $cashSummary['difference'] < 0 ? 'danger' : 'watch',
+                'issue' => 'Cash shortage/excess',
+                'business_meaning' => 'Cash counted at shift close differs from expected cash.',
+                'amount_label' => config('business.currency', 'UGX').' '.number_format((float) $cashSummary['difference'], 0),
+                'suggested_action' => 'Open cash shifts and review shortages or excesses.',
+                'link' => route('cash-shifts.index'),
+            ]);
+        }
+
+        if ((float) $summary['supplier_credit_increase'] > 0) {
+            $alerts->push((object) [
+                'severity' => 'watch',
+                'issue' => 'Supplier credit / unpaid purchases increasing',
+                'business_meaning' => 'Some stock was bought on supplier credit and still needs settlement.',
+                'amount_label' => config('business.currency', 'UGX').' '.number_format((float) $summary['supplier_credit_increase'], 0),
+                'suggested_action' => 'Review supplier balances and due dates.',
+                'link' => route('purchases.index', ['date_from' => $data['fromDate'], 'date_to' => $data['toDate']]),
+            ]);
+        }
+
+        if ((float) $summary['loan_money_used'] > 0) {
+            $alerts->push((object) [
+                'severity' => 'watch',
+                'issue' => 'Loan / borrowed money used',
+                'business_meaning' => 'Purchases used loan or borrowed money during this period.',
+                'amount_label' => config('business.currency', 'UGX').' '.number_format((float) $summary['loan_money_used'], 0),
+                'suggested_action' => 'Track repayment plan and cash pressure.',
+                'link' => route('purchases.index', ['date_from' => $data['fromDate'], 'date_to' => $data['toDate']]),
+            ]);
+        }
+
+        $stockRowsByProduct = $data['stockRows']->groupBy(fn ($row) => (int) $row->product->id);
+        foreach ($data['fastMovingRows'] as $row) {
+            $stockRow = $stockRowsByProduct->get((int) $row->product_id, collect())->first();
+            $reorderLevel = (float) ($stockRow?->product?->reorder_level ?? 0);
+
+            if ($stockRow && $reorderLevel > 0 && (float) $stockRow->base_balance <= $reorderLevel) {
+                $alerts->push((object) [
+                    'severity' => 'watch',
+                    'issue' => 'Fast-moving low stock',
+                    'business_meaning' => 'A selling item is close to or below reorder level.',
+                    'amount_label' => $stockRow->base_stock_label,
+                    'suggested_action' => 'Review reorder list and plan purchase.',
+                    'link' => route('stock.reorder', ['q' => $row->product_name]),
+                ]);
+            }
+        }
+
+        if ($alerts->isEmpty()) {
+            $alerts->push((object) [
+                'severity' => 'good',
+                'issue' => 'No critical owner alerts',
+                'business_meaning' => 'No major pricing, profit, cash, or stock warnings were found for this period.',
+                'amount_label' => 'Good',
+                'suggested_action' => 'Keep monitoring daily.',
+                'link' => route('reports.owner-dashboard', ['date_from' => $data['fromDate'], 'date_to' => $data['toDate']]),
+            ]);
+        }
+
+        return $alerts
+            ->unique(fn ($row) => $row->issue.'|'.$row->amount_label.'|'.$row->link)
+            ->sortBy(fn ($row) => ['danger' => 0, 'watch' => 1, 'good' => 2][$row->severity] ?? 1)
+            ->values();
+    }
+
+    private function ownerDashboardAlertPresentation(string $issue): array
+    {
+        return match ($issue) {
+            'Products selling below cost' => ['danger', 'Selling below cost', 'Some items are selling for less than their recorded cost.'],
+            'Products with low margin' => ['watch', 'Low margin below 5%', 'Some items are selling too close to cost.'],
+            'Products with zero selling price' => ['danger', 'Zero selling price', 'Some product units have no selling price configured.'],
+            'Possible pack conversion review' => ['watch', 'Possible pack conversion review', 'A pack unit may still have conversion factor 1 and needs checking.'],
+            'Products with sales but missing cost' => ['danger', 'Missing cost on sold items', 'Profit is incomplete because sold items have no reliable cost.'],
+            'High stock value but low sales' => ['watch', 'Slow-moving item with high stock value', 'Money may be tied up in stock that is not moving.'],
+            default => ['watch', $issue, 'This item needs owner review.'],
+        };
+    }
+
+    private function ownerDashboardHealthScore(array $summary, Collection $alerts, array $cashSummary): array
+    {
+        $score = 100;
+        $score -= min(18, (int) $alerts->where('issue', 'Missing cost on sold items')->count() * 6);
+        $score -= min(20, (int) $alerts->where('issue', 'Selling below cost')->count() * 8);
+        $score -= min(12, (int) $alerts->where('issue', 'Low margin below 5%')->count() * 3);
+        $score -= min(8, (int) $alerts->where('issue', 'Zero selling price')->count() * 4);
+
+        if ((float) $summary['estimated_net_profit'] < 0) {
+            $score -= 25;
+        }
+
+        $expenseRatio = $summary['expense_to_sales_percent'];
+        if ($expenseRatio !== null && (float) $expenseRatio >= 50) {
+            $score -= 20;
+        } elseif ($expenseRatio !== null && (float) $expenseRatio >= 30) {
+            $score -= 10;
+        }
+
+        $returnRate = (float) $summary['net_sales'] > 0 ? ((float) $summary['returns'] / (float) $summary['net_sales']) * 100 : 0;
+        if ($returnRate >= 20) {
+            $score -= 15;
+        } elseif ($returnRate >= 10) {
+            $score -= 8;
+        }
+
+        if ((float) $cashSummary['difference'] < 0) {
+            $score -= 12;
+        } elseif ((float) $cashSummary['difference'] > 0) {
+            $score -= 5;
+        }
+
+        if ((float) $summary['supplier_credit_increase'] > 0) {
+            $score -= 8;
+        }
+
+        if ((float) $summary['loan_money_used'] > 0) {
+            $score -= 8;
+        }
+
+        $score = max(0, min(100, $score));
+
+        return [
+            'score' => $score,
+            'label' => $score >= 80 ? 'Good' : ($score >= 60 ? 'Watch' : 'Needs Attention'),
+            'status' => $score >= 80 ? 'good' : ($score >= 60 ? 'watch' : 'danger'),
+        ];
+    }
+
+    private function ownerDashboardPercentStatus(?float $percent, float $watchAt, float $dangerAt, bool $higherIsBetter = true): string
+    {
+        if ($percent === null) {
+            return 'watch';
+        }
+
+        if ($higherIsBetter) {
+            return $percent < $dangerAt ? 'danger' : ($percent < $watchAt ? 'watch' : 'good');
+        }
+
+        return $percent >= $dangerAt ? 'danger' : ($percent >= $watchAt ? 'watch' : 'good');
+    }
+
     private function monthlyManagementPackData(Request $request, FinancialReportsService $financialReportsService): array
     {
         [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'month');
@@ -1087,6 +1358,8 @@ class ReportController extends Controller
                 'total_purchases' => $totalPurchases,
                 'total_stock_value' => $stockData['summary']['total_estimated_stock_value'],
                 'missing_cost_count' => $stockData['summary']['products_missing_cost'],
+                'missing_cost_items_sold' => $productUnitRows->filter(fn ($row) => $row->missing_cost)->count(),
+                'low_margin_count' => $productUnitRows->filter(fn ($row) => $row->margin_percent !== null && $row->margin_percent < 5)->count(),
                 'conversion_review_count' => $stockData['summary']['conversion_review_count'],
                 'supplier_credit_increase' => $supplierCredit,
                 'owner_money_used' => $ownerMoneyUsed,
@@ -1107,6 +1380,8 @@ class ReportController extends Controller
             'largestExpenses' => $largestExpenses,
             'paymentRows' => $paymentRows,
             'fundingRows' => $fundingRows,
+            'stockRows' => $stockRows,
+            'marginRows' => $marginRows,
             'alertRows' => $alerts,
             'fastMovingRows' => $fastMovingRows,
             'slowMovingRows' => $slowMovingRows,
@@ -1462,6 +1737,77 @@ class ReportController extends Controller
             ->sortByDesc('estimated_stock_value')
             ->take(12)
             ->values();
+    }
+
+    private function ownerDashboardCsv(array $data): StreamedResponse
+    {
+        $rows = collect();
+
+        $rows->push(['Health Score', $data['healthScore']['label'], $data['healthScore']['score'], 'Score out of 100']);
+
+        foreach ($data['healthCards'] as $card) {
+            $rows->push(['Health Summary', $card->label, $card->value, $card->status, $card->helper]);
+        }
+
+        foreach ($data['dailyRows'] as $row) {
+            $rows->push(['Trend', $row->date, $row->net_sales, $row->expenses, $row->estimated_net_profit, $row->margin_percent, $row->sales_count]);
+        }
+
+        foreach ($data['paymentRows'] as $row) {
+            $rows->push(['Payment Mode', $row->payment_mode, $row->transaction_count, $row->gross_amount, $row->returns_amount, $row->net_amount]);
+        }
+
+        foreach ($data['topProfitableRows']->take(10) as $row) {
+            $rows->push(['Top Profit Product', $row->product_name.' - '.$row->unit_name, $row->quantity_sold, $row->revenue, $row->cost, $row->profit, $row->margin_percent]);
+        }
+
+        foreach ($data['topRevenueRows']->take(10) as $row) {
+            $rows->push(['Top Revenue Product', $row->product_name.' - '.$row->unit_name, $row->quantity_sold, $row->revenue, $row->profit, $row->margin_percent, $row->status]);
+        }
+
+        foreach ($data['expenseRows'] as $row) {
+            $rows->push(['Expense Breakdown', $row->category_name, $row->expense_count, $row->amount, $row->expense_percent]);
+        }
+
+        foreach ($data['fundingRows'] as $row) {
+            $rows->push(['Purchase Funding Source', $row->funding_source, $row->purchase_count, $row->purchase_total, $row->amount_paid, $row->balance_due]);
+        }
+
+        foreach ($data['ownerAlerts'] as $row) {
+            $rows->push(['Owner Alert', $row->severity, $row->issue, $row->business_meaning, $row->amount_label, $row->suggested_action, $row->link]);
+        }
+
+        return $this->streamCsv('owner-dashboard.csv', [
+            'Section',
+            'Name',
+            'Value 1',
+            'Value 2',
+            'Value 3',
+            'Value 4',
+            'Value 5',
+            'Value 6',
+        ], $rows);
+    }
+
+    private function ownerDashboardAlertsCsv(array $data): StreamedResponse
+    {
+        $rows = $data['ownerAlerts']->map(fn ($row) => [
+            $row->severity,
+            $row->issue,
+            $row->business_meaning,
+            $row->amount_label,
+            $row->suggested_action,
+            $row->link,
+        ]);
+
+        return $this->streamCsv('owner-dashboard-alerts.csv', [
+            'Severity',
+            'Issue',
+            'Business Meaning',
+            'Amount / Count',
+            'Suggested Action',
+            'Link',
+        ], $rows);
     }
 
     private function monthlyManagementPackCsv(array $data): StreamedResponse
