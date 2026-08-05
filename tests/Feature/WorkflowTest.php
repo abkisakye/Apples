@@ -811,6 +811,89 @@ class WorkflowTest extends TestCase
         $this->get('/sales/'.$sale->id.'/print?theme=thermal')->assertOk()->assertSee($sale->sale_no)->assertSee('Cash Sale Receipt');
     }
 
+    public function test_pos_thermal_receipt_uses_80mm_layout_and_hides_controls_for_print(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Thermal Customer', 'phone' => '0700000000', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
+        $product = Product::create(['name' => 'Thermal Soap Long Name', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Boxes',
+            'selling_price' => 184000,
+            'cost_price' => 150000,
+            'is_active' => true,
+        ]);
+        $sale = Sale::create([
+            'sale_no' => 'RCPT-THERMAL-1',
+            'sale_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 184000,
+            'total_amount' => 184000,
+            'amount_paid' => 184000,
+            'balance_due' => 0,
+            'status' => 'posted',
+            'created_by' => auth()->id(),
+        ]);
+        \App\Models\SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $unit->id,
+            'quantity' => 1,
+            'unit_price' => 184000,
+            'line_total' => 184000,
+        ]);
+        \App\Models\CustomerPayment::create([
+            'payment_no' => 'CP-THERMAL-1',
+            'payment_date' => '2026-03-25',
+            'customer_id' => $customer->id,
+            'sale_id' => $sale->id,
+            'store_id' => $store->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount' => 184000,
+            'status' => 'posted',
+        ]);
+
+        $response = $this->get('/sales/'.$sale->id.'/print')->assertOk();
+
+        $response
+            ->assertSee('size: 80mm', false)
+            ->assertSee('width: 80mm', false)
+            ->assertSee('width: 72mm', false)
+            ->assertSee('class="receipt-screen-wrap"', false)
+            ->assertSee('class="receipt-paper"', false)
+            ->assertSee('class="no-print"', false)
+            ->assertSee('display: none !important', false)
+            ->assertSee('Scale 100')
+            ->assertSee('Headers and footers Off')
+            ->assertSee('Do not use Fit to page width')
+            ->assertSee('Receipt No:')
+            ->assertSee('Invoice No:')
+            ->assertSee('RCPT-THERMAL-1')
+            ->assertSee('Thermal Customer')
+            ->assertSee('Thermal Soap Long Name - Boxes')
+            ->assertSee('Mobile Money')
+            ->assertSee('UGX 184,000')
+            ->assertDontSee('Choose Format')
+            ->assertDontSee('Full A4 Document')
+            ->assertDontSee('Professional')
+            ->assertDontSee('Simple')
+            ->assertDontSee('<aside', false)
+            ->assertDontSee('<nav', false)
+            ->assertDontSee('size: A4', false)
+            ->assertDontSee('3276', false)
+            ->assertDontSee('transform: scale', false)
+            ->assertDontSee('zoom:', false);
+
+        $this->get('/sales/'.$sale->id.'/print?theme=full')
+            ->assertOk()
+            ->assertSee('size: A4', false)
+            ->assertSee('Sales Receipt');
+    }
+
     public function test_purchase_posting_creates_purchase_items_and_inventory_transaction(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
