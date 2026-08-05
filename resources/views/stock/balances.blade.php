@@ -45,6 +45,9 @@
             @if ($access->can('purchases.manage'))
                 <a href="{{ route('purchases.create') }}" class="button-link">Record Purchase</a>
             @endif
+            @if ($access->can('reports.view'))
+                <a href="{{ route('reports.product-unit-fix-workbench', request()->only('q', 'category_id')) }}" class="button-link">Product Cost & Conversion Fix</a>
+            @endif
             <a href="{{ route('stock.balances.export', request()->only('store_id', 'category_id', 'q')) }}" class="button-link">Export CSV</a>
             <a href="{{ route('stock.reorder', request()->only('store_id', 'category_id', 'q')) }}" class="button-link primary">View Reorder List</a>
         </div>
