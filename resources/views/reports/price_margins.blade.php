@@ -8,6 +8,7 @@
             <p>Review configured pack costs, selling prices, margin, and wholesale conversion warnings.</p>
         </div>
         <div class="actions">
+            <a href="{{ route('reports.product-unit-fix-workbench', request()->only(['q', 'category_id', 'status'])) }}" class="button-link">Fix Cost & Conversion Issues</a>
             <a href="{{ route('reports.stock-valuation') }}" class="button-link">Stock Valuation</a>
             <a href="{{ route('reports.financial-summary') }}" class="button-link">Financial Summary</a>
         </div>

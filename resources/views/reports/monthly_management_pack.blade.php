@@ -15,6 +15,7 @@
             <button type="button" class="button-link" onclick="window.print()">Print</button>
             <a href="{{ request()->fullUrlWithQuery(['export' => 'csv']) }}" class="button-link">Export CSV</a>
             <a href="{{ route('reports.financial-summary', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Back to Financial Summary</a>
+            <a href="{{ route('reports.product-unit-fix-workbench') }}" class="button-link">Fix Cost & Conversion Issues</a>
         </div>
     </div>
 
@@ -341,7 +342,7 @@
                     <tbody>
                         @forelse ($alertRows as $row)
                             <tr>
-                                <td><a href="{{ route('products.edit', ['product' => $row->product_id, 'focus' => 'units']) }}"><strong>{{ $row->product_name }}</strong></a></td>
+                                <td><a href="{{ route('reports.product-unit-fix-workbench', ['q' => $row->product_name, 'unit_name' => $row->unit_name]) }}"><strong>{{ $row->product_name }}</strong></a></td>
                                 <td>{{ $row->unit_name }}</td>
                                 <td><span class="badge credit">{{ $row->issue }}</span></td>
                                 <td>{{ $row->suggested_action }}</td>

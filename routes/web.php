@@ -112,6 +112,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/reports/supplier-aging/export', [ReportController::class, 'supplierAgingExport'])->middleware('ability:reports.view')->name('reports.supplier-aging.export');
     Route::get('/reports/stock-valuation', [ReportController::class, 'stockValuation'])->middleware('ability:reports.view')->name('reports.stock-valuation');
     Route::get('/reports/price-margins', [ReportController::class, 'priceMargins'])->middleware('ability:reports.view')->name('reports.price-margins');
+    Route::get('/reports/product-unit-fix-workbench', [ReportController::class, 'productUnitFixWorkbench'])->middleware('ability:reports.view')->name('reports.product-unit-fix-workbench');
+    Route::post('/reports/product-unit-fix-workbench/update', [ReportController::class, 'productUnitFixWorkbenchUpdate'])->middleware('ability:purchases.manage')->name('reports.product-unit-fix-workbench.update');
     Route::get('/reports/gross-profit', [ReportController::class, 'grossProfit'])->middleware('ability:reports.view')->name('reports.gross-profit');
     Route::get('/reports/cash-sales-summary', [ReportController::class, 'cashSalesSummary'])->middleware('ability:reports.view')->name('reports.cash-sales-summary');
     Route::get('/reports/income-expenditure', [ReportController::class, 'incomeExpenditure'])->middleware('ability:reports.view')->name('reports.income-expenditure');

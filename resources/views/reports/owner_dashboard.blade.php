@@ -144,6 +144,7 @@
             <a href="{{ route('reports.financial-summary', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Back to Financial Summary</a>
             <a href="{{ route('reports.monthly-management-pack', request()->except('export')) }}" class="button-link">Open Monthly Management Pack</a>
             <a href="{{ route('reports.daily-closing-pack', request()->except('export')) }}" class="button-link">Open Daily Closing Pack</a>
+            <a href="{{ route('reports.product-unit-fix-workbench') }}" class="button-link">Fix Cost & Conversion Issues</a>
         </div>
     </div>
 

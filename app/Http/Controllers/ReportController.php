@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\CashShift;
+use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\CustomerPayment;
 use App\Models\Expense;
 use App\Models\PaymentMode;
+use App\Models\ProductUnit;
 use App\Models\Purchase;
 use App\Models\SaleItem;
 use App\Models\SaleReturn;
@@ -25,6 +27,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -59,6 +62,98 @@ class ReportController extends Controller
             'search' => trim((string) $request->query('q', $request->query('search', ''))),
             'status' => (string) $request->query('status', 'all'),
         ]);
+    }
+
+    public function productUnitFixWorkbench(Request $request, FinancialReportsService $financialReportsService): View
+    {
+        $data = $this->productUnitFixWorkbenchData($request, $financialReportsService);
+
+        return view('reports.product_unit_fix_workbench', $data);
+    }
+
+    public function productUnitFixWorkbenchUpdate(Request $request)
+    {
+        $validated = $request->validate([
+            'product_unit_id' => ['required', 'integer', 'exists:product_units,id'],
+            'conversion_factor' => ['required', 'numeric', 'gt:0'],
+            'cost_price' => ['required', 'numeric', 'min:0'],
+            'selling_price' => ['required', 'numeric', 'min:0'],
+            'allow_fractional_quantity' => ['nullable', 'boolean'],
+            'quantity_precision' => ['required', 'integer', 'min:0', 'max:4'],
+            'minimum_wholesale_quantity' => ['nullable', 'numeric', 'gt:0'],
+        ]);
+
+        $allowFractional = $request->boolean('allow_fractional_quantity');
+        $quantityPrecision = (int) $validated['quantity_precision'];
+        $minimumWholesaleQuantity = array_key_exists('minimum_wholesale_quantity', $validated) && $validated['minimum_wholesale_quantity'] !== null && $validated['minimum_wholesale_quantity'] !== ''
+            ? round((float) $validated['minimum_wholesale_quantity'], 3)
+            : null;
+
+        if (! $allowFractional) {
+            $quantityPrecision = 0;
+            $minimumWholesaleQuantity = null;
+        } else {
+            $quantityPrecision = max(2, $quantityPrecision);
+            if ($minimumWholesaleQuantity === null) {
+                $minimumWholesaleQuantity = 0.25;
+            }
+        }
+
+        $unit = ProductUnit::query()
+            ->with('product:id,name')
+            ->findOrFail((int) $validated['product_unit_id']);
+
+        $before = [
+            'conversion_factor' => (float) $unit->conversion_factor,
+            'cost_price' => (float) $unit->cost_price,
+            'selling_price' => (float) $unit->selling_price,
+            'allow_fractional_quantity' => (bool) $unit->allow_fractional_quantity,
+            'quantity_precision' => (int) $unit->quantity_precision,
+            'minimum_wholesale_quantity' => $unit->minimum_wholesale_quantity === null ? null : (float) $unit->minimum_wholesale_quantity,
+        ];
+        $after = [
+            'conversion_factor' => round((float) $validated['conversion_factor'], 3),
+            'cost_price' => round((float) $validated['cost_price'], 2),
+            'selling_price' => round((float) $validated['selling_price'], 2),
+            'allow_fractional_quantity' => $allowFractional,
+            'quantity_precision' => $quantityPrecision,
+            'minimum_wholesale_quantity' => $minimumWholesaleQuantity,
+        ];
+
+        DB::transaction(function () use ($unit, $before, $after): void {
+            ProductUnit::query()
+                ->whereKey($unit->id)
+                ->update($after);
+
+            ActivityLog::create([
+                'user_id' => auth()->id(),
+                'event' => 'product_unit.cost_conversion_updated',
+                'subject_type' => ProductUnit::class,
+                'subject_id' => $unit->id,
+                'ip_address' => request()->ip(),
+                'description' => 'Product unit cost and conversion setup updated from the fix workbench.',
+                'properties' => [
+                    'product_id' => $unit->product_id,
+                    'product_name' => $unit->product?->name,
+                    'unit_name' => $unit->unit_name,
+                    'before' => $before,
+                    'after' => $after,
+                ],
+            ]);
+        });
+
+        return redirect()
+            ->route('reports.product-unit-fix-workbench', $request->except([
+                '_token',
+                'product_unit_id',
+                'conversion_factor',
+                'cost_price',
+                'selling_price',
+                'allow_fractional_quantity',
+                'quantity_precision',
+                'minimum_wholesale_quantity',
+            ]))
+            ->with('status', 'Product unit setup updated. Stock, sales, purchases, and inventory history were not changed.');
     }
 
     public function grossProfit(Request $request, FinancialReportsService $financialReportsService): View|StreamedResponse
@@ -603,6 +698,102 @@ class ReportController extends Controller
             $row->days_90_plus,
             $row->total,
         ]));
+    }
+
+    private function productUnitFixWorkbenchData(Request $request, FinancialReportsService $financialReportsService): array
+    {
+        $status = (string) $request->query('status', 'all');
+        $status = array_key_exists($status, $this->productUnitWorkbenchStatusOptions()) ? $status : 'all';
+        $unitName = trim((string) $request->query('unit_name', ''));
+        $search = trim((string) $request->query('q', $request->query('search', '')));
+        $perPage = min(max((int) $request->query('per_page', 25), 10), 100);
+        $page = max((int) $request->query('page', 1), 1);
+
+        $reportRequest = Request::create('/reports/price-margins', 'GET', array_filter([
+            'category_id' => $request->integer('category_id') ?: null,
+            'q' => $search,
+            'status' => in_array($status, ['missing_cost', 'zero_selling_price', 'selling_below_cost', 'conversion_review'], true) ? $status : 'all',
+        ], fn ($value) => $value !== null && $value !== ''));
+
+        $data = $financialReportsService->priceMargins($reportRequest);
+        $rows = $data['rows']
+            ->when($status === 'low_margin', fn (Collection $rows) => $rows->filter(fn ($row) => $row->margin_percent !== null && (float) $row->margin_percent < 5))
+            ->when($unitName !== '', fn (Collection $rows) => $rows->filter(fn ($row) => str_contains(strtolower((string) $row->unit->unit_name), strtolower($unitName))))
+            ->map(function ($row) {
+                $row->suggested_action = $this->productUnitWorkbenchSuggestedAction($row);
+
+                return $row;
+            })
+            ->values();
+
+        $paginatedRows = new LengthAwarePaginator(
+            $rows->forPage($page, $perPage)->values(),
+            $rows->count(),
+            $perPage,
+            $page,
+            [
+                'path' => route('reports.product-unit-fix-workbench'),
+                'query' => $request->query(),
+            ]
+        );
+
+        return [
+            'rows' => $paginatedRows,
+            'summary' => [
+                'total_product_units' => $rows->count(),
+                'missing_cost' => $rows->where('status_key', 'missing_cost')->count(),
+                'zero_selling_price' => $rows->filter(fn ($row) => (float) $row->selling_price <= 0)->count(),
+                'selling_below_cost' => $rows->where('status_key', 'selling_below_cost')->count(),
+                'low_margin' => $rows->filter(fn ($row) => $row->margin_percent !== null && (float) $row->margin_percent < 5)->count(),
+                'conversion_review_count' => $rows->where('conversion_review', true)->count(),
+            ],
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'filters' => [
+                'q' => $search,
+                'category_id' => $request->integer('category_id'),
+                'status' => $status,
+                'unit_name' => $unitName,
+                'per_page' => $perPage,
+            ],
+            'statusOptions' => $this->productUnitWorkbenchStatusOptions(),
+        ];
+    }
+
+    private function productUnitWorkbenchStatusOptions(): array
+    {
+        return [
+            'all' => 'All statuses',
+            'missing_cost' => 'Missing cost',
+            'conversion_review' => 'Possible Pack Conversion Review',
+            'zero_selling_price' => 'Zero selling price',
+            'selling_below_cost' => 'Selling below cost',
+            'low_margin' => 'Low margin below 5%',
+        ];
+    }
+
+    private function productUnitWorkbenchSuggestedAction(object $row): string
+    {
+        if ($row->status_key === 'missing_cost') {
+            return 'Enter cost price';
+        }
+
+        if ($row->conversion_review) {
+            return 'Review conversion factor';
+        }
+
+        if ((float) $row->selling_price <= 0) {
+            return 'Enter selling price';
+        }
+
+        if ($row->status_key === 'selling_below_cost') {
+            return 'Review selling price or cost';
+        }
+
+        if ($row->margin_percent !== null && (float) $row->margin_percent < 5) {
+            return 'Review margin';
+        }
+
+        return 'No action needed';
     }
 
     private function agingBuckets(iterable $documents, $today, string $dueDateField, string $amountField): array
@@ -1176,7 +1367,7 @@ class ReportController extends Controller
                 'business_meaning' => $meaning,
                 'amount_label' => $row->amount !== null ? config('business.currency', 'UGX').' '.number_format((float) $row->amount, 0) : $row->product_name.' - '.$row->unit_name,
                 'suggested_action' => $row->suggested_action,
-                'link' => route('products.edit', ['product' => $row->product_id, 'focus' => 'units']),
+                'link' => route('reports.product-unit-fix-workbench', ['q' => $row->product_name, 'unit_name' => $row->unit_name]),
             ]);
         }
 

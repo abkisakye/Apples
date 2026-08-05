@@ -186,6 +186,144 @@ class FinancialReportsTest extends TestCase
             ->assertDontSee('Pieces');
     }
 
+    public function test_product_unit_fix_workbench_loads_and_filters_warning_rows(): void
+    {
+        [$missingCostProduct] = $this->singleUnitProduct('WORKBENCH MISSING COST SOAP', 0, 3500);
+        $bulkProduct = Product::create(['name' => 'WORKBENCH BULK SOAP', 'category_id' => $this->category->id, 'is_active' => true]);
+        ProductUnit::create([
+            'product_id' => $bulkProduct->id,
+            'unit_name' => 'Boxes',
+            'conversion_factor' => 1,
+            'cost_price' => 1000,
+            'selling_price' => 1500,
+            'is_active' => true,
+        ]);
+        $this->singleUnitProduct('WORKBENCH LOW MARGIN SOAP', 1000, 1020);
+
+        $this->get('/reports/product-unit-fix-workbench?status=missing_cost')
+            ->assertOk()
+            ->assertSee('Product Cost &amp; Conversion Fix Workbench', false)
+            ->assertSee($missingCostProduct->name)
+            ->assertSee('Enter cost price')
+            ->assertDontSee($bulkProduct->name);
+
+        $this->get('/reports/product-unit-fix-workbench?status=conversion_review')
+            ->assertOk()
+            ->assertSee($bulkProduct->name)
+            ->assertSee('Review conversion factor')
+            ->assertDontSee($missingCostProduct->name);
+
+        $this->get('/reports/product-unit-fix-workbench?status=low_margin')
+            ->assertOk()
+            ->assertSee('WORKBENCH LOW MARGIN SOAP')
+            ->assertSee('Review margin');
+    }
+
+    public function test_product_unit_fix_workbench_updates_unit_setup_without_touching_business_history(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('WORKBENCH FIXABLE SOAP', 0, 0);
+        $unit->update([
+            'unit_name' => 'Boxes',
+            'conversion_factor' => 1,
+            'cost_price' => 0,
+            'selling_price' => 0,
+        ]);
+        $unit->refresh();
+
+        $this->postPurchaseCost($product, $unit, 1, 0);
+        $this->stockMovement($product, $unit, 1, 0, 1, 0, 'opening_stock');
+        $this->postSaleLine($product, $unit, '2026-07-28', 1, 0, 0, 0);
+
+        $beforeCounts = [
+            'inventory_transactions' => InventoryTransaction::query()->count(),
+            'sales' => Sale::query()->count(),
+            'sale_items' => SaleItem::query()->count(),
+            'purchases' => Purchase::query()->count(),
+            'purchase_items' => PurchaseItem::query()->count(),
+        ];
+
+        $this->post(route('reports.product-unit-fix-workbench.update'), [
+            'product_unit_id' => $unit->id,
+            'conversion_factor' => 12,
+            'cost_price' => 900,
+            'selling_price' => 1800,
+            'allow_fractional_quantity' => 1,
+            'quantity_precision' => 1,
+            'minimum_wholesale_quantity' => '',
+            'q' => 'WORKBENCH FIXABLE SOAP',
+            'status' => 'missing_cost',
+        ])
+            ->assertRedirect(route('reports.product-unit-fix-workbench', [
+                'q' => 'WORKBENCH FIXABLE SOAP',
+                'status' => 'missing_cost',
+            ]));
+
+        $unit->refresh();
+        $this->assertEquals(12.0, (float) $unit->conversion_factor);
+        $this->assertEquals(900.0, (float) $unit->cost_price);
+        $this->assertEquals(1800.0, (float) $unit->selling_price);
+        $this->assertTrue((bool) $unit->allow_fractional_quantity);
+        $this->assertSame(2, (int) $unit->quantity_precision);
+        $this->assertEquals(0.25, (float) $unit->minimum_wholesale_quantity);
+
+        $this->assertDatabaseHas('activity_logs', [
+            'event' => 'product_unit.cost_conversion_updated',
+            'subject_type' => ProductUnit::class,
+            'subject_id' => $unit->id,
+        ]);
+        $this->assertSame($beforeCounts['inventory_transactions'], InventoryTransaction::query()->count());
+        $this->assertSame($beforeCounts['sales'], Sale::query()->count());
+        $this->assertSame($beforeCounts['sale_items'], SaleItem::query()->count());
+        $this->assertSame($beforeCounts['purchases'], Purchase::query()->count());
+        $this->assertSame($beforeCounts['purchase_items'], PurchaseItem::query()->count());
+
+        $this->get('/reports/product-unit-fix-workbench?status=missing_cost&q=WORKBENCH+FIXABLE+SOAP')
+            ->assertOk()
+            ->assertSee('No product unit setup rows matched the selected filters.');
+    }
+
+    public function test_product_unit_fix_workbench_rejects_invalid_setup_values(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('WORKBENCH INVALID SOAP', 800, 1200);
+
+        $this->post(route('reports.product-unit-fix-workbench.update'), [
+            'product_unit_id' => $unit->id,
+            'conversion_factor' => 0,
+            'cost_price' => -10,
+            'selling_price' => -5,
+            'quantity_precision' => 5,
+        ])
+            ->assertSessionHasErrors(['conversion_factor', 'cost_price', 'selling_price', 'quantity_precision']);
+
+        $unit->refresh();
+        $this->assertEquals(1.0, (float) $unit->conversion_factor);
+        $this->assertEquals(800.0, (float) $unit->cost_price);
+        $this->assertEquals(1200.0, (float) $unit->selling_price);
+        $this->assertDatabaseMissing('activity_logs', [
+            'event' => 'product_unit.cost_conversion_updated',
+            'subject_type' => ProductUnit::class,
+            'subject_id' => $unit->id,
+        ]);
+    }
+
+    public function test_price_margins_and_management_reports_link_to_product_unit_fix_workbench(): void
+    {
+        $this->get('/reports/price-margins')
+            ->assertOk()
+            ->assertSeeText('Fix Cost & Conversion Issues', false)
+            ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
+
+        $this->get('/reports/financial-summary')
+            ->assertOk()
+            ->assertSeeText('Product Cost & Conversion Fix Workbench', false)
+            ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
+
+        $this->get('/management-centre')
+            ->assertOk()
+            ->assertSee('Product Cost &amp; Conversion Fix Workbench', false)
+            ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
+    }
+
     public function test_stock_valuation_search_matches_product_code_unit_barcode_and_part_number(): void
     {
         [$product, $unit] = $this->singleUnitProduct('SEARCHABLE STOCK ITEM', 800, 1200);
