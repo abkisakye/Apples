@@ -53,7 +53,7 @@ class FinancialReportsTest extends TestCase
             ->assertSee('Estimated report')
             ->assertSee('DETTOL FRESH SOAP 90G')
             ->assertSee('21 pieces')
-            ->assertSee('UGX 1,000.00')
+            ->assertSee('UGX 1,000')
             ->assertSee('UGX 21,000')
             ->assertSee('Latest purchase cost');
     }
@@ -282,6 +282,30 @@ class FinancialReportsTest extends TestCase
             ->assertSee('No product unit setup rows matched the selected filters.');
     }
 
+    public function test_product_unit_fix_workbench_formats_and_accepts_comma_money_inputs(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('WORKBENCH COMMA PRICE SOAP', 184000, 1500);
+
+        $this->get('/reports/product-unit-fix-workbench?q=WORKBENCH+COMMA+PRICE+SOAP')
+            ->assertOk()
+            ->assertSee('value="184,000"', false)
+            ->assertSee('value="1,500"', false)
+            ->assertSee('data-money-input', false)
+            ->assertDontSee('184000.00');
+
+        $this->post(route('reports.product-unit-fix-workbench.update'), [
+            'product_unit_id' => $unit->id,
+            'conversion_factor' => 1,
+            'cost_price' => '150,000',
+            'selling_price' => '184,000',
+            'quantity_precision' => 0,
+        ])->assertRedirect();
+
+        $unit->refresh();
+        $this->assertEquals(150000.0, (float) $unit->cost_price);
+        $this->assertEquals(184000.0, (float) $unit->selling_price);
+    }
+
     public function test_product_unit_fix_workbench_rejects_invalid_setup_values(): void
     {
         [$product, $unit] = $this->singleUnitProduct('WORKBENCH INVALID SOAP', 800, 1200);
@@ -304,6 +328,15 @@ class FinancialReportsTest extends TestCase
             'subject_type' => ProductUnit::class,
             'subject_id' => $unit->id,
         ]);
+
+        $this->post(route('reports.product-unit-fix-workbench.update'), [
+            'product_unit_id' => $unit->id,
+            'conversion_factor' => 1,
+            'cost_price' => 'abc',
+            'selling_price' => '1,2,3',
+            'quantity_precision' => 0,
+        ])
+            ->assertSessionHasErrors(['cost_price', 'selling_price']);
     }
 
     public function test_price_margins_and_management_reports_link_to_product_unit_fix_workbench(): void
@@ -321,6 +354,22 @@ class FinancialReportsTest extends TestCase
         $this->get('/management-centre')
             ->assertOk()
             ->assertSee('Product Cost &amp; Conversion Fix Workbench', false)
+            ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
+
+        $this->get('/products')
+            ->assertOk()
+            ->assertSee('Product Price & Margin Review', false)
+            ->assertSee('Product Cost & Conversion Fix', false)
+            ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
+
+        $this->get('/stock/balances')
+            ->assertOk()
+            ->assertSee('Product Cost & Conversion Fix', false)
+            ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
+
+        $this->get('/purchases/create')
+            ->assertOk()
+            ->assertSee('Product Cost & Conversion Fix', false)
             ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
     }
 

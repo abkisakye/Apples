@@ -121,6 +121,9 @@
             </p>
         </div>
         <div class="actions">
+            @if ($access->can('reports.view'))
+                <a href="{{ route('reports.product-unit-fix-workbench') }}" class="button-link">Product Cost & Conversion Fix</a>
+            @endif
             <a href="{{ $returnTo ?: route('purchases.index') }}" class="button-link">Back to Purchases</a>
         </div>
     </div>
@@ -317,10 +320,36 @@
 
             let cart = initialItems;
 
+            function parseMoney(value) {
+                const raw = String(value ?? '').trim();
+
+                if (raw === '' || !isMoneyLike(raw)) {
+                    return 0;
+                }
+
+                const normalized = raw.replace(/,/g, '');
+                const parsed = Number(normalized || 0);
+
+                return Number.isFinite(parsed) ? parsed : 0;
+            }
+
+            function isMoneyLike(value) {
+                return /^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/.test(String(value ?? '').trim());
+            }
+
+            function escapeAttribute(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+
             function money(value) { return `${currency} ${Number(value || 0).toLocaleString()}`; }
+            function moneyInput(value) { return Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 0, minimumFractionDigits: 0 }); }
             function normalizeQuantity(value) { return Math.max(Math.round(Number(value || 0)), 1); }
-            function total() { return cart.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.price || 0)), 0); }
-            function paidNow() { return Number(amountPaidInput.value || 0); }
+            function total() { return cart.reduce((sum, item) => sum + (Number(item.quantity || 0) * parseMoney(item.price)), 0); }
+            function paidNow() { return parseMoney(amountPaidInput.value); }
             function balance() { return Math.max(total() - Math.min(paidNow(), total()), 0); }
             function duePreview() {
                 const days = Number(creditPeriodInput.value || 0);
@@ -428,7 +457,7 @@
                 hiddenInputs.innerHTML = cart.map((item, index) => `
                     <input type="hidden" name="items[${index}][product_unit_id]" value="${item.id}">
                     <input type="hidden" name="items[${index}][quantity]" value="${item.quantity}">
-                    <input type="hidden" name="items[${index}][unit_cost]" value="${item.price}">
+                    <input type="hidden" name="items[${index}][unit_cost]" value="${escapeAttribute(item.price)}">
                 `).join('');
 
                 const selectedSupplier = suppliers.find((item) => String(item.id) === String(supplierInput.value));
@@ -471,7 +500,7 @@
             function updateCartRow(index) {
                 const lineTotalField = cartList.querySelector(`[data-line-total="${index}"]`);
                 if (lineTotalField) {
-                    lineTotalField.value = money(Number(cart[index]?.quantity || 0) * Number(cart[index]?.price || 0));
+                    lineTotalField.value = money(Number(cart[index]?.quantity || 0) * parseMoney(cart[index]?.price));
                 }
             }
 
@@ -503,8 +532,8 @@
                                             <button type="button" data-plus="${index}">+</button>
                                         </div>
                                     </td>
-                                    <td><input type="number" min="0" step="0.01" value="${item.price}" data-price="${index}"></td>
-                                    <td><input type="text" value="${money(Number(item.quantity) * Number(item.price))}" data-line-total="${index}" class="line-total-field" readonly></td>
+                                    <td><input type="text" value="${escapeAttribute(isMoneyLike(item.price) ? moneyInput(parseMoney(item.price)) : item.price)}" data-price="${index}" data-money-input inputmode="numeric" autocomplete="off"></td>
+                                    <td><input type="text" value="${money(Number(item.quantity) * parseMoney(item.price))}" data-line-total="${index}" class="line-total-field" readonly></td>
                                     <td><button type="button" class="cart-remove" data-remove="${index}">Remove</button></td>
                                 </tr>
                             `).join('')}
@@ -512,6 +541,7 @@
                     </table>
                 ` : '';
 
+                window.AppMoneyInput?.prepare(cartList);
                 syncPurchaseSummary();
             }
 
@@ -587,7 +617,7 @@
                 const price = event.target.closest('[data-price]');
                 if (price) {
                     const index = Number(price.dataset.price);
-                    cart[index].price = Math.max(Number(price.value || 0), 0);
+                    cart[index].price = price.value;
                     updateCartRow(index);
                     syncPurchaseSummary();
                 }
@@ -606,7 +636,10 @@
                 const price = event.target.closest('[data-price]');
                 if (price) {
                     const index = Number(price.dataset.price);
-                    price.value = String(Math.max(Number(cart[index].price || 0), 0));
+                    if (isMoneyLike(cart[index].price)) {
+                        cart[index].price = Math.max(parseMoney(cart[index].price), 0);
+                        price.value = moneyInput(cart[index].price);
+                    }
                     updateCartRow(index);
                     syncPurchaseSummary();
                 }

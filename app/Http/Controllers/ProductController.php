@@ -10,6 +10,7 @@ use App\Models\PurchaseItem;
 use App\Models\SaleItem;
 use App\Models\Supplier;
 use App\Services\AuditLogService;
+use App\Support\MoneyInput;
 use App\Support\StockDisplayService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -252,6 +253,16 @@ class ProductController extends Controller
 
     private function validateProduct(Request $request, ?Product $product = null): array
     {
+        $input = $request->all();
+        $input['base_cost_price'] = MoneyInput::normalize($input['base_cost_price'] ?? null);
+
+        foreach (($input['units'] ?? []) as $index => $unit) {
+            $input['units'][$index]['cost_price'] = MoneyInput::normalize($unit['cost_price'] ?? null);
+            $input['units'][$index]['selling_price'] = MoneyInput::normalize($unit['selling_price'] ?? null);
+        }
+
+        $request->merge($input);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('products', 'name')->ignore($product?->id)],
             'code' => ['nullable', 'string', 'max:255', Rule::unique('products', 'code')->ignore($product?->id)],

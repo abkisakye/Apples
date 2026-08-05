@@ -13,6 +13,7 @@ use App\Services\AuditLogService;
 use App\Services\DocumentNumberService;
 use App\Support\ProductUnitConversionService;
 use App\Support\ProductUnitCostSyncService;
+use App\Support\MoneyInput;
 use App\Support\StoreAssignmentService;
 use App\Support\AccessService;
 use Carbon\Carbon;
@@ -228,6 +229,15 @@ class PurchaseController extends Controller
         ProductUnitCostSyncService $costSyncService
     ): RedirectResponse
     {
+        $input = $request->all();
+        $input['amount_paid'] = MoneyInput::normalize($input['amount_paid'] ?? null);
+
+        foreach (($input['items'] ?? []) as $index => $item) {
+            $input['items'][$index]['unit_cost'] = MoneyInput::normalize($item['unit_cost'] ?? null);
+        }
+
+        $request->merge($input);
+
         $validated = $request->validate([
             'purchase_date' => ['required', 'date'],
             'store_id' => ['required', 'exists:stores,id'],

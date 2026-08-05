@@ -3,7 +3,19 @@
 @section('content')
     @php($currency = config('business.currency', 'UGX'))
     @php($formatQty = fn ($value) => rtrim(rtrim(number_format((float) $value, 3, '.', ''), '0'), '.') ?: '0')
-    @php($formatMoneyInput = fn ($value) => number_format((float) $value, 2, '.', ''))
+    @php($formatMoneyInput = function ($value) {
+        $raw = trim((string) $value);
+
+        if ($raw === '') {
+            return '0';
+        }
+
+        if (! preg_match('/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/', $raw)) {
+            return $raw;
+        }
+
+        return number_format((float) str_replace(',', '', $raw), 0);
+    })
 
     <div class="page-head">
         <div>
@@ -106,11 +118,11 @@
                             </td>
                             <td>{{ $currency }} {{ number_format($row->cost_price, 0) }}</td>
                             <td>
-                                <input form="{{ $formId }}" type="number" name="cost_price" value="{{ $formatMoneyInput($row->cost_price) }}" min="0" step="0.01" required style="min-width:120px;">
+                                <input form="{{ $formId }}" type="text" name="cost_price" value="{{ $formatMoneyInput($row->cost_price) }}" inputmode="numeric" autocomplete="off" data-money-input required style="min-width:120px;">
                             </td>
                             <td>{{ $currency }} {{ number_format($row->selling_price, 0) }}</td>
                             <td>
-                                <input form="{{ $formId }}" type="number" name="selling_price" value="{{ $formatMoneyInput($row->selling_price) }}" min="0" step="0.01" required style="min-width:120px;">
+                                <input form="{{ $formId }}" type="text" name="selling_price" value="{{ $formatMoneyInput($row->selling_price) }}" inputmode="numeric" autocomplete="off" data-money-input required style="min-width:120px;">
                             </td>
                             <td>
                                 <input form="{{ $formId }}" type="hidden" name="allow_fractional_quantity" value="0">

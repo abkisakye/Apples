@@ -1,3 +1,17 @@
+@php($formatMoneyInput = function ($value) {
+    $raw = trim((string) $value);
+
+    if ($raw === '') {
+        return '0';
+    }
+
+    if (! preg_match('/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/', $raw)) {
+        return $raw;
+    }
+
+    return number_format((float) str_replace(',', '', $raw), 0);
+})
+
 <style>
     .profile-form {
         display: grid;
@@ -102,6 +116,9 @@
         <a href="{{ route('products.index') }}" class="button-link">Back to Products</a>
         @if ($product->exists)
             <a href="{{ route('products.show', $product) }}" class="button-link">Product Profile</a>
+        @endif
+        @if ($access->can('reports.view'))
+            <a href="{{ route('reports.product-unit-fix-workbench', $product->exists ? ['q' => $product->code ?: $product->name] : []) }}" class="button-link">Product Cost & Conversion Fix</a>
         @endif
     </div>
 </div>
@@ -250,11 +267,11 @@
                             </label>
                             <label class="form-field">
                                 <span>Cost Price</span>
-                                <input type="number" step="0.01" min="0" name="units[{{ $index }}][cost_price]" value="{{ $unit['cost_price'] ?? 0 }}">
+                                <input type="text" name="units[{{ $index }}][cost_price]" value="{{ $formatMoneyInput($unit['cost_price'] ?? 0) }}" inputmode="numeric" autocomplete="off" data-money-input>
                             </label>
                             <label class="form-field">
                                 <span>Selling Price</span>
-                                <input type="number" step="0.01" min="0" name="units[{{ $index }}][selling_price]" value="{{ $unit['selling_price'] ?? 0 }}">
+                                <input type="text" name="units[{{ $index }}][selling_price]" value="{{ $formatMoneyInput($unit['selling_price'] ?? 0) }}" inputmode="numeric" autocomplete="off" data-money-input>
                             </label>
                             <label class="form-field">
                                 <span>Barcode</span>
@@ -353,11 +370,11 @@
             </label>
             <label class="form-field">
                 <span>Cost Price</span>
-                <input type="number" step="0.01" min="0" name="units[__INDEX__][cost_price]" value="0">
+                <input type="text" name="units[__INDEX__][cost_price]" value="0" inputmode="numeric" autocomplete="off" data-money-input>
             </label>
             <label class="form-field">
                 <span>Selling Price</span>
-                <input type="number" step="0.01" min="0" name="units[__INDEX__][selling_price]" value="0">
+                <input type="text" name="units[__INDEX__][selling_price]" value="0" inputmode="numeric" autocomplete="off" data-money-input>
             </label>
             <label class="form-field">
                 <span>Barcode</span>
@@ -514,6 +531,7 @@
                 .replaceAll('__LABEL__', rowsContainer.querySelectorAll('[data-unit-row]').length + 1);
 
             rowsContainer.insertAdjacentHTML('beforeend', html);
+            window.AppMoneyInput?.prepare(rowsContainer);
             ensureDefaultExists();
         });
 

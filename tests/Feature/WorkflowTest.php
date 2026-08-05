@@ -833,7 +833,7 @@ class WorkflowTest extends TestCase
             'payment_mode_id' => $paymentMode->id,
             'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
             'items' => [
-                ['product_unit_id' => $unit->id, 'quantity' => 3, 'unit_cost' => 100000],
+                ['product_unit_id' => $unit->id, 'quantity' => 3, 'unit_cost' => '100,000'],
             ],
         ]);
 
@@ -844,6 +844,12 @@ class WorkflowTest extends TestCase
         $this->assertSame('Business Cash / Shop Cash', $purchase->fundingSource?->name);
         $this->assertDatabaseCount('purchases', 1);
         $this->assertDatabaseCount('purchase_items', 1);
+        $this->assertDatabaseHas('purchase_items', [
+            'purchase_id' => $purchase->id,
+            'product_unit_id' => $unit->id,
+            'unit_cost' => 100000,
+            'line_total' => 300000,
+        ]);
         $this->assertDatabaseHas('inventory_transactions', [
             'reference_type' => 'purchase',
             'movement_type' => 'purchase',
@@ -860,6 +866,38 @@ class WorkflowTest extends TestCase
             ->assertOk()
             ->assertSee($purchase->purchase_no)
             ->assertSee('Business Cash / Shop Cash');
+    }
+
+    public function test_purchase_unit_cost_rejects_invalid_money_text(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Invalid Money Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Invalid Money Rice', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Bag',
+            'selling_price' => 120000,
+            'cost_price' => 100000,
+            'is_active' => true,
+        ]);
+
+        $this->from('/purchases/create')->post('/purchases', [
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 3, 'unit_cost' => '1,2,3'],
+            ],
+        ])
+            ->assertRedirect('/purchases/create')
+            ->assertSessionHasErrors(['items.0.unit_cost']);
+
+        $this->assertDatabaseCount('purchases', 0);
+        $this->assertDatabaseCount('purchase_items', 0);
     }
 
     public function test_paid_purchase_requires_money_source_and_preserves_selected_items(): void
@@ -897,6 +935,7 @@ class WorkflowTest extends TestCase
         $this->get('/purchases/create')
             ->assertOk()
             ->assertSee('Money Source')
+            ->assertSee('data-money-input', false)
             ->assertSee('purchase-funding-required', false)
             ->assertSee('For unpaid credit purchases, money source will be Supplier Credit / Not Paid Yet.')
             ->assertSee('Select the cash, mobile money, bank, owner, loan, or other real source used to pay.')
@@ -1413,15 +1452,15 @@ class WorkflowTest extends TestCase
                 [
                     'unit_name' => 'Each',
                     'conversion_factor' => 1,
-                    'selling_price' => 1200,
-                    'cost_price' => 800,
+                    'selling_price' => '1,200',
+                    'cost_price' => '800',
                     'is_active' => 1,
                 ],
                 [
                     'unit_name' => 'Box',
                     'conversion_factor' => 12,
-                    'selling_price' => 13500,
-                    'cost_price' => 9200,
+                    'selling_price' => '13,500',
+                    'cost_price' => '9,200',
                     'is_active' => 1,
                 ],
             ],
@@ -1446,15 +1485,15 @@ class WorkflowTest extends TestCase
                     'id' => $defaultUnit->id,
                     'unit_name' => 'Each',
                     'conversion_factor' => 1,
-                    'selling_price' => 1500,
-                    'cost_price' => 900,
+                    'selling_price' => '1,500',
+                    'cost_price' => '900',
                     'is_active' => 1,
                 ],
                 [
                     'unit_name' => 'Carton',
                     'conversion_factor' => 24,
-                    'selling_price' => 28000,
-                    'cost_price' => 18000,
+                    'selling_price' => '28,000',
+                    'cost_price' => '18,000',
                     'is_active' => 1,
                 ],
             ],
@@ -1474,7 +1513,16 @@ class WorkflowTest extends TestCase
             'product_id' => $product->id,
             'unit_name' => 'Carton',
             'is_pos_unit' => true,
+            'cost_price' => 18000,
+            'selling_price' => 28000,
         ]);
+
+        $this->get('/products/'.$product->id.'/edit?focus=units')
+            ->assertOk()
+            ->assertSee('value="28,000"', false)
+            ->assertSee('value="18,000"', false)
+            ->assertSee('data-money-input', false)
+            ->assertSee('name="units[0][conversion_factor]" value="24"', false);
     }
 
     public function test_products_index_uses_server_backed_search_across_pagination(): void

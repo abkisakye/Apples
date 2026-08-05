@@ -21,6 +21,7 @@ use App\Models\SupplierPayment;
 use App\Models\User;
 use App\Services\ExcelExportService;
 use App\Support\FinancialReportsService;
+use App\Support\MoneyInput;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -73,6 +74,11 @@ class ReportController extends Controller
 
     public function productUnitFixWorkbenchUpdate(Request $request)
     {
+        $request->merge([
+            'cost_price' => MoneyInput::normalize($request->input('cost_price')),
+            'selling_price' => MoneyInput::normalize($request->input('selling_price')),
+        ]);
+
         $validated = $request->validate([
             'product_unit_id' => ['required', 'integer', 'exists:product_units,id'],
             'conversion_factor' => ['required', 'numeric', 'gt:0'],

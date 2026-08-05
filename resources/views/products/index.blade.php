@@ -15,6 +15,10 @@
                 <a href="{{ route('products.create') }}" class="button-link">New Product</a>
                 <a href="{{ route('purchases.create') }}" class="button-link primary">New Purchase</a>
             @endif
+            @if ($access->can('reports.view'))
+                <a href="{{ route('reports.price-margins') }}" class="button-link">Product Price & Margin Review</a>
+                <a href="{{ route('reports.product-unit-fix-workbench') }}" class="button-link">Product Cost & Conversion Fix</a>
+            @endif
         </div>
     </div>
 

@@ -1024,6 +1024,7 @@
                 ['label' => 'Suppliers', 'route' => 'suppliers.index', 'match' => 'suppliers.*', 'ability' => 'suppliers.view', 'mark' => 'SU'],
                 ['label' => 'Stock', 'route' => 'stock.balances', 'match' => 'stock.*', 'ability' => 'stock.view', 'mark' => 'ST'],
                 ['label' => 'Products', 'route' => 'products.index', 'match' => 'products.*', 'ability' => 'products.view', 'mark' => 'PR'],
+                ['label' => 'Product Fixes', 'route' => 'reports.product-unit-fix-workbench', 'match' => 'reports.product-unit-fix-workbench*', 'ability' => 'reports.view', 'mark' => 'PF'],
             ],
         ],
         [
@@ -1291,6 +1292,58 @@
             window.addEventListener('resize', () => {
                 menus.forEach(positionRowActionsMenu);
             });
+
+            const normalizeMoneyValue = (value) => String(value ?? '').replace(/,/g, '').trim();
+            const isMoneyLike = (value) => /^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/.test(String(value ?? '').trim());
+            const formatMoneyValue = (value) => {
+                const raw = String(value ?? '').trim();
+
+                if (raw === '' || !isMoneyLike(raw)) {
+                    return String(value ?? '');
+                }
+
+                const normalized = normalizeMoneyValue(raw);
+
+                return Number(normalized).toLocaleString('en-US', {
+                    maximumFractionDigits: 0,
+                    minimumFractionDigits: 0,
+                });
+            };
+
+            const prepareMoneyInputs = (scope = document) => {
+                scope.querySelectorAll('[data-money-input]').forEach((input) => {
+                    if (input.dataset.moneyInputReady === 'true') {
+                        return;
+                    }
+
+                    input.dataset.moneyInputReady = 'true';
+                    input.value = formatMoneyValue(input.value);
+
+                    input.addEventListener('focus', () => {
+                        input.value = normalizeMoneyValue(input.value);
+                    });
+
+                    input.addEventListener('blur', () => {
+                        input.value = formatMoneyValue(input.value);
+                    });
+                });
+            };
+
+            window.AppMoneyInput = {
+                normalize: normalizeMoneyValue,
+                format: formatMoneyValue,
+                prepare: prepareMoneyInputs,
+            };
+
+            prepareMoneyInputs();
+
+            document.addEventListener('submit', (event) => {
+                event.target.querySelectorAll('[data-money-input]').forEach((input) => {
+                    if (isMoneyLike(input.value)) {
+                        input.value = normalizeMoneyValue(input.value);
+                    }
+                });
+            }, true);
 
             document.querySelectorAll('[data-server-live-search-form]').forEach((form) => {
                 const input = form.querySelector('[data-server-live-search-input]');

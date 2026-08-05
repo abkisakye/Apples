@@ -78,7 +78,7 @@
                             <td>{{ $row->store_name }}</td>
                             <td>{{ $row->base_stock_label }}</td>
                             <td><span class="badge soft">{{ $row->base_unit_label }}</span></td>
-                            <td>{{ $currency }} {{ number_format($row->estimated_cost_per_base_unit, 2) }}</td>
+                            <td>{{ $currency }} {{ number_format($row->estimated_cost_per_base_unit, 0) }}</td>
                             <td><strong>{{ $currency }} {{ number_format($row->estimated_stock_value, 0) }}</strong></td>
                             <td>{{ $row->cost_source }}</td>
                             <td>
