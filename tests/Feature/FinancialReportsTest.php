@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Category;
 use App\Models\CashShift;
+use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\InventoryTransaction;
 use App\Models\PaymentMode;
@@ -927,6 +928,150 @@ class FinancialReportsTest extends TestCase
                 ->assertSee('UGX 1,000')
                 ->assertDontSee('OWNER FILTERED RICE')
                 ->assertDontSee('30 Jun 2026');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_owner_report_bundle_combines_month_end_sections_exports_and_is_read_only(): void
+    {
+        $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        [$product, $unit] = $this->singleUnitProduct('BUNDLE PROFIT SOAP', 500, 1000);
+        $saleItem = $this->postSaleLine($product, $unit, '2026-07-10', 5, 1000, 5000, 500, 'posted', $cash->id);
+        $this->postSaleReturnLine($saleItem, '2026-07-11', 1, 1000, 1000);
+        [$missingProduct, $missingUnit] = $this->singleUnitProduct('BUNDLE MISSING COST SOAP', 0, 1500);
+        $this->postSaleLine($missingProduct, $missingUnit, '2026-07-10', 1, 1500, 1500, 0, 'posted', $cash->id);
+        [$voidProduct, $voidUnit] = $this->singleUnitProduct('BUNDLE VOID SOAP', 500, 9000);
+        $this->postSaleLine($voidProduct, $voidUnit, '2026-07-10', 1, 9000, 9000, 500, 'void', $cash->id);
+        $expense = $this->postExpense('2026-07-12', 'Transport', 700, 'posted', $cash->id);
+        $this->postFundedPurchase('2026-07-13', 'Supplier Credit / Not Paid Yet', 3000, 0, 3000);
+        CashShift::create([
+            'shift_no' => 'SHIFT-BUNDLE-001',
+            'store_id' => $this->store->id,
+            'user_id' => auth()->id(),
+            'status' => 'closed',
+            'opened_at' => '2026-07-10 08:00:00',
+            'closed_at' => '2026-07-10 18:00:00',
+            'opening_balance' => 0,
+            'cash_sales_total' => 5000,
+            'cash_customer_payments_total' => 0,
+            'cash_expenses_total' => 0,
+            'expected_cash' => 5000,
+            'counted_cash' => 4950,
+            'shortage_overage' => -50,
+        ]);
+
+        $countsBefore = [
+            'sales' => Sale::query()->count(),
+            'sale_items' => SaleItem::query()->count(),
+            'sale_returns' => SaleReturn::query()->count(),
+            'sale_return_items' => SaleReturnItem::query()->count(),
+            'purchases' => Purchase::query()->count(),
+            'expenses' => Expense::query()->count(),
+            'cash_shifts' => CashShift::query()->count(),
+            'inventory_transactions' => InventoryTransaction::query()->count(),
+            'product_units' => ProductUnit::query()->count(),
+            'customers' => Customer::query()->count(),
+        ];
+        $pricesBefore = ProductUnit::query()->pluck('selling_price', 'id')->all();
+
+        $response = $this->get('/reports/owner-report-bundle?date_from=2026-07-01&date_to=2026-07-31');
+
+        $response->assertOk()
+            ->assertSee('Owner Report Bundle')
+            ->assertSee('Month-End Closing Pack')
+            ->assertSee('Period:')
+            ->assertSee('Gross Sales')
+            ->assertSee('Returns / Refunds')
+            ->assertSee('Net Sales')
+            ->assertSee('Estimated Net Profit')
+            ->assertSee('Health Score')
+            ->assertSee('Cash Sales / Income Summary')
+            ->assertSee('Summary Cash Sales/Income by Shop Report')
+            ->assertSee('Consolidated Sales Detail')
+            ->assertSee('Consolidated Cash Sales/Income Report')
+            ->assertSee('Income and Expenditure')
+            ->assertSee('B/F not available in this system yet')
+            ->assertSee('Gross Margin Summary')
+            ->assertSee('Daily Closing Summary')
+            ->assertSee('Monthly Management Summary')
+            ->assertSee('Owner Dashboard Alerts')
+            ->assertSee('Print / Save as PDF')
+            ->assertSee('Export Bundle CSV')
+            ->assertSee('BUNDLE PROFIT SOAP')
+            ->assertSee('BUNDLE MISSING COST SOAP')
+            ->assertSee('Missing cost')
+            ->assertSee('N/A')
+            ->assertSee('Transport')
+            ->assertSee('Supplier Credit / Not Paid Yet')
+            ->assertSee('Cash shortage/excess')
+            ->assertSee('UGX 6,500')
+            ->assertSee('UGX 1,000')
+            ->assertSee('UGX 5,500')
+            ->assertSee('UGX 700')
+            ->assertSee(route('sales.show', $saleItem->sale, false), false)
+            ->assertSee(route('expenses.show', $expense, false), false)
+            ->assertSee(route('products.edit', ['product' => $missingProduct->id, 'focus' => 'units'], false), false)
+            ->assertDontSee('BUNDLE VOID SOAP')
+            ->assertDontSee('UGX 9,000');
+
+        $csv = $this->get('/reports/owner-report-bundle?date_from=2026-07-01&date_to=2026-07-31&export=csv');
+        $csv->assertOk();
+        $csvContent = $csv->streamedContent();
+        $this->assertStringContainsString('Cover Summary', $csvContent);
+        $this->assertStringContainsString('Cash Sales Summary', $csvContent);
+        $this->assertStringContainsString('Consolidated Sales Detail', $csvContent);
+        $this->assertStringContainsString('Income and Expenditure', $csvContent);
+        $this->assertStringContainsString('Gross Margin Summary', $csvContent);
+        $this->assertStringContainsString('Daily Closing Payment Mode', $csvContent);
+        $this->assertStringContainsString('Monthly Daily Trend', $csvContent);
+        $this->assertStringContainsString('Owner Alerts and Actions', $csvContent);
+
+        $this->get('/management-centre')
+            ->assertOk()
+            ->assertSee('Owner Report Bundle')
+            ->assertSee(route('reports.owner-report-bundle', [], false), false);
+
+        $this->get('/reports/financial-summary?date_from=2026-07-01&date_to=2026-07-31')
+            ->assertOk()
+            ->assertSee('Owner Report Bundle')
+            ->assertSee(route('reports.owner-report-bundle', [], false), false);
+
+        $this->assertSame($countsBefore['sales'], Sale::query()->count());
+        $this->assertSame($countsBefore['sale_items'], SaleItem::query()->count());
+        $this->assertSame($countsBefore['sale_returns'], SaleReturn::query()->count());
+        $this->assertSame($countsBefore['sale_return_items'], SaleReturnItem::query()->count());
+        $this->assertSame($countsBefore['purchases'], Purchase::query()->count());
+        $this->assertSame($countsBefore['expenses'], Expense::query()->count());
+        $this->assertSame($countsBefore['cash_shifts'], CashShift::query()->count());
+        $this->assertSame($countsBefore['inventory_transactions'], InventoryTransaction::query()->count());
+        $this->assertSame($countsBefore['product_units'], ProductUnit::query()->count());
+        $this->assertSame($countsBefore['customers'], Customer::query()->count());
+        $this->assertEquals($pricesBefore, ProductUnit::query()->pluck('selling_price', 'id')->all());
+    }
+
+    public function test_owner_report_bundle_defaults_to_current_month_and_filters_by_date(): void
+    {
+        Carbon::setTestNow('2026-07-20 09:00:00');
+
+        try {
+            $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+            [$julyProduct, $julyUnit] = $this->singleUnitProduct('BUNDLE JULY SOAP', 500, 1000);
+            [$juneProduct, $juneUnit] = $this->singleUnitProduct('BUNDLE JUNE SOAP', 500, 1000);
+            $this->postSaleLine($julyProduct, $julyUnit, '2026-07-05', 1, 1000, 1000, 500, 'posted', $cash->id);
+            $this->postSaleLine($juneProduct, $juneUnit, '2026-06-30', 1, 1000, 1000, 500, 'posted', $cash->id);
+
+            $this->get('/reports/owner-report-bundle')
+                ->assertOk()
+                ->assertSee('01 Jul 2026')
+                ->assertSee('31 Jul 2026')
+                ->assertSee('BUNDLE JULY SOAP')
+                ->assertDontSee('BUNDLE JUNE SOAP');
+
+            $this->get('/reports/owner-report-bundle?date_from=2026-06-01&date_to=2026-06-30')
+                ->assertOk()
+                ->assertSee('BUNDLE JUNE SOAP')
+                ->assertDontSee('BUNDLE JULY SOAP');
         } finally {
             Carbon::setTestNow();
         }

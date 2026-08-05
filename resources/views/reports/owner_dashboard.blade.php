@@ -140,6 +140,7 @@
             <button type="button" class="button-link" onclick="window.print()">Print</button>
             <a href="{{ route('reports.owner-dashboard', $dashboardExportQuery) }}" class="button-link">Export Dashboard CSV</a>
             <a href="{{ route('reports.owner-dashboard', $alertsExportQuery) }}" class="button-link">Export Alerts CSV</a>
+            <a href="{{ route('reports.owner-report-bundle', request()->except('export')) }}" class="button-link">Print Owner Pack</a>
             <a href="{{ route('reports.financial-summary', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Back to Financial Summary</a>
             <a href="{{ route('reports.monthly-management-pack', request()->except('export')) }}" class="button-link">Open Monthly Management Pack</a>
             <a href="{{ route('reports.daily-closing-pack', request()->except('export')) }}" class="button-link">Open Daily Closing Pack</a>

@@ -179,6 +179,17 @@ class ReportController extends Controller
         return view('reports.owner_dashboard', $data);
     }
 
+    public function ownerReportBundle(Request $request, FinancialReportsService $financialReportsService): View|StreamedResponse
+    {
+        $data = $this->ownerReportBundleData($request, $financialReportsService);
+
+        if ($request->query('export') === 'csv') {
+            return $this->ownerReportBundleCsv($data);
+        }
+
+        return view('reports.owner_report_bundle', $data);
+    }
+
     public function financialSummary(Request $request): View
     {
         [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'month');
@@ -1042,6 +1053,81 @@ class ReportController extends Controller
         return $data;
     }
 
+    private function ownerReportBundleData(Request $request, FinancialReportsService $financialReportsService): array
+    {
+        [$fromDate, $toDate, $period] = $this->resolveDateRange($request, 'month');
+        $storeId = (int) $request->integer('store_id');
+        $paymentModeId = (int) $request->integer('payment_mode_id');
+        $userId = (int) $request->integer('user_id');
+
+        $filters = [
+            'date_from' => $fromDate,
+            'date_to' => $toDate,
+            'store_id' => $storeId,
+            'payment_mode_id' => $paymentModeId,
+            'user_id' => $userId,
+        ];
+        $sharedFilters = array_filter($filters, fn ($value) => $value !== null && $value !== '' && $value !== 0);
+        $sharedFilters['date_from'] = $fromDate;
+        $sharedFilters['date_to'] = $toDate;
+
+        $cashSales = $this->dailySalesSummaryData(Request::create('/reports/cash-sales-summary', 'GET', array_merge($sharedFilters, [
+            'sale_type' => 'all',
+            'status' => 'posted',
+        ])));
+        $consolidatedSales = $this->consolidatedSalesDetailData(Request::create('/reports/consolidated-sales-detail', 'GET', array_merge($sharedFilters, [
+            'sale_type' => 'all',
+        ])));
+        $incomeExpenditure = $this->incomeExpenditureData(Request::create('/reports/income-expenditure', 'GET', $sharedFilters));
+        $grossProfit = $financialReportsService->grossProfitReport(Request::create('/reports/gross-profit', 'GET', $sharedFilters));
+        $dailyClosing = $this->dailyClosingPackData(Request::create('/reports/daily-closing-pack', 'GET', $sharedFilters), $financialReportsService);
+        $monthlyManagement = $this->monthlyManagementPackData(Request::create('/reports/monthly-management-pack', 'GET', $sharedFilters), $financialReportsService);
+        $ownerDashboard = $this->ownerDashboardData(Request::create('/reports/owner-dashboard', 'GET', $sharedFilters), $financialReportsService);
+
+        $store = $storeId > 0 ? Store::query()->find($storeId) : null;
+        $paymentMode = $paymentModeId > 0 ? PaymentMode::query()->find($paymentModeId) : null;
+        $user = $userId > 0 ? User::query()->find($userId) : null;
+        $summary = $ownerDashboard['summary'];
+
+        return [
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
+            'period' => $period,
+            'filters' => [
+                'store_id' => $storeId,
+                'payment_mode_id' => $paymentModeId,
+                'user_id' => $userId,
+            ],
+            'stores' => Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'users' => User::query()->orderBy('name')->get(['id', 'name', 'username']),
+            'selectedStore' => $store,
+            'selectedPaymentMode' => $paymentMode,
+            'selectedUser' => $user,
+            'coverSummary' => [
+                'gross_sales' => $summary['gross_sales'],
+                'returns' => $summary['returns'],
+                'net_sales' => $summary['net_sales'],
+                'estimated_cogs' => $summary['estimated_cogs'],
+                'estimated_gross_profit' => $summary['estimated_gross_profit'],
+                'expenses' => $summary['expenses'],
+                'estimated_net_profit' => $summary['estimated_net_profit'],
+                'purchases' => $summary['total_purchases'],
+                'supplier_credit' => $summary['supplier_credit_increase'],
+                'cash_difference' => $ownerDashboard['cashSummary']['difference'],
+                'health_score' => $ownerDashboard['healthScore']['score'],
+                'health_label' => $ownerDashboard['healthScore']['label'],
+            ],
+            'cashSales' => $cashSales,
+            'consolidatedSales' => $consolidatedSales,
+            'incomeExpenditure' => $incomeExpenditure,
+            'grossProfit' => $grossProfit,
+            'dailyClosing' => $dailyClosing,
+            'monthlyManagement' => $monthlyManagement,
+            'ownerDashboard' => $ownerDashboard,
+        ];
+    }
+
     private function ownerDashboardCashSummary(string $fromDate, string $toDate, int $storeId, int $userId): array
     {
         $rows = CashShift::query()
@@ -1807,6 +1893,73 @@ class ReportController extends Controller
             'Amount / Count',
             'Suggested Action',
             'Link',
+        ], $rows);
+    }
+
+    private function ownerReportBundleCsv(array $data): StreamedResponse
+    {
+        $rows = collect();
+
+        foreach ($data['coverSummary'] as $label => $value) {
+            $rows->push(['Cover Summary', str_replace('_', ' ', $label), $value]);
+        }
+
+        foreach ($data['cashSales']['shopGroups'] as $shopGroup) {
+            foreach ($shopGroup['saleGroups'] as $saleGroup) {
+                foreach ($saleGroup['rows'] as $index => $row) {
+                    $rows->push(['Cash Sales Summary', $shopGroup['store_name'], $saleGroup['label'], $index + 1, $row->item_label, $row->quantity, $row->average_rate, $row->total_amount]);
+                }
+            }
+        }
+
+        foreach ($data['consolidatedSales']['rows'] as $row) {
+            $rows->push(['Consolidated Sales Detail', $row->store_name, $row->date, $row->reference, $row->item, $row->quantity, $row->rate, $row->total_amount]);
+        }
+
+        foreach ($data['incomeExpenditure']['rows'] as $row) {
+            $rows->push(['Income and Expenditure', $row->date, $row->reference, $row->section, $row->item, $row->quantity, $row->rate, $row->income, $row->expenditure]);
+        }
+
+        foreach ($data['grossProfit']['productRows'] as $row) {
+            $rows->push(['Gross Margin Summary', $row->product_name, $row->quantity_sold, $row->sales_revenue, $row->net_estimated_cogs, $row->returned_revenue, $row->has_reliable_margin ? $row->net_estimated_gross_profit : 'N/A', $row->has_reliable_margin ? $row->net_margin_percent : 'N/A', $row->warning_label]);
+        }
+
+        foreach ($data['dailyClosing']['paymentRows'] as $row) {
+            $rows->push(['Daily Closing Payment Mode', $row->payment_mode, $row->transaction_count, $row->total_amount, $row->returned_amount, $row->net_amount]);
+        }
+
+        foreach ($data['dailyClosing']['cashierRows'] as $row) {
+            $rows->push(['Daily Closing Cashier', $row->cashier, $row->sales_count, $row->cash_sales, $row->mobile_money_sales, $row->credit_sales, $row->returns, $row->expenses, $row->expected_cash, $row->handover_amount, $row->difference]);
+        }
+
+        foreach ($data['monthlyManagement']['dailyRows'] as $row) {
+            $rows->push(['Monthly Daily Trend', $row->date, $row->sales, $row->returns, $row->net_sales, $row->estimated_gross_profit, $row->expenses, $row->estimated_net_profit, $row->margin_percent]);
+        }
+
+        foreach ($data['monthlyManagement']['topProfitableRows'] as $row) {
+            $rows->push(['Monthly Product Performance', $row->product_name.' - '.$row->unit_name, $row->quantity_sold, $row->revenue, $row->cost, $row->profit, $row->margin_percent, $row->status]);
+        }
+
+        foreach ($data['monthlyManagement']['fundingRows'] as $row) {
+            $rows->push(['Purchase Funding', $row->funding_source, $row->purchase_count, $row->purchase_total, $row->amount_paid, $row->balance_due]);
+        }
+
+        foreach ($data['ownerDashboard']['ownerAlerts'] as $row) {
+            $rows->push(['Owner Alerts and Actions', $row->severity, $row->issue, $row->business_meaning, $row->amount_label, $row->suggested_action, $row->link]);
+        }
+
+        return $this->streamCsv('owner-report-bundle.csv', [
+            'Section',
+            'Name',
+            'Value 1',
+            'Value 2',
+            'Value 3',
+            'Value 4',
+            'Value 5',
+            'Value 6',
+            'Value 7',
+            'Value 8',
+            'Value 9',
         ], $rows);
     }
 

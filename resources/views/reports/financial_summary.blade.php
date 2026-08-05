@@ -9,6 +9,7 @@
             <p>This report shows sales, discounts, cost of goods sold, expenses, and profit for the selected period.</p>
         </div>
         <div class="actions">
+            <a href="{{ route('reports.owner-report-bundle', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Owner Report Bundle</a>
             <a href="{{ route('reports.owner-dashboard', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Owner Dashboard</a>
             <a href="{{ route('reports.monthly-management-pack', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Monthly Management Pack</a>
             <a href="{{ route('reports.daily-closing-pack', ['date_from' => $fromDate, 'date_to' => $toDate]) }}" class="button-link">Daily Closing Pack</a>
