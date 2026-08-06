@@ -141,8 +141,9 @@ class WholesaleBrowserUxTest extends TestCase
 
         $this->get('/sales/'.$sale->id.'/print')
             ->assertOk()
-            ->assertSee('Tea Bags - Box 6 Packets')
-            ->assertSee('Tea Bags - Bundle 10 Packets')
+            ->assertSee('Tea Bags')
+            ->assertSee('Box 6 Packets')
+            ->assertSee('Bundle 10 Packets')
             ->assertDontSee('Tea Bags - Tea Bag Box 6 Packets');
 
         $this->get('/sales/'.$sale->id.'/print?theme=full')

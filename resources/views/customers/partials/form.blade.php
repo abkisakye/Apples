@@ -98,7 +98,15 @@
                 <label class="form-field">
                     <span>Credit Limit</span>
                     <input type="number" step="0.01" min="0" name="credit_limit" value="{{ old('credit_limit', $customer->credit_limit ?? 0) }}">
-                    <div class="field-tip">Leave zero if this customer should not receive credit at the counter.</div>
+                    <div class="field-tip">Use this as the maximum balance once management approves this customer for credit.</div>
+                </label>
+                <label class="form-field">
+                    <span>Credit Sales Approval</span>
+                    <select name="allow_credit_sales">
+                        <option value="0" @selected(! old('allow_credit_sales', $customer->allow_credit_sales ?? false))>Not approved for credit</option>
+                        <option value="1" @selected(old('allow_credit_sales', $customer->allow_credit_sales ?? false))>Approved for credit sales</option>
+                    </select>
+                    <div class="field-tip">Only approved customers can leave the counter with an unpaid or partly paid sale.</div>
                 </label>
                 <label class="form-field">
                     <span>Status</span>
@@ -129,14 +137,14 @@
             </div>
             <div class="side-note-card">
                 <strong>Credit control</strong>
-                <div class="field-tip">Set a limit only when management wants staff to allow controlled credit sales for this account.</div>
+                <div class="field-tip">Approve credit only for trusted named customers. Walk-in and unknown customers cannot use credit sales.</div>
             </div>
         </div>
         <table>
             <tbody>
                 <tr><th style="text-align:left; width:38%;">Use Case</th><td>Create named accounts for repeat buyers, credit customers, and institutions.</td></tr>
                 <tr><th style="text-align:left;">Opening Balance</th><td>Use this only for amounts brought over from the old system or pre-existing balances.</td></tr>
-                <tr><th style="text-align:left;">Credit Limit</th><td>Set this for customers you want staff to treat as credit-approved accounts.</td></tr>
+                <tr><th style="text-align:left;">Credit Approval</th><td>Turn this on only when management has approved the customer for credit sales.</td></tr>
                 <tr><th style="text-align:left;">Status</th><td>Inactive accounts stay in history but can be clearly separated from active trading customers.</td></tr>
             </tbody>
         </table>

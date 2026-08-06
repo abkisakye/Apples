@@ -404,46 +404,34 @@
                 text-align: right;
                 overflow-wrap: anywhere;
             }
-            table.receipt-items {
-                width: 100%;
-                max-width: 100%;
-                border-collapse: collapse;
-                table-layout: fixed;
+            .receipt-items {
+                margin-top: 2px;
             }
-            .receipt-items th,
-            .receipt-items td {
-                padding: 2px 0;
-                vertical-align: top;
-            }
-            .receipt-items th {
-                border-bottom: 1px dashed #000000;
-                font-size: 11px;
-                text-align: left;
-            }
-            .receipt-items th:nth-child(1),
-            .receipt-items td:nth-child(1) {
-                width: 38mm;
-            }
-            .receipt-items th:nth-child(2),
-            .receipt-items td:nth-child(2) {
-                width: 8mm;
-            }
-            .receipt-items th:nth-child(3),
-            .receipt-items td:nth-child(3) {
-                width: 11mm;
-            }
-            .receipt-items th:nth-child(4),
-            .receipt-items td:nth-child(4) {
-                width: 13mm;
-            }
-            .qty,
-            .money {
-                text-align: right;
-                white-space: nowrap;
+            .receipt-item {
+                padding: 3px 0;
+                border-bottom: 1px dotted #9ca3af;
             }
             .item-name {
+                display: block;
+                font-weight: 800;
                 overflow-wrap: anywhere;
                 word-break: normal;
+            }
+            .item-meta {
+                display: grid;
+                grid-template-columns: minmax(15mm, 1fr) minmax(23mm, auto) minmax(17mm, auto);
+                column-gap: 3mm;
+                align-items: start;
+                margin-top: 1px;
+                font-size: 12px;
+            }
+            .item-unit {
+                overflow-wrap: anywhere;
+            }
+            .item-formula,
+            .item-amount {
+                text-align: right;
+                white-space: nowrap;
             }
             .totals {
                 margin-top: 4px;
@@ -451,11 +439,6 @@
             .grand-total {
                 font-size: 15px;
                 font-weight: 900;
-            }
-            .payment-breakdown-title {
-                margin-top: 4px;
-                font-weight: 900;
-                text-transform: uppercase;
             }
             .footer {
                 margin-top: 7px;
@@ -526,80 +509,64 @@
             </div>
         </div>
 
+        @php($isCreditSale = $sale->sale_type === 'credit')
+        @php($thermalTitle = $isCreditSale ? 'CREDIT SALE INVOICE' : 'CASH SALE RECEIPT')
+        @php($documentNumberLabel = $isCreditSale ? 'Invoice No:' : 'Receipt No:')
+        @php($thermalCustomerName = trim((string) $customerName))
+        @php($routineCustomerName = strtolower((string) preg_replace('/[\s\-]+/', '', $thermalCustomerName)))
+        @php($showThermalCustomer = $thermalCustomerName !== '' && ! in_array($routineCustomerName, ['unknowncustomer', 'walkincustomer'], true))
+        @php($thermalQuantity = fn ($value) => rtrim(rtrim(number_format((float) $value, 3, '.', ''), '0'), '.') ?: '0')
+        @php($thermalMoney = fn ($value) => number_format((float) $value, 0, '.', ''))
         <div class="receipt-screen-wrap">
         <div class="receipt-paper">
             <div class="center">
-                <div class="brand">{{ strtoupper(config('business.name', 'Apples Of Gold')) }}</div>
-                @if (config('business.tagline'))
-                    <div class="business-meta">{{ config('business.tagline') }}</div>
-                @endif
-                @if (config('business.address'))
-                    <div class="business-meta">{{ config('business.address') }}</div>
-                @endif
-                @if (config('business.phone'))
-                    <div class="business-meta">Tel: {{ config('business.phone') }}</div>
-                @endif
+                <div class="brand">APPLES OF GOLD</div>
+                <div class="business-meta">WHOLESALE</div>
+                <div class="business-meta">Mutungo Biina - Kiduuka Stage</div>
             </div>
 
             <div class="rule"></div>
-            <div class="receipt-title">{{ $sale->sale_type === 'cash' ? 'Cash Sale Receipt' : 'Credit Sale Invoice' }}</div>
-            <div class="receipt-row"><span>Receipt No:</span><strong>{{ $sale->sale_no }}</strong></div>
-            <div class="receipt-row"><span>Invoice No:</span><strong>{{ $sale->sale_no }}</strong></div>
+            <div class="receipt-title">{{ $thermalTitle }}</div>
+            <div class="receipt-row"><span>{{ $documentNumberLabel }}</span><strong>{{ $sale->sale_no }}</strong></div>
             <div class="receipt-row"><span>Date:</span><strong>{{ optional($sale->sale_date)->format('d M Y') }}</strong></div>
-            <div class="receipt-row"><span>Time:</span><strong>{{ $printedAt->format('H:i') }}</strong></div>
-            <div class="receipt-row"><span>Cashier:</span><strong>{{ $sale->createdBy?->name ?? $sale->createdBy?->username ?? '-' }}</strong></div>
-            <div class="receipt-row"><span>Customer:</span><strong>{{ $customerName }}</strong></div>
+            <div class="receipt-row"><span>Served By:</span><strong>{{ $sale->createdBy?->name ?? $sale->createdBy?->username ?? '-' }}</strong></div>
+            @if ($showThermalCustomer)
+                <div class="receipt-row"><span>Customer:</span><strong>{{ $thermalCustomerName }}</strong></div>
+            @endif
             <div class="rule"></div>
 
-            <table class="receipt-items">
-                <thead>
-                    <tr>
-                        <th>Item</th>
-                        <th class="qty">Qty</th>
-                        <th class="money">Price</th>
-                        <th class="money">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($sale->items as $item)
-                        <tr>
-                            <td class="item-name">{{ $item->display_item_label ?? $item->product?->name ?? '-' }}</td>
-                            <td class="qty">{{ rtrim(rtrim(number_format((float) $item->quantity, 3), '0'), '.') }}</td>
-                            <td class="money">{{ number_format((float) $item->unit_price, 0) }}</td>
-                            <td class="money">{{ number_format((float) $item->line_total, 0) }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+            <div class="receipt-items">
+                @foreach ($sale->items as $item)
+                    @php($productName = (string) ($item->product?->name ?? $item->display_item_label ?? '-'))
+                    @php($displayLabel = (string) ($item->display_item_label ?? ''))
+                    @php($unitLabel = (string) ($item->productUnit?->unit_name ?? 'Unit'))
+                    @php($productPrefix = $productName.' - ')
+                    @if ($displayLabel !== '' && str_starts_with($displayLabel, $productPrefix))
+                        @php($unitLabel = substr($displayLabel, strlen($productPrefix)))
+                    @endif
+                    <div class="receipt-item">
+                        <span class="item-name">{{ $productName }}</span>
+                        <div class="item-meta">
+                            <span class="item-unit">{{ $unitLabel }}</span>
+                            <span class="item-formula">{{ $thermalQuantity($item->quantity) }} x {{ $thermalMoney($item->unit_price) }}</span>
+                            <span class="item-amount">{{ $thermalMoney($item->line_total) }}</span>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
 
             <div class="rule"></div>
             <div class="totals">
-                <div class="receipt-row"><span>Subtotal</span><strong>{{ $currency }} {{ number_format((float) $sale->subtotal, 0) }}</strong></div>
                 @if ((float) $sale->discount_amount > 0)
-                    <div class="receipt-row"><span>Discount</span><strong>{{ $currency }} {{ number_format((float) $sale->discount_amount, 0) }}</strong></div>
+                    <div class="receipt-row"><span>Discount</span><strong>{{ $thermalMoney($sale->discount_amount) }}</strong></div>
                 @endif
-                <div class="receipt-row grand-total"><span>Total</span><strong>{{ $currency }} {{ number_format((float) $sale->total_amount, 0) }}</strong></div>
-                <div class="receipt-row"><span>Paid</span><strong>{{ $currency }} {{ number_format((float) $paidAmount, 0) }}</strong></div>
-                @if ($sale->change_given > 0)
-                    <div class="receipt-row"><span>Change</span><strong>{{ $currency }} {{ number_format((float) $sale->change_given, 0) }}</strong></div>
+                <div class="receipt-row grand-total"><span>Total</span><strong>{{ $thermalMoney($sale->total_amount) }}</strong></div>
+                <div class="receipt-row"><span>Paid</span><strong>{{ $thermalMoney($paidAmount) }}</strong></div>
+                @if ($isCreditSale)
+                    <div class="receipt-row"><span>Balance</span><strong>{{ $thermalMoney($sale->balance_due) }}</strong></div>
+                @else
+                    <div class="receipt-row"><span>Change</span><strong>{{ $thermalMoney($sale->change_given) }}</strong></div>
                 @endif
-                @if ($sale->balance_due > 0)
-                    <div class="receipt-row"><span>Balance</span><strong>{{ $currency }} {{ number_format((float) $sale->balance_due, 0) }}</strong></div>
-                    <div class="receipt-row"><span>Due</span><strong>{{ optional($sale->credit_due_date)->format('d M Y') ?: '-' }}</strong></div>
-                @endif
-                <div class="payment-breakdown-title">Payment</div>
-                @php($postedPayments = $sale->payments->where('status', 'posted'))
-                @forelse ($postedPayments as $payment)
-                    <div class="receipt-row">
-                        <span>{{ $payment->paymentMode?->name ?? $sale->paymentMode?->name ?? 'Payment' }}</span>
-                        <strong>{{ $currency }} {{ number_format((float) $payment->amount, 0) }}</strong>
-                    </div>
-                @empty
-                    <div class="receipt-row">
-                        <span>{{ $sale->paymentMode?->name ?? 'Payment' }}</span>
-                        <strong>{{ $currency }} {{ number_format((float) $sale->amount_paid, 0) }}</strong>
-                    </div>
-                @endforelse
             </div>
 
             @if ($sale->remarks)
@@ -609,11 +576,15 @@
 
             <div class="rule"></div>
             <div class="footer">
-                {{ $sale->sale_type === 'cash'
-                    ? config('business.receipt_footer', 'Thank you for shopping with Apples Of Gold.')
-                    : config('business.invoice_footer', 'Please settle outstanding balances by the due date shown.') }}
+                {{ $isCreditSale ? 'Thank you for your business.' : 'Thank you for shopping with us.' }}
             </div>
-            @include('partials.developer_credit')
+            <div class="print-credit">
+                <div>Apples Of Gold System</div>
+                <div>Designed &amp; Developed by</div>
+                <div>Rolanz Software Solutions</div>
+                {{-- TODO: Replace this support phone when the final developer contact number is provided. --}}
+                <div>Tel: +256 703/773-086 770</div>
+            </div>
         </div>
         </div>
     @else

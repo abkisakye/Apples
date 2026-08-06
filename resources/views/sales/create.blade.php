@@ -7,6 +7,7 @@
             'id' => $customer->id,
             'name' => $customer->name,
             'is_walk_in' => (bool) $customer->is_walk_in,
+            'allow_credit_sales' => (bool) $customer->allow_credit_sales,
             'location' => $customer->location,
             'credit' => round((float) ($customer->outstanding_credit ?? 0) + max((float) ($customer->opening_balance ?? 0) - (float) ($customer->opening_payments_total ?? 0), 0), 2),
             'search' => strtolower(trim(implode(' ', array_filter([
@@ -817,7 +818,8 @@
             color: #3e2e03;
             box-shadow: 0 10px 20px rgba(212, 175, 55, .2);
         }
-        .payment-shortcut.is-missing {
+        .payment-shortcut.is-missing,
+        .payment-shortcut.is-credit-blocked {
             opacity: .48;
             cursor: not-allowed;
         }
@@ -1760,7 +1762,7 @@
                     <h3>Sale</h3>
                     <div class="sale-inline-status">
                         <span id="sale-kind-badge" class="sale-kind-pill">Cash Sale</span>
-                        <span id="walkin-warning" class="sale-walkin-warning">Walk-in must pay in full.</span>
+                        <span id="walkin-warning" class="sale-walkin-warning">Credit approval required.</span>
                     </div>
                 </div>
 
@@ -2256,13 +2258,26 @@
 
             function syncPaymentShortcuts() {
                 const activeButton = activePaymentShortcut();
+                const creditBlocked = saleBalance() > 0 && !customerCreditApproved(selectedCustomer());
                 paymentShortcutButtons.forEach((button) => {
+                    const isCreditButton = button.dataset.paymentShortcut === 'credit';
+                    const blocked = isCreditButton && creditBlocked;
                     button.classList.toggle('is-active', button === activeButton);
+                    button.classList.toggle('is-credit-blocked', blocked);
+                    button.disabled = button.classList.contains('is-missing') || blocked;
+                    if (blocked) {
+                        button.title = 'This customer is not approved for credit sales.';
+                    } else if (!button.classList.contains('is-missing')) {
+                        button.removeAttribute('title');
+                    }
                 });
             }
 
             function applyPaymentShortcut(button) {
-                if (!button || button.classList.contains('is-missing') || !paymentModeSelect) {
+                if (!button || button.classList.contains('is-missing') || button.classList.contains('is-credit-blocked') || !paymentModeSelect) {
+                    if (button?.classList.contains('is-credit-blocked')) {
+                        alert('This customer is not approved for credit sales. Please choose Cash/Mobile Money/Card or ask admin to approve credit for this customer.');
+                    }
                     return;
                 }
 
@@ -2287,6 +2302,23 @@
                 return customers.find((customer) => String(customer.id) === String(customerSelect.value)) || null;
             }
 
+            function routineCustomerName(customer) {
+                return String(customer?.name || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+            }
+
+            function customerCreditApproved(customer) {
+                if (!customer || customer.is_walk_in) {
+                    return false;
+                }
+
+                const normalized = routineCustomerName(customer);
+                if (!normalized || normalized === 'unknowncustomer' || normalized === 'walkincustomer') {
+                    return false;
+                }
+
+                return Boolean(customer.allow_credit_sales);
+            }
+
             function customerDisplay(customer) {
                 if (!customer) {
                     return {
@@ -2299,12 +2331,16 @@
                     value: customer.name,
                     meta: customer.is_walk_in
                         ? 'Walk-in: full payment only.'
-                        : ([customer.location, customer.credit > 0 ? `${money(customer.credit)} credit` : null].filter(Boolean).join(' / ') || 'Saved account'),
+                        : ([
+                            customer.location,
+                            customerCreditApproved(customer) ? 'Credit approved' : 'No credit approval',
+                            customer.credit > 0 ? `${money(customer.credit)} credit` : null,
+                        ].filter(Boolean).join(' / ') || 'Saved account'),
                 };
             }
 
             function creditPeriodIsNeeded(customer = selectedCustomer()) {
-                return Boolean(customer) && !customer.is_walk_in && saleBalance() > 0;
+                return Boolean(customer) && customerCreditApproved(customer) && saleBalance() > 0;
             }
 
             function syncCreditPeriodVisibility(customer = selectedCustomer()) {
@@ -2674,10 +2710,10 @@
                 if (!customerDropdownOpen) {
                     customerSearch.value = triggerCopy.value;
                 }
-                quickCustomerStatus.textContent = activeCustomer?.is_walk_in && saleBalance() > 0
-                    ? 'Walk-in must pay in full.'
+                quickCustomerStatus.textContent = activeCustomer && saleBalance() > 0 && !customerCreditApproved(activeCustomer)
+                    ? 'This customer is not approved for credit sales.'
                     : triggerCopy.meta;
-                walkinWarning?.classList.toggle('is-visible', Boolean(activeCustomer?.is_walk_in && saleBalance() > 0));
+                walkinWarning?.classList.toggle('is-visible', Boolean(activeCustomer && saleBalance() > 0 && !customerCreditApproved(activeCustomer)));
 
                 if (saleBalance() > 0) {
                     saleKindBadge.textContent = 'Credit Sale';
@@ -2701,7 +2737,11 @@
                     <div class="customer-result">
                         <div>
                             <strong>${customer.name}${customer.is_walk_in ? ' (Walk-in)' : ''}</strong>
-                            <div class="sale-product-meta">${[customer.location, customer.credit > 0 ? `${money(customer.credit)} credit` : null].filter(Boolean).join(' / ') || 'Saved account'}</div>
+                            <div class="sale-product-meta">${[
+                                customer.location,
+                                customer.is_walk_in ? 'Full payment only' : (customerCreditApproved(customer) ? 'Credit approved' : 'No credit approval'),
+                                customer.credit > 0 ? `${money(customer.credit)} credit` : null,
+                            ].filter(Boolean).join(' / ') || 'Saved account'}</div>
                         </div>
                         <button type="button" class="button-link" data-customer-pick="${customer.id}">${selectedId === String(customer.id) ? 'Selected' : 'Select'}</button>
                     </div>
@@ -3043,6 +3083,14 @@
                     event.preventDefault();
                     alert('Choose a customer before saving the sale.');
                     customerSearch.focus();
+                    return;
+                }
+
+                const activeCustomer = selectedCustomer();
+                if (saleBalance() > 0 && !customerCreditApproved(activeCustomer)) {
+                    event.preventDefault();
+                    alert('This customer is not approved for credit sales. Please choose Cash/Mobile Money/Card or ask admin to approve credit for this customer.');
+                    customerSearch.focus();
                 }
             });
 
@@ -3102,6 +3150,7 @@
                         id: customer.id,
                         name: customer.name,
                         is_walk_in: false,
+                        allow_credit_sales: false,
                         location: customer.location || '',
                         credit: 0,
                         search: String([customer.name || '', customer.location || ''].join(' ')).toLowerCase(),

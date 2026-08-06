@@ -242,6 +242,7 @@ class CustomerController extends Controller
             'name' => $validated['name'],
             'phone' => $validated['phone'] ?? null,
             'location' => $validated['location'] ?? null,
+            'allow_credit_sales' => false,
             'is_walk_in' => false,
             'is_system' => false,
             'is_active' => true,
@@ -271,6 +272,7 @@ class CustomerController extends Controller
             'opening_balance' => ['nullable', 'numeric', 'min:0'],
             'opening_balance_date' => ['nullable', 'date'],
             'credit_limit' => ['nullable', 'numeric', 'min:0'],
+            'allow_credit_sales' => ['nullable', 'boolean'],
             'customer_type' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'is_active' => ['nullable', 'boolean'],
@@ -281,6 +283,7 @@ class CustomerController extends Controller
             ? ($validated['opening_balance_date'] ?? now()->toDateString())
             : null;
         $validated['credit_limit'] = round((float) ($validated['credit_limit'] ?? 0), 2);
+        $validated['allow_credit_sales'] = $request->boolean('allow_credit_sales');
         $validated['is_active'] = $request->boolean('is_active', true);
 
         return $validated;

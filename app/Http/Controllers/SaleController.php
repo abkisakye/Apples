@@ -172,7 +172,7 @@ class SaleController extends Controller
                 ->withSum(['openingBalancePayments as opening_payments_total' => fn ($query) => $query->posted()], 'amount')
                 ->orderByDesc('is_walk_in')
                 ->orderBy('name')
-                ->get(['id', 'name', 'is_walk_in', 'location', 'opening_balance']),
+                ->get(['id', 'name', 'is_walk_in', 'location', 'opening_balance', 'allow_credit_sales']),
             'paymentModes' => PaymentMode::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'productUnits' => $productUnits,
             'unitsPayload' => $unitsPayload,
@@ -434,9 +434,9 @@ class SaleController extends Controller
             $balanceDue = max($netTotal - $amountApplied, 0);
             $changeGiven = $saleType === 'cash' ? max($enteredAmount - $netTotal, 0) : 0;
 
-            if ($customer->is_walk_in && $balanceDue > 0) {
+            if ($saleType === 'credit' && ! $this->customerCanReceiveCredit($customer)) {
                 throw ValidationException::withMessages([
-                    'customer_id' => 'Walk-in customer cannot carry credit. Choose a named customer or complete full payment.',
+                    'customer_id' => 'This customer is not approved for credit sales. Please choose Cash/Mobile Money/Card or ask admin to approve credit for this customer.',
                 ]);
             }
 
@@ -723,6 +723,25 @@ class SaleController extends Controller
             ));
             $item->setAttribute('base_stock_impact_label', $this->baseStockImpactLabel($item));
         });
+    }
+
+    private function customerCanReceiveCredit(Customer $customer): bool
+    {
+        if ($customer->is_walk_in || $this->isRoutineCustomerName((string) $customer->name)) {
+            return false;
+        }
+
+        return (bool) $customer->allow_credit_sales;
+    }
+
+    private function isRoutineCustomerName(string $name): bool
+    {
+        $normalized = strtolower((string) preg_replace('/[\s\-]+/', '', trim($name)));
+
+        return $normalized === '' || in_array($normalized, [
+            'unknowncustomer',
+            'walkincustomer',
+        ], true);
     }
 
     private function posProductUnits(string $search = '', int $limit = 20): Collection

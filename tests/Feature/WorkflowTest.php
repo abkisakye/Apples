@@ -588,7 +588,7 @@ class WorkflowTest extends TestCase
     public function test_partial_amount_received_turns_sale_into_credit_with_balance(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
-        $customer = Customer::create(['name' => 'Credit Buyer', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Credit Buyer', 'allow_credit_sales' => true, 'is_active' => true]);
         $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
         $product = Product::create(['name' => 'Soap', 'is_active' => true]);
         $unit = ProductUnit::create([
@@ -688,7 +688,108 @@ class WorkflowTest extends TestCase
             'items' => [
                 ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_price' => 3000],
             ],
-        ])->assertSessionHasErrors('customer_id');
+        ])->assertSessionHasErrors([
+            'customer_id' => 'This customer is not approved for credit sales. Please choose Cash/Mobile Money/Card or ask admin to approve credit for this customer.',
+        ]);
+    }
+
+    public function test_unapproved_customer_cannot_post_credit_sale(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Unapproved Credit Buyer', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Credit Soap', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Bar',
+            'selling_price' => 3000,
+            'cost_price' => 2000,
+            'is_active' => true,
+        ]);
+        $this->seedStock($store, $unit, 5);
+
+        $this->from('/sales/create')->post('/sales', [
+            'sale_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 1000,
+            'credit_period_days' => 7,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_price' => 3000],
+            ],
+        ])->assertRedirect('/sales/create')
+            ->assertSessionHasErrors([
+                'customer_id' => 'This customer is not approved for credit sales. Please choose Cash/Mobile Money/Card or ask admin to approve credit for this customer.',
+            ]);
+
+        $this->assertDatabaseCount('sales', 0);
+        $this->assertDatabaseCount('sale_items', 0);
+    }
+
+    public function test_approved_customer_can_post_credit_sale(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Approved Credit Buyer', 'allow_credit_sales' => true, 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Credit Milk', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Pack',
+            'selling_price' => 3000,
+            'cost_price' => 2000,
+            'is_active' => true,
+        ]);
+        $this->seedStock($store, $unit, 5);
+
+        $response = $this->post('/sales', [
+            'sale_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 1000,
+            'credit_period_days' => 7,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_price' => 3000],
+            ],
+        ]);
+
+        $sale = Sale::query()->firstOrFail();
+        $response->assertRedirect('/sales/'.$sale->id);
+        $this->assertSame('credit', $sale->sale_type);
+        $this->assertEquals(2000.0, (float) $sale->balance_due);
+    }
+
+    public function test_cash_sale_still_works_for_unapproved_customer(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Cash Only Buyer', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Cash Bread', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Loaf',
+            'selling_price' => 3000,
+            'cost_price' => 2000,
+            'is_active' => true,
+        ]);
+        $this->seedStock($store, $unit, 5);
+
+        $response = $this->post('/sales', [
+            'sale_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'payment_mode_id' => $paymentMode->id,
+            'amount_paid' => 3000,
+            'items' => [
+                ['product_unit_id' => $unit->id, 'quantity' => 1, 'unit_price' => 3000],
+            ],
+        ]);
+
+        $sale = Sale::query()->firstOrFail();
+        $response->assertRedirect('/sales/'.$sale->id);
+        $this->assertSame('cash', $sale->sale_type);
+        $this->assertEquals(0.0, (float) $sale->balance_due);
     }
 
     public function test_cashier_cannot_override_sale_price_without_approval(): void
@@ -804,14 +905,14 @@ class WorkflowTest extends TestCase
         $this->get('/sales/'.$sale->id.'/print')
             ->assertOk()
             ->assertSee($sale->sale_no)
-            ->assertSee('Cash Sale Receipt')
-            ->assertSee('Generated by Apples Of Gold System')
-            ->assertSee('Designed & Developed by Kisakye Allan | Rolans Software Solutions');
+            ->assertSee('CASH SALE RECEIPT')
+            ->assertSee('Apples Of Gold System')
+            ->assertSee('Rolanz Software Solutions');
         $this->get('/sales/'.$sale->id.'/print?theme=full')->assertOk()->assertSee($sale->sale_no)->assertSee('Sales Receipt');
-        $this->get('/sales/'.$sale->id.'/print?theme=thermal')->assertOk()->assertSee($sale->sale_no)->assertSee('Cash Sale Receipt');
+        $this->get('/sales/'.$sale->id.'/print?theme=thermal')->assertOk()->assertSee($sale->sale_no)->assertSee('CASH SALE RECEIPT');
     }
 
-    public function test_pos_thermal_receipt_uses_80mm_layout_and_hides_controls_for_print(): void
+    public function test_pos_thermal_cash_receipt_uses_simple_80mm_layout(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
         $customer = Customer::create(['name' => 'Thermal Customer', 'phone' => '0700000000', 'is_active' => true]);
@@ -870,13 +971,37 @@ class WorkflowTest extends TestCase
             ->assertSee('Scale 100')
             ->assertSee('Headers and footers Off')
             ->assertSee('Do not use Fit to page width')
+            ->assertDontSee('Your business address')
+            ->assertDontSee('+256700000000')
+            ->assertSee('APPLES OF GOLD')
+            ->assertSee('WHOLESALE')
+            ->assertSee('Mutungo Biina - Kiduuka Stage')
+            ->assertSee('CASH SALE RECEIPT')
             ->assertSee('Receipt No:')
-            ->assertSee('Invoice No:')
+            ->assertDontSee('Invoice No:')
             ->assertSee('RCPT-THERMAL-1')
+            ->assertSee('Served By:')
+            ->assertDontSee('Salesperson:')
+            ->assertDontSee('Cashier:')
+            ->assertDontSee('Time:')
             ->assertSee('Thermal Customer')
-            ->assertSee('Thermal Soap Long Name - Boxes')
-            ->assertSee('Mobile Money')
-            ->assertSee('UGX 184,000')
+            ->assertSee('Thermal Soap Long Name')
+            ->assertSee('Boxes')
+            ->assertSee('1 x 184000')
+            ->assertSee('184000')
+            ->assertSee('Total')
+            ->assertSee('Paid')
+            ->assertSee('Change')
+            ->assertDontSee('Due Date')
+            ->assertDontSee('Subtotal')
+            ->assertDontSee('PAYMENT')
+            ->assertDontSee('Payment</div>', false)
+            ->assertDontSee('Please settle outstanding balances')
+            ->assertSee('Thank you for shopping with us.')
+            ->assertSee('Apples Of Gold System')
+            ->assertSee('Designed &amp; Developed by', false)
+            ->assertSee('Rolanz Software Solutions')
+            ->assertSee('Tel: +256 703/773-086 770')
             ->assertDontSee('Choose Format')
             ->assertDontSee('Full A4 Document')
             ->assertDontSee('Professional')
@@ -892,6 +1017,110 @@ class WorkflowTest extends TestCase
             ->assertOk()
             ->assertSee('size: A4', false)
             ->assertSee('Sales Receipt');
+    }
+
+    public function test_pos_thermal_credit_invoice_uses_invoice_labels_without_due_date(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Credit Thermal Customer', 'phone' => '0700000001', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Credit', 'is_active' => true]);
+        $product = Product::create(['name' => 'Always Extra Long', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Pieces',
+            'selling_price' => 3000,
+            'cost_price' => 2500,
+            'is_active' => true,
+        ]);
+        $sale = Sale::create([
+            'sale_no' => 'INV-THERMAL-1',
+            'sale_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'sale_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 12000,
+            'total_amount' => 12000,
+            'amount_paid' => 0,
+            'balance_due' => 12000,
+            'credit_due_date' => '2026-04-27',
+            'status' => 'posted',
+            'created_by' => auth()->id(),
+        ]);
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $unit->id,
+            'quantity' => 4,
+            'unit_price' => 3000,
+            'line_total' => 12000,
+        ]);
+
+        $this->get('/sales/'.$sale->id.'/print')
+            ->assertOk()
+            ->assertSee('CREDIT SALE INVOICE')
+            ->assertSee('Invoice No:')
+            ->assertDontSee('Receipt No:')
+            ->assertSee('INV-THERMAL-1')
+            ->assertSee('APPLES OF GOLD')
+            ->assertSee('WHOLESALE')
+            ->assertSee('Mutungo Biina - Kiduuka Stage')
+            ->assertSee('Served By:')
+            ->assertDontSee('Salesperson:')
+            ->assertDontSee('Cashier:')
+            ->assertDontSee('Time:')
+            ->assertSee('Customer:')
+            ->assertSee('Credit Thermal Customer')
+            ->assertSee('Always Extra Long')
+            ->assertSee('Pieces')
+            ->assertSee('4 x 3000')
+            ->assertSee('12000')
+            ->assertSee('Total')
+            ->assertSee('Paid')
+            ->assertSee('Balance')
+            ->assertDontSee('Due Date')
+            ->assertDontSee('27 Apr 2026')
+            ->assertDontSee('Your business address')
+            ->assertDontSee('+256700000000')
+            ->assertDontSee('Subtotal')
+            ->assertDontSee('PAYMENT')
+            ->assertDontSee('Payment</div>', false)
+            ->assertDontSee('Please settle outstanding balances')
+            ->assertSee('Thank you for your business.');
+    }
+
+    public function test_pos_thermal_receipt_hides_routine_customer_names(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+
+        foreach (['Walk-in Customer', 'Unknown Customer'] as $index => $customerName) {
+            $customer = Customer::create([
+                'name' => $customerName,
+                'is_walk_in' => $customerName === 'Walk-in Customer',
+                'is_system' => true,
+                'is_active' => true,
+            ]);
+            $sale = Sale::create([
+                'sale_no' => 'RCPT-ROUTINE-'.$index,
+                'sale_date' => '2026-03-25',
+                'store_id' => $store->id,
+                'customer_id' => $customer->id,
+                'sale_type' => 'cash',
+                'payment_mode_id' => $paymentMode->id,
+                'subtotal' => 1000,
+                'total_amount' => 1000,
+                'amount_paid' => 1000,
+                'balance_due' => 0,
+                'status' => 'posted',
+            ]);
+
+            $this->get('/sales/'.$sale->id.'/print')
+                ->assertOk()
+                ->assertSee('CASH SALE RECEIPT')
+                ->assertDontSee('Customer:')
+                ->assertDontSee($customerName);
+        }
     }
 
     public function test_purchase_posting_creates_purchase_items_and_inventory_transaction(): void
@@ -1497,6 +1726,7 @@ class WorkflowTest extends TestCase
             'customer_type' => 'Retail',
             'opening_balance' => 50,
             'credit_limit' => 1000,
+            'allow_credit_sales' => 0,
             'is_active' => 1,
         ])->assertRedirect();
 
@@ -1511,6 +1741,7 @@ class WorkflowTest extends TestCase
             'customer_type' => 'Retail',
             'opening_balance' => 50,
             'credit_limit' => 1500,
+            'allow_credit_sales' => 1,
             'is_active' => 1,
         ])->assertRedirect('/customers/'.$customer->id);
 
@@ -1518,6 +1749,7 @@ class WorkflowTest extends TestCase
             'id' => $customer->id,
             'name' => 'Browser Customer Updated',
             'credit_limit' => 1500,
+            'allow_credit_sales' => true,
         ]);
 
         $this->post('/products', [
@@ -4516,9 +4748,9 @@ class WorkflowTest extends TestCase
             'status' => 'posted',
         ]);
 
-        $this->get('/sales/'.$sale->id.'/print')
+        $this->get('/sales/'.$sale->id.'/print?theme=full')
             ->assertOk()
-            ->assertSee('CLIENT DEMO STORES')
+            ->assertSee('Client Demo Stores')
             ->assertSee('Receipt footer text');
     }
 
@@ -4927,7 +5159,7 @@ class WorkflowTest extends TestCase
     {
         $storeMain = Store::create(['name' => 'Main Store', 'is_active' => true]);
         $storeBranch = Store::create(['name' => 'Branch Store', 'is_active' => true]);
-        $customer = Customer::create(['name' => 'Daily Customer', 'phone' => '0700111222', 'location' => 'Kampala', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Daily Customer', 'phone' => '0700111222', 'location' => 'Kampala', 'allow_credit_sales' => true, 'is_active' => true]);
         $supplier = Supplier::create(['name' => 'Daily Supplier', 'phone' => '0700222333', 'country' => 'Uganda', 'is_active' => true]);
         $cashMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
         $mobileMode = PaymentMode::create(['name' => 'Mobile Money', 'is_active' => true]);
@@ -5127,7 +5359,7 @@ class WorkflowTest extends TestCase
         ]);
 
         $this->get('/sales/'.$sale->id)->assertOk()->assertSee($sale->sale_no)->assertSee('Daily Customer');
-        $this->get('/sales/'.$sale->id.'/print')->assertOk()->assertSee($sale->sale_no)->assertSee('Credit Sale Invoice');
+        $this->get('/sales/'.$sale->id.'/print')->assertOk()->assertSee($sale->sale_no)->assertSee('CREDIT SALE INVOICE');
         $this->get('/sales/'.$sale->id.'/print?theme=full')->assertOk()->assertSee($sale->sale_no)->assertSee('Sales Invoice');
         $this->get('/purchases/'.$purchase->id)->assertOk()->assertSee($purchase->purchase_no)->assertSee('Daily Supplier');
         $this->get('/purchases/'.$purchase->id.'/print')->assertOk()->assertSee($purchase->purchase_no)->assertSee('Purchase Invoice');

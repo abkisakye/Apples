@@ -43,6 +43,10 @@
                     <tr><th style="text-align:left;">Location</th><td>{{ $customer->location ?? '-' }}</td></tr>
                     <tr><th style="text-align:left;">Address</th><td>{{ $customer->address ?? '-' }}</td></tr>
                     <tr><th style="text-align:left;">Type</th><td>{{ $customer->customer_type ?? 'General' }}</td></tr>
+                    <tr>
+                        <th style="text-align:left;">Credit Sales</th>
+                        <td><span class="badge {{ $customer->allow_credit_sales ? 'success' : 'credit' }}">{{ $customer->allow_credit_sales ? 'Approved' : 'Not approved' }}</span></td>
+                    </tr>
                     <tr><th style="text-align:left;">Credit Limit</th><td>{{ $currency }} {{ number_format((float) $customer->credit_limit, 0) }}</td></tr>
                     <tr><th style="text-align:left;">Status</th><td><span class="badge {{ $customer->is_active ? 'success' : 'credit' }}">{{ $customer->is_active ? 'Active' : 'Inactive' }}</span></td></tr>
                 </tbody>

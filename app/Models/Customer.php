@@ -15,6 +15,7 @@ class Customer extends Model
             'opening_balance' => 'decimal:2',
             'opening_balance_date' => 'date',
             'credit_limit' => 'decimal:2',
+            'allow_credit_sales' => 'boolean',
             'is_walk_in' => 'boolean',
             'is_system' => 'boolean',
             'is_active' => 'boolean',
