@@ -17,7 +17,7 @@
             @endif
             @if ($access->can('reports.view'))
                 <a href="{{ route('reports.price-margins') }}" class="button-link">Product Price & Margin Review</a>
-                <a href="{{ route('reports.product-unit-fix-workbench') }}" class="button-link">Product Cost & Conversion Fix</a>
+                <a href="{{ route('reports.product-unit-fix-workbench') }}" class="button-link">Product Unit Setup Workbench</a>
             @endif
         </div>
     </div>

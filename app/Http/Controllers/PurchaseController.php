@@ -91,6 +91,7 @@ class PurchaseController extends Controller
                 'product_unit_id' => $selectedUnit->id,
                 'quantity' => 1,
                 'unit_cost' => (float) $selectedUnit->cost_price,
+                'selling_price' => (float) $selectedUnit->selling_price,
             ]] : [],
         ];
 
@@ -117,6 +118,8 @@ class PurchaseController extends Controller
                         'product_unit_id' => $item->product_unit_id,
                         'quantity' => (int) round((float) $item->quantity),
                         'unit_cost' => (float) $item->unit_cost,
+                        'selling_price' => (float) ($item->productUnit?->selling_price ?? 0),
+                        'line_total' => (float) $item->line_total,
                     ];
                 })->all(),
             ];
@@ -234,6 +237,8 @@ class PurchaseController extends Controller
 
         foreach (($input['items'] ?? []) as $index => $item) {
             $input['items'][$index]['unit_cost'] = MoneyInput::normalize($item['unit_cost'] ?? null);
+            $input['items'][$index]['selling_price'] = MoneyInput::normalize($item['selling_price'] ?? null);
+            $input['items'][$index]['line_total'] = MoneyInput::normalize($item['line_total'] ?? null);
         }
 
         $request->merge($input);
@@ -255,6 +260,8 @@ class PurchaseController extends Controller
             'items.*.product_unit_id' => ['nullable', 'exists:product_units,id'],
             'items.*.quantity' => ['nullable', 'integer', 'min:1'],
             'items.*.unit_cost' => ['nullable', 'numeric', 'min:0'],
+            'items.*.selling_price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.line_total' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $items = collect($validated['items'])
@@ -291,8 +298,18 @@ class PurchaseController extends Controller
                 $quantity = max((int) $item['quantity'], 1);
                 $conversionFactor = $conversionService->conversionFactorSnapshot($unit);
                 $baseQuantity = $conversionService->toBaseQuantity($quantity, $unit);
-                $unitCost = round((float) ($item['unit_cost'] ?? $unit?->cost_price ?? 0), 2);
-                $lineTotal = round($quantity * $unitCost, 2);
+                $enteredLineTotal = array_key_exists('line_total', $item) && $item['line_total'] !== null && $item['line_total'] !== ''
+                    ? round((float) $item['line_total'], 2)
+                    : null;
+                $unitCost = $enteredLineTotal !== null && $quantity > 0
+                    ? round($enteredLineTotal / $quantity, 2)
+                    : round((float) ($item['unit_cost'] ?? $unit?->cost_price ?? 0), 2);
+                $lineTotal = $enteredLineTotal !== null
+                    ? $enteredLineTotal
+                    : round($quantity * $unitCost, 2);
+                $sellingPrice = array_key_exists('selling_price', $item) && $item['selling_price'] !== null && $item['selling_price'] !== ''
+                    ? round((float) $item['selling_price'], 2)
+                    : null;
 
                 return [
                     'unit' => $unit,
@@ -300,6 +317,7 @@ class PurchaseController extends Controller
                     'base_quantity' => $baseQuantity,
                     'conversion_factor_snapshot' => $conversionFactor,
                     'unit_cost' => $unitCost,
+                    'selling_price' => $sellingPrice,
                     'line_total' => $lineTotal,
                 ];
             });
@@ -383,6 +401,11 @@ class PurchaseController extends Controller
                     'line_total' => $item['line_total'],
                 ]);
                 $costSyncService->syncFromPurchaseItem($purchaseItem);
+                if ($item['selling_price'] !== null) {
+                    ProductUnit::query()
+                        ->whereKey($unit->id)
+                        ->update(['selling_price' => $item['selling_price']]);
+                }
 
                 InventoryTransaction::create([
                     'transaction_date' => $purchase->purchase_date,
@@ -557,7 +580,7 @@ class PurchaseController extends Controller
         if ($productUnitId > 0) {
             return ProductUnit::query()
                 ->where('is_active', true)
-                ->find($productUnitId, ['id', 'product_id', 'cost_price']);
+                ->find($productUnitId, ['id', 'product_id', 'cost_price', 'selling_price']);
         }
 
         if ($productId > 0) {
@@ -566,7 +589,7 @@ class PurchaseController extends Controller
                 ->where('is_active', true)
                 ->orderByDesc('is_pos_unit')
                 ->orderBy('unit_name')
-                ->first(['id', 'product_id', 'cost_price']);
+                ->first(['id', 'product_id', 'cost_price', 'selling_price']);
         }
 
         return null;

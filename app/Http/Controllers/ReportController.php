@@ -148,6 +148,21 @@ class ReportController extends Controller
             ]);
         });
 
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'message' => 'Saved',
+                'unit' => [
+                    'id' => $unit->id,
+                    'conversion_factor' => $after['conversion_factor'],
+                    'cost_price' => $after['cost_price'],
+                    'selling_price' => $after['selling_price'],
+                    'allow_fractional_quantity' => $after['allow_fractional_quantity'],
+                    'quantity_precision' => $after['quantity_precision'],
+                    'minimum_wholesale_quantity' => $after['minimum_wholesale_quantity'],
+                ],
+            ]);
+        }
+
         return redirect()
             ->route('reports.product-unit-fix-workbench', $request->except([
                 '_token',
@@ -992,8 +1007,65 @@ class ReportController extends Controller
                 'expenditure' => (float) $expense->amount,
             ]);
 
-        $rows = $sales
+        $purchaseRows = Purchase::query()
+            ->with(['supplier:id,name', 'store:id,name', 'paymentMode:id,name', 'fundingSource:id,name', 'payments:id,purchase_id,amount,status'])
+            ->posted()
+            ->where('amount_paid', '>', 0)
+            ->whereDate('purchase_date', '>=', $fromDate)
+            ->whereDate('purchase_date', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->when($paymentModeId > 0, fn ($query) => $query->where('payment_mode_id', $paymentModeId))
+            ->get()
+            ->map(function (Purchase $purchase) {
+                $laterSupplierPayments = (float) $purchase->payments
+                    ->where('status', 'posted')
+                    ->sum('amount');
+                $paidAtPurchaseEntry = max(round((float) $purchase->amount_paid - $laterSupplierPayments, 2), 0);
+
+                return (object) [
+                    'date' => $purchase->purchase_date?->toDateString() ?? '',
+                    'reference' => $purchase->purchase_no,
+                    'reference_url' => route('purchases.show', $purchase, false),
+                    'store_name' => $purchase->store?->name ?? 'Unassigned store',
+                    'account_name' => $purchase->fundingSource?->name ?? $purchase->paymentMode?->name ?? 'Purchase funding source not set',
+                    'section' => 'Paid Purchases / Stock Bought',
+                    'item' => trim('Purchase from '.($purchase->supplier?->name ?? 'Supplier')),
+                    'quantity' => null,
+                    'rate' => null,
+                    'income' => 0.0,
+                    'expenditure' => $paidAtPurchaseEntry,
+                ];
+            })
+            ->filter(fn ($row) => $row->expenditure > 0)
+            ->values();
+
+        $supplierPaymentRows = SupplierPayment::query()
+            ->with(['supplier:id,name', 'purchase:id,purchase_no,store_id', 'store:id,name', 'paymentMode:id,name'])
+            ->where('status', 'posted')
+            ->whereDate('payment_date', '>=', $fromDate)
+            ->whereDate('payment_date', '<=', $toDate)
+            ->when($storeId > 0, fn ($query) => $query->where('store_id', $storeId))
+            ->when($paymentModeId > 0, fn ($query) => $query->where('payment_mode_id', $paymentModeId))
+            ->whereHas('purchase', fn ($query) => $query->posted())
+            ->get()
+            ->map(fn (SupplierPayment $payment) => (object) [
+                'date' => $payment->payment_date?->toDateString() ?? '',
+                'reference' => $payment->payment_no,
+                'reference_url' => route('supplier-payments.show', $payment, false),
+                'store_name' => $payment->store?->name ?? 'Unassigned store',
+                'account_name' => $payment->paymentMode?->name ?? 'Unassigned',
+                'section' => 'Supplier Payments / Credit Purchases',
+                'item' => trim('Payment to '.($payment->supplier?->name ?? 'Supplier').($payment->purchase?->purchase_no ? ' for '.$payment->purchase->purchase_no : '')),
+                'quantity' => null,
+                'rate' => null,
+                'income' => 0.0,
+                'expenditure' => (float) $payment->amount,
+            ]);
+
+        $rows = collect($sales)
             ->merge($expenses)
+            ->merge($purchaseRows)
+            ->merge($supplierPaymentRows)
             ->sortBy([
                 ['date', 'asc'],
                 ['section', 'desc'],

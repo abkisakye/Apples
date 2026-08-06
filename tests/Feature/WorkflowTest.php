@@ -1212,6 +1212,70 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseCount('purchase_items', 0);
     }
 
+    public function test_purchase_create_can_update_selling_price_and_derive_buying_cost_from_line_total(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $supplier = Supplier::create(['name' => 'Line Total Supplier', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $product = Product::create(['name' => 'Line Total Rice', 'is_active' => true]);
+        $unit = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Cartons',
+            'selling_price' => 120000,
+            'cost_price' => 10000,
+            'conversion_factor' => 12,
+            'is_active' => true,
+        ]);
+
+        $this->get('/purchases/create')
+            ->assertOk()
+            ->assertSee('Selling Price')
+            ->assertSee('Line Total')
+            ->assertSee('data-selling-price', false)
+            ->assertSee('data-line-total', false)
+            ->assertSee('name="items[${index}][selling_price]"', false)
+            ->assertSee('name="items[${index}][line_total]"', false);
+
+        $response = $this->post('/purchases', [
+            'purchase_date' => '2026-03-25',
+            'store_id' => $store->id,
+            'supplier_id' => $supplier->id,
+            'purchase_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'purchase_funding_source_id' => $this->businessCashFundingSource()->id,
+            'items' => [
+                [
+                    'product_unit_id' => $unit->id,
+                    'quantity' => 4,
+                    'unit_cost' => '',
+                    'line_total' => '80,000',
+                    'selling_price' => '35,000',
+                ],
+            ],
+        ]);
+
+        $purchase = Purchase::query()->firstOrFail();
+        $response->assertRedirect('/purchases/'.$purchase->id);
+
+        $this->assertDatabaseHas('purchase_items', [
+            'purchase_id' => $purchase->id,
+            'product_unit_id' => $unit->id,
+            'quantity' => 4,
+            'unit_cost' => 20000,
+            'line_total' => 80000,
+        ]);
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'purchase',
+            'product_unit_id' => $unit->id,
+            'quantity_in' => 4,
+            'base_quantity_in' => 48,
+            'unit_cost' => 20000,
+        ]);
+        $this->assertEquals(35000.0, (float) $unit->fresh()->selling_price);
+        $this->assertEquals(20000.0, (float) $unit->fresh()->cost_price);
+        $this->assertEquals(80000.0, (float) $purchase->total_amount);
+    }
+
     public function test_paid_purchase_requires_money_source_and_preserves_selected_items(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
@@ -1251,6 +1315,8 @@ class WorkflowTest extends TestCase
             ->assertSee('purchase-funding-required', false)
             ->assertSee('For unpaid credit purchases, money source will be Supplier Credit / Not Paid Yet.')
             ->assertSee('Select the cash, mobile money, bank, owner, loan, or other real source used to pay.')
+            ->assertSee('data-selling-price', false)
+            ->assertSee('data-line-total', false)
             ->assertSee('Money Source Rice - Bag');
     }
 

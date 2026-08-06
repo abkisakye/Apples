@@ -16,6 +16,7 @@
         'product_name' => $unit->product->name,
         'unit_name' => $unit->unit_name,
         'price' => (float) $unit->cost_price,
+        'selling_price' => (float) $unit->selling_price,
         'barcode' => $unit->barcode,
         'code' => $unit->product->code,
         'part_number' => $unit->part_number,
@@ -90,15 +91,16 @@
         .status-pill { display:inline-flex; align-items:center; justify-content:center; width:100%; padding:9px 10px; border-radius:9px; background:#DBEAFE; color:#1D4ED8; font-weight:800; }
         .status-pill.credit { background:var(--purchase-soft); color:var(--purchase-main); }
         .incoming-table-wrap { margin-top:8px; max-height:min(360px, calc(100vh - 390px)); overflow:auto; border:1px solid #e7e5e4; border-radius:10px; background:#fff; }
-        .incoming-table { width:100%; border-collapse:collapse; min-width:760px; table-layout:fixed; }
+        .incoming-table { width:100%; border-collapse:collapse; min-width:920px; table-layout:fixed; }
         .incoming-table th, .incoming-table td { padding:5px 7px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:middle; }
         .incoming-table th { position:sticky; top:0; z-index:1; background:var(--purchase-soft); color:var(--purchase-main); font-size:.76rem; text-transform:uppercase; letter-spacing:.04em; }
         .incoming-table input { width:100%; min-height:30px; padding:5px 7px; }
-        .incoming-table th:nth-child(1), .incoming-table td:nth-child(1) { width:39%; }
-        .incoming-table th:nth-child(2), .incoming-table td:nth-child(2) { width:18%; }
-        .incoming-table th:nth-child(3), .incoming-table td:nth-child(3) { width:17%; }
-        .incoming-table th:nth-child(4), .incoming-table td:nth-child(4) { width:16%; }
-        .incoming-table th:nth-child(5), .incoming-table td:nth-child(5) { width:10%; }
+        .incoming-table th:nth-child(1), .incoming-table td:nth-child(1) { width:32%; }
+        .incoming-table th:nth-child(2), .incoming-table td:nth-child(2) { width:14%; }
+        .incoming-table th:nth-child(3), .incoming-table td:nth-child(3) { width:14%; }
+        .incoming-table th:nth-child(4), .incoming-table td:nth-child(4) { width:14%; }
+        .incoming-table th:nth-child(5), .incoming-table td:nth-child(5) { width:16%; }
+        .incoming-table th:nth-child(6), .incoming-table td:nth-child(6) { width:10%; }
         .incoming-product { font-weight:800; color:var(--purchase-ink); }
         .incoming-unit { color:#6b7280; font-size:.78rem; margin-top:2px; }
         .purchase-qty-box { display:grid; grid-template-columns:28px minmax(0,1fr) 28px; gap:4px; align-items:center; }
@@ -122,7 +124,7 @@
         </div>
         <div class="actions">
             @if ($access->can('reports.view'))
-                <a href="{{ route('reports.product-unit-fix-workbench') }}" class="button-link">Product Cost & Conversion Fix</a>
+                <a href="{{ route('reports.product-unit-fix-workbench') }}" class="button-link">Product Unit Setup Workbench</a>
             @endif
             <a href="{{ $returnTo ?: route('purchases.index') }}" class="button-link">Back to Purchases</a>
         </div>
@@ -311,6 +313,8 @@
                         product_name: @json($oldUnit->product->name),
                         unit_name: @json($oldUnit->unit_name),
                         price: {{ (float) ($oldItem['unit_cost'] ?? $oldUnit->cost_price) }},
+                        selling_price: {{ (float) ($oldItem['selling_price'] ?? $oldUnit->selling_price) }},
+                        line_total: {{ (float) ($oldItem['line_total'] ?? (((float) ($oldItem['quantity'] ?? 1)) * ((float) ($oldItem['unit_cost'] ?? $oldUnit->cost_price)))) }},
                         quantity: {{ (int) round((float) ($oldItem['quantity'] ?? 1)) }},
                         barcode: @json($oldUnit->barcode),
                         code: @json($oldUnit->product->code),
@@ -348,7 +352,8 @@
             function money(value) { return `${currency} ${Number(value || 0).toLocaleString()}`; }
             function moneyInput(value) { return Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 0, minimumFractionDigits: 0 }); }
             function normalizeQuantity(value) { return Math.max(Math.round(Number(value || 0)), 1); }
-            function total() { return cart.reduce((sum, item) => sum + (Number(item.quantity || 0) * parseMoney(item.price)), 0); }
+            function itemLineTotal(item) { return parseMoney(item.line_total ?? (Number(item.quantity || 0) * parseMoney(item.price))); }
+            function total() { return cart.reduce((sum, item) => sum + itemLineTotal(item), 0); }
             function paidNow() { return parseMoney(amountPaidInput.value); }
             function balance() { return Math.max(total() - Math.min(paidNow(), total()), 0); }
             function duePreview() {
@@ -458,6 +463,8 @@
                     <input type="hidden" name="items[${index}][product_unit_id]" value="${item.id}">
                     <input type="hidden" name="items[${index}][quantity]" value="${item.quantity}">
                     <input type="hidden" name="items[${index}][unit_cost]" value="${escapeAttribute(item.price)}">
+                    <input type="hidden" name="items[${index}][selling_price]" value="${escapeAttribute(item.selling_price ?? '')}">
+                    <input type="hidden" name="items[${index}][line_total]" value="${escapeAttribute(item.line_total ?? '')}">
                 `).join('');
 
                 const selectedSupplier = suppliers.find((item) => String(item.id) === String(supplierInput.value));
@@ -500,7 +507,7 @@
             function updateCartRow(index) {
                 const lineTotalField = cartList.querySelector(`[data-line-total="${index}"]`);
                 if (lineTotalField) {
-                    lineTotalField.value = money(Number(cart[index]?.quantity || 0) * parseMoney(cart[index]?.price));
+                    lineTotalField.value = moneyInput(itemLineTotal(cart[index] || {}));
                 }
             }
 
@@ -514,6 +521,7 @@
                                 <th>Product / Pack</th>
                                 <th>Qty Received</th>
                                 <th>Buying Cost</th>
+                                <th>Selling Price</th>
                                 <th>Line Total</th>
                                 <th>Remove</th>
                             </tr>
@@ -533,7 +541,8 @@
                                         </div>
                                     </td>
                                     <td><input type="text" value="${escapeAttribute(isMoneyLike(item.price) ? moneyInput(parseMoney(item.price)) : item.price)}" data-price="${index}" data-money-input inputmode="numeric" autocomplete="off"></td>
-                                    <td><input type="text" value="${money(Number(item.quantity) * parseMoney(item.price))}" data-line-total="${index}" class="line-total-field" readonly></td>
+                                    <td><input type="text" value="${escapeAttribute(isMoneyLike(item.selling_price) ? moneyInput(parseMoney(item.selling_price)) : (item.selling_price ?? ''))}" data-selling-price="${index}" data-money-input inputmode="numeric" autocomplete="off"></td>
+                                    <td><input type="text" value="${moneyInput(itemLineTotal(item))}" data-line-total="${index}" class="line-total-field" data-money-input inputmode="numeric" autocomplete="off"></td>
                                     <td><button type="button" class="cart-remove" data-remove="${index}">Remove</button></td>
                                 </tr>
                             `).join('')}
@@ -552,12 +561,12 @@
                 if (existingIndex >= 0) {
                     const existing = cart.splice(existingIndex, 1)[0];
                     existing.quantity = normalizeQuantity(existing.quantity) + 1;
+                    existing.line_total = Number(existing.quantity || 0) * parseMoney(existing.price);
                     cart.unshift(existing);
                 } else {
-                    cart.unshift({ ...unit, quantity: 1 });
+                    cart.unshift({ ...unit, quantity: 1, line_total: unit.price });
                 }
                 renderCart();
-                searchInput.value = '';
                 renderSearchResults();
                 searchInput.focus();
             }
@@ -594,6 +603,7 @@
                 if (plus) {
                     const index = Number(plus.dataset.plus);
                     cart[index].quantity = normalizeQuantity(cart[index].quantity) + 1;
+                    cart[index].line_total = Number(cart[index].quantity || 0) * parseMoney(cart[index].price);
                     renderCart();
                     return;
                 }
@@ -601,6 +611,7 @@
                 if (minus) {
                     const index = Number(minus.dataset.minus);
                     cart[index].quantity = Math.max(normalizeQuantity(cart[index].quantity) - 1, 1);
+                    cart[index].line_total = Number(cart[index].quantity || 0) * parseMoney(cart[index].price);
                     renderCart();
                 }
             });
@@ -610,6 +621,7 @@
                 if (qty) {
                     const index = Number(qty.dataset.qty);
                     cart[index].quantity = normalizeQuantity(qty.value);
+                    cart[index].line_total = Number(cart[index].quantity || 0) * parseMoney(cart[index].price);
                     updateCartRow(index);
                     syncPurchaseSummary();
                     return;
@@ -618,7 +630,28 @@
                 if (price) {
                     const index = Number(price.dataset.price);
                     cart[index].price = price.value;
+                    cart[index].line_total = Number(cart[index].quantity || 0) * parseMoney(cart[index].price);
                     updateCartRow(index);
+                    syncPurchaseSummary();
+                    return;
+                }
+                const sellingPrice = event.target.closest('[data-selling-price]');
+                if (sellingPrice) {
+                    const index = Number(sellingPrice.dataset.sellingPrice);
+                    cart[index].selling_price = sellingPrice.value;
+                    syncPurchaseSummary();
+                    return;
+                }
+                const lineTotal = event.target.closest('[data-line-total]');
+                if (lineTotal) {
+                    const index = Number(lineTotal.dataset.lineTotal);
+                    cart[index].line_total = lineTotal.value;
+                    const quantity = normalizeQuantity(cart[index].quantity);
+                    if (quantity > 0 && isMoneyLike(lineTotal.value)) {
+                        cart[index].price = parseMoney(lineTotal.value) / quantity;
+                        const priceInput = cartList.querySelector(`[data-price="${index}"]`);
+                        if (priceInput) priceInput.value = moneyInput(cart[index].price);
+                    }
                     syncPurchaseSummary();
                 }
             });
@@ -639,8 +672,36 @@
                     if (isMoneyLike(cart[index].price)) {
                         cart[index].price = Math.max(parseMoney(cart[index].price), 0);
                         price.value = moneyInput(cart[index].price);
+                        cart[index].line_total = Number(cart[index].quantity || 0) * parseMoney(cart[index].price);
                     }
                     updateCartRow(index);
+                    syncPurchaseSummary();
+                    return;
+                }
+
+                const sellingPrice = event.target.closest('[data-selling-price]');
+                if (sellingPrice) {
+                    const index = Number(sellingPrice.dataset.sellingPrice);
+                    if (isMoneyLike(cart[index].selling_price)) {
+                        cart[index].selling_price = Math.max(parseMoney(cart[index].selling_price), 0);
+                        sellingPrice.value = moneyInput(cart[index].selling_price);
+                    }
+                    syncPurchaseSummary();
+                    return;
+                }
+
+                const lineTotal = event.target.closest('[data-line-total]');
+                if (lineTotal) {
+                    const index = Number(lineTotal.dataset.lineTotal);
+                    if (isMoneyLike(cart[index].line_total)) {
+                        cart[index].line_total = Math.max(parseMoney(cart[index].line_total), 0);
+                        lineTotal.value = moneyInput(cart[index].line_total);
+                        cart[index].price = normalizeQuantity(cart[index].quantity) > 0
+                            ? parseMoney(cart[index].line_total) / normalizeQuantity(cart[index].quantity)
+                            : 0;
+                        const priceInput = cartList.querySelector(`[data-price="${index}"]`);
+                        if (priceInput) priceInput.value = moneyInput(cart[index].price);
+                    }
                     syncPurchaseSummary();
                 }
             });

@@ -19,6 +19,7 @@ use App\Models\SaleReturn;
 use App\Models\SaleReturnItem;
 use App\Models\Store;
 use App\Models\Supplier;
+use App\Models\SupplierPayment;
 use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -202,7 +203,7 @@ class FinancialReportsTest extends TestCase
 
         $this->get('/reports/product-unit-fix-workbench?status=missing_cost')
             ->assertOk()
-            ->assertSee('Product Cost &amp; Conversion Fix Workbench', false)
+            ->assertSee('Product Unit Setup / Price &amp; Conversion Workbench', false)
             ->assertSee($missingCostProduct->name)
             ->assertSee('Enter cost price')
             ->assertDontSee($bulkProduct->name);
@@ -279,7 +280,45 @@ class FinancialReportsTest extends TestCase
 
         $this->get('/reports/product-unit-fix-workbench?status=missing_cost&q=WORKBENCH+FIXABLE+SOAP')
             ->assertOk()
+            ->assertSee('value="WORKBENCH FIXABLE SOAP"', false)
             ->assertSee('No product unit setup rows matched the selected filters.');
+    }
+
+    public function test_product_unit_fix_workbench_can_save_one_row_with_ajax_without_touching_history(): void
+    {
+        [$product, $unit] = $this->singleUnitProduct('WORKBENCH AJAX SOAP', 1000, 1500);
+        $this->stockMovement($product, $unit, 3, 0, 3, 0, 'opening_stock');
+        $this->postSaleLine($product, $unit, '2026-07-28', 1, 1500, 1500, 1000);
+
+        $beforeCounts = [
+            'inventory_transactions' => InventoryTransaction::query()->count(),
+            'sales' => Sale::query()->count(),
+            'purchases' => Purchase::query()->count(),
+        ];
+
+        $this->postJson(route('reports.product-unit-fix-workbench.update'), [
+            'product_unit_id' => $unit->id,
+            'conversion_factor' => 6,
+            'cost_price' => '1,200',
+            'selling_price' => '1,800',
+            'allow_fractional_quantity' => 1,
+            'quantity_precision' => 2,
+            'minimum_wholesale_quantity' => 0.25,
+            'q' => 'WORKBENCH AJAX SOAP',
+        ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Saved')
+            ->assertJsonPath('unit.conversion_factor', 6)
+            ->assertJsonPath('unit.cost_price', 1200)
+            ->assertJsonPath('unit.selling_price', 1800);
+
+        $unit->refresh();
+        $this->assertEquals(6.0, (float) $unit->conversion_factor);
+        $this->assertEquals(1200.0, (float) $unit->cost_price);
+        $this->assertEquals(1800.0, (float) $unit->selling_price);
+        $this->assertSame($beforeCounts['inventory_transactions'], InventoryTransaction::query()->count());
+        $this->assertSame($beforeCounts['sales'], Sale::query()->count());
+        $this->assertSame($beforeCounts['purchases'], Purchase::query()->count());
     }
 
     public function test_product_unit_fix_workbench_formats_and_accepts_comma_money_inputs(): void
@@ -348,28 +387,28 @@ class FinancialReportsTest extends TestCase
 
         $this->get('/reports/financial-summary')
             ->assertOk()
-            ->assertSeeText('Product Cost & Conversion Fix Workbench', false)
+            ->assertSeeText('Product Unit Setup / Price & Conversion Workbench', false)
             ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
 
         $this->get('/management-centre')
             ->assertOk()
-            ->assertSee('Product Cost &amp; Conversion Fix Workbench', false)
+            ->assertSee('Product Unit Setup / Price &amp; Conversion Workbench', false)
             ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
 
         $this->get('/products')
             ->assertOk()
             ->assertSee('Product Price & Margin Review', false)
-            ->assertSee('Product Cost & Conversion Fix', false)
+            ->assertSee('Product Unit Setup Workbench', false)
             ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
 
         $this->get('/stock/balances')
             ->assertOk()
-            ->assertSee('Product Cost & Conversion Fix', false)
+            ->assertSee('Product Unit Setup Workbench', false)
             ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
 
         $this->get('/purchases/create')
             ->assertOk()
-            ->assertSee('Product Cost & Conversion Fix', false)
+            ->assertSee('Product Unit Setup Workbench', false)
             ->assertSee(route('reports.product-unit-fix-workbench', [], false), false);
     }
 
@@ -1327,6 +1366,59 @@ class FinancialReportsTest extends TestCase
         $this->assertStringContainsString('Date,Reference,Section,Item,Qty,Rate,Income,Expenditure', $csv->streamedContent());
         $this->assertStringContainsString('INCOME SOAP - Pieces', $csv->streamedContent());
         $this->assertStringContainsString('Transport', $csv->streamedContent());
+    }
+
+    public function test_income_expenditure_includes_paid_purchases_supplier_payments_and_excludes_unpaid_or_voided_purchases(): void
+    {
+        $cash = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $businessCash = PurchaseFundingSource::query()->firstOrCreate(
+            ['name' => 'Business Cash / Shop Cash'],
+            ['is_active' => true, 'sort_order' => 10]
+        );
+        $supplierCredit = PurchaseFundingSource::query()->firstOrCreate(
+            ['name' => 'Supplier Credit / Not Paid Yet'],
+            ['is_active' => true, 'sort_order' => 80]
+        );
+
+        $cashPurchase = $this->postFundedPurchase('2026-07-10', $businessCash->name, 5000, 5000, 0);
+        $cashPurchase->update(['payment_mode_id' => $cash->id]);
+        $unpaidCredit = $this->postFundedPurchase('2026-07-11', $supplierCredit->name, 9000, 0, 9000);
+        $unpaidCredit->update(['payment_mode_id' => $cash->id]);
+        $creditPaidLater = $this->postFundedPurchase('2026-07-12', $supplierCredit->name, 10000, 3000, 7000);
+        $creditPaidLater->update(['payment_mode_id' => $cash->id]);
+        $voidedPurchase = $this->postFundedPurchase('2026-07-13', $businessCash->name, 777, 777, 0);
+        $voidedPurchase->update(['payment_mode_id' => $cash->id, 'status' => 'void']);
+
+        $supplierPayment = SupplierPayment::create([
+            'payment_no' => 'SPY-INCOME-0001',
+            'payment_date' => '2026-07-13',
+            'supplier_id' => $creditPaidLater->supplier_id,
+            'purchase_id' => $creditPaidLater->id,
+            'store_id' => $this->store->id,
+            'payment_mode_id' => $cash->id,
+            'amount' => 3000,
+            'status' => 'posted',
+        ]);
+
+        $response = $this->get('/reports/income-expenditure?date_from=2026-07-01&date_to=2026-07-31&payment_mode_id='.$cash->id);
+
+        $response->assertOk()
+            ->assertSee('Paid Purchases / Stock Bought')
+            ->assertSee('Supplier Payments / Credit Purchases')
+            ->assertSee($cashPurchase->purchase_no)
+            ->assertSee($supplierPayment->payment_no)
+            ->assertSee('UGX 5,000')
+            ->assertSee('UGX 3,000')
+            ->assertSee('UGX -8,000')
+            ->assertDontSee($unpaidCredit->purchase_no)
+            ->assertDontSee($voidedPurchase->purchase_no)
+            ->assertDontSee('UGX 9,000')
+            ->assertDontSee('UGX 777');
+
+        $this->get('/purchases?q='.$voidedPurchase->purchase_no)
+            ->assertOk()
+            ->assertSee('voided-row', false)
+            ->assertSee('Voided');
     }
 
     public function test_gross_margin_summary_uses_net_returns_and_avoids_fake_missing_cost_profit(): void

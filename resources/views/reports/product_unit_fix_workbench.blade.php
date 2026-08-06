@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'Product Cost & Conversion Fix Workbench'])
+@extends('layouts.app', ['title' => 'Product Unit Setup / Price & Conversion Workbench'])
 
 @section('content')
     @php($currency = config('business.currency', 'UGX'))
@@ -16,11 +16,26 @@
 
         return number_format((float) str_replace(',', '', $raw), 0);
     })
+    <style>
+        .page { width:100%; max-width:none; }
+        .workspace { padding-left:8px; padding-right:8px; }
+        .unit-workbench-card { max-height:calc(100vh - 310px); min-height:360px; overflow:auto; }
+        .unit-workbench-card table { min-width:1540px; }
+        .unit-workbench-card thead th { position:sticky; top:0; z-index:2; background:#fffaf0; }
+        .unit-workbench-card td, .unit-workbench-card th { padding:7px 8px; vertical-align:middle; }
+        .unit-workbench-card input[type="number"],
+        .unit-workbench-card input[type="text"] { min-height:34px; padding:6px 8px; }
+        .unit-save-cell { display:grid; gap:5px; min-width:92px; }
+        .unit-row-status { min-height:16px; font-size:.74rem; font-weight:800; color:#64748b; }
+        .unit-row-status.is-saving { color:#92400e; }
+        .unit-row-status.is-saved { color:#047857; }
+        .unit-row-status.is-failed { color:#b91c1c; }
+    </style>
 
     <div class="page-head">
         <div>
-            <h2>Product Cost & Conversion Fix Workbench</h2>
-            <p>Fix product unit setup only: conversion factor, cost, selling price, and fractional selling settings.</p>
+            <h2>Product Unit Setup / Price & Conversion Workbench</h2>
+            <p>Maintain product units, pack conversion, cost, selling price, fractional quantity, precision, and minimum wholesale quantity.</p>
         </div>
         <div class="actions">
             <a href="{{ route('reports.price-margins', request()->only(['q', 'category_id', 'status'])) }}" class="button-link">Back to Price Margins</a>
@@ -45,15 +60,15 @@
 
     <section class="panel" style="margin-bottom:16px;">
         <p class="list-note"><strong>Safe setup screen.</strong> Saving here updates product unit setup only. It does not change stock quantities, inventory transactions, sales, purchases, payments, or receipts.</p>
-        <form method="get" class="filters" style="margin-top:12px;">
+        <form method="get" class="filters" style="margin-top:12px;" data-unit-workbench-filter-form>
             <select name="category_id">
                 <option value="">All categories</option>
                 @foreach ($categories as $category)
                     <option value="{{ $category->id }}" @selected((int) $filters['category_id'] === (int) $category->id)>{{ $category->name }}</option>
                 @endforeach
             </select>
-            <input type="search" name="q" value="{{ $filters['q'] }}" placeholder="Search product, code, category, supplier, barcode, or unit">
-            <input type="search" name="unit_name" value="{{ $filters['unit_name'] }}" placeholder="Unit name">
+            <input type="search" name="q" value="{{ $filters['q'] }}" placeholder="Search product, code, category, supplier, barcode, or unit" data-unit-workbench-live-filter>
+            <input type="search" name="unit_name" value="{{ $filters['unit_name'] }}" placeholder="Unit name" data-unit-workbench-live-filter>
             <select name="status">
                 @foreach ($statusOptions as $value => $label)
                     <option value="{{ $value }}" @selected($filters['status'] === $value)>{{ $label }}</option>
@@ -80,7 +95,7 @@
     <section class="panel">
         <h3>Product Unit Setup Rows</h3>
         <p class="list-note">Use this table to repair old imported product setup. Review conversion factors carefully before saving.</p>
-        <div style="overflow:auto; margin-top:12px;">
+        <div class="unit-workbench-card" style="margin-top:12px;">
             <table>
                 <thead>
                     <tr>
@@ -105,7 +120,7 @@
                 <tbody>
                     @forelse ($rows as $row)
                         @php($formId = 'unit-fix-form-'.$row->unit->id)
-                        <tr>
+                        <tr data-unit-workbench-row="{{ $row->unit->id }}">
                             <td>
                                 <strong>{{ $row->product->name }}</strong>
                                 <div class="muted">{{ $row->product->code ?: 'No code' }}</div>
@@ -140,7 +155,7 @@
                             <td><span class="badge {{ $row->status_key === 'healthy_margin' && ! $row->conversion_review ? 'success' : 'credit' }}">{{ $row->warning_label }}</span></td>
                             <td>{{ $row->suggested_action }}</td>
                             <td>
-                                <form id="{{ $formId }}" method="post" action="{{ route('reports.product-unit-fix-workbench.update') }}" onsubmit="return confirm('Update this product unit setup only? Stock, sales, purchases, and inventory history will not be changed. Continue?')">
+                                <form id="{{ $formId }}" method="post" action="{{ route('reports.product-unit-fix-workbench.update') }}" data-unit-workbench-form>
                                     @csrf
                                     <input type="hidden" name="product_unit_id" value="{{ $row->unit->id }}">
                                     <input type="hidden" name="q" value="{{ $filters['q'] }}">
@@ -148,7 +163,10 @@
                                     <input type="hidden" name="status" value="{{ $filters['status'] }}">
                                     <input type="hidden" name="unit_name" value="{{ $filters['unit_name'] }}">
                                     <input type="hidden" name="per_page" value="{{ $filters['per_page'] }}">
-                                    <button type="submit">Save</button>
+                                    <div class="unit-save-cell">
+                                        <button type="submit" data-unit-workbench-save>Save</button>
+                                        <span class="unit-row-status" data-unit-workbench-status></span>
+                                    </div>
                                 </form>
                             </td>
                             <td><a href="{{ route('products.edit', ['product' => $row->product->id, 'focus' => 'units']) }}">Full product edit</a></td>
@@ -168,4 +186,65 @@
     </section>
 
     @include('partials.developer_credit')
+    <script>
+        (() => {
+            const filterForm = document.querySelector('[data-unit-workbench-filter-form]');
+            let filterTimer = null;
+            filterForm?.querySelectorAll('[data-unit-workbench-live-filter]').forEach((input) => {
+                input.addEventListener('input', () => {
+                    clearTimeout(filterTimer);
+                    filterTimer = setTimeout(() => {
+                        const pageInput = filterForm.querySelector('input[name="page"]');
+                        if (pageInput) pageInput.value = '1';
+                        filterForm.requestSubmit();
+                    }, 500);
+                });
+            });
+
+            document.querySelectorAll('[data-unit-workbench-form]').forEach((form) => {
+                const status = form.querySelector('[data-unit-workbench-status]');
+                const button = form.querySelector('[data-unit-workbench-save]');
+
+                form.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+
+                    status.textContent = 'Saving...';
+                    status.className = 'unit-row-status is-saving';
+                    button.disabled = true;
+
+                    try {
+                        const formData = new FormData(form);
+                        document.querySelectorAll(`[form="${form.id}"]`).forEach((control) => {
+                            if (form.contains(control) || !control.name) return;
+                            if ((control.type === 'checkbox' || control.type === 'radio') && !control.checked) return;
+                            formData.append(control.name, control.value);
+                        });
+
+                        const response = await fetch(form.action, {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: formData,
+                        });
+                        const payload = await response.json().catch(() => ({}));
+
+                        if (!response.ok) {
+                            const firstError = Object.values(payload.errors || {})?.[0]?.[0];
+                            throw new Error(firstError || payload.message || 'Save failed');
+                        }
+
+                        status.textContent = 'Saved';
+                        status.className = 'unit-row-status is-saved';
+                    } catch (error) {
+                        status.textContent = error.message || 'Failed';
+                        status.className = 'unit-row-status is-failed';
+                    } finally {
+                        button.disabled = false;
+                    }
+                });
+            });
+        })();
+    </script>
 @endsection

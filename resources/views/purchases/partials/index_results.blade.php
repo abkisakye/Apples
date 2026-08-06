@@ -22,7 +22,7 @@
         </thead>
         <tbody>
             @forelse ($purchases as $purchase)
-                <tr>
+                <tr @class(['voided-row' => $purchase->status === 'void']) style="{{ $purchase->status === 'void' ? 'background:#fef2f2;' : '' }}">
                     <td>
                         <div class="cell-stack">
                             <div class="table-title"><a href="{{ route('purchases.show', $purchase) }}">{{ $purchase->purchase_no }}</a></div>
@@ -45,7 +45,7 @@
                     <td>
                         <div class="status-inline">
                             <span class="badge {{ $purchase->purchase_type === 'credit' ? 'credit' : '' }}">{{ ucfirst($purchase->purchase_type) }}</span>
-                            <span class="badge {{ $purchase->status === 'posted' ? 'success' : 'credit' }}">{{ ucfirst($purchase->status) }}</span>
+                            <span class="badge {{ $purchase->status === 'posted' ? 'success' : 'credit' }}" style="{{ $purchase->status === 'void' ? 'background:#fee2e2;color:#991b1b;border-color:#fecaca;' : '' }}">{{ $purchase->status === 'void' ? 'Voided' : ucfirst($purchase->status) }}</span>
                         </div>
                         <div class="table-meta">{{ $purchase->fundingSource?->name ?? 'Money source not set' }}</div>
                     </td>

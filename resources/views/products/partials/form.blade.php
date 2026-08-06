@@ -118,7 +118,7 @@
             <a href="{{ route('products.show', $product) }}" class="button-link">Product Profile</a>
         @endif
         @if ($access->can('reports.view'))
-            <a href="{{ route('reports.product-unit-fix-workbench', $product->exists ? ['q' => $product->code ?: $product->name] : []) }}" class="button-link">Product Cost & Conversion Fix</a>
+            <a href="{{ route('reports.product-unit-fix-workbench', $product->exists ? ['q' => $product->code ?: $product->name] : []) }}" class="button-link">Product Unit Setup Workbench</a>
         @endif
     </div>
 </div>
