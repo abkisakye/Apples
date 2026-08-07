@@ -308,6 +308,75 @@ class BaseUnitStockBehaviorTest extends TestCase
         $this->assertUnitBalance($unit, $this->storeA, 8, 'Current single-unit quantity behavior should remain unchanged.');
     }
 
+    public function test_stock_conversion_repair_aligns_current_stock_without_creating_purchase_debt(): void
+    {
+        [$product, $piece, $packet, $box] = $this->iceGreenProduct();
+
+        $this->legacyMovement($this->storeA, $packet, 32, 32, 'OLD-PACKET');
+        $this->legacyMovement($this->storeA, $box, 5, 5, 'OLD-BOX');
+        $this->assertBaseBalance($product, $this->storeA, 37, 'Old movement snapshots should show the broken base balance before repair.');
+
+        $this->get('/stock/conversion-repair?store_id='.$this->storeA->id.'&product_id='.$product->id)
+            ->assertOk()
+            ->assertSee('Stock Conversion Repair')
+            ->assertSee('Current Base Stock')
+            ->assertSee('37 pieces')
+            ->assertSee('Boxes')
+            ->assertSee('Packets')
+            ->assertSee('Pieces');
+
+        $this->post('/stock/conversion-repair', [
+            'repair_date' => '2026-06-04',
+            'store_id' => $this->storeA->id,
+            'product_id' => $product->id,
+            'physical_quantities' => [
+                $box->id => 5,
+                $packet->id => 26,
+                $piece->id => 0,
+            ],
+        ])->assertRedirect('/stock/adjustments/ADJ-20260604-0001')->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('purchases', 0);
+        $this->assertDatabaseCount('supplier_payments', 0);
+        $this->assertDatabaseHas('inventory_transactions', [
+            'reference_type' => 'stock_adjustment',
+            'reference_no' => 'ADJ-20260604-0001',
+            'movement_type' => 'adjustment_in',
+            'product_id' => $product->id,
+            'product_unit_id' => $piece->id,
+            'quantity_in' => 4883,
+            'base_quantity_in' => 4883,
+            'conversion_factor_snapshot' => 1,
+        ]);
+        $this->assertBaseBalance($product, $this->storeA, 4920, 'Repair should align current base stock to physical stock.');
+
+        $this->get('/stock/balances?store_id='.$this->storeA->id.'&q=ICE+GREEN')
+            ->assertOk()
+            ->assertSee('Equivalent Stock')
+            ->assertSee('5 boxes, 26 packets, 0 pieces')
+            ->assertSee('Can Sell')
+            ->assertSee('Boxes: 5')
+            ->assertSee('Packets: 246')
+            ->assertSee('Pieces: 4920');
+
+        $this->postSale($this->storeA, $packet, 2, 10000)->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertBaseBalance($product, $this->storeA, 4880, 'Selling 2 repaired packets should deduct 40 base pieces.');
+    }
+
+    public function test_insufficient_stock_message_explains_required_and_available_base_stock(): void
+    {
+        [$product, , $packet, $box] = $this->iceGreenProduct();
+
+        $this->legacyMovement($this->storeA, $packet, 32, 32, 'OLD-PACKET');
+        $this->legacyMovement($this->storeA, $box, 5, 5, 'OLD-BOX');
+
+        $this->postSale($this->storeA, $packet, 2, 10000)
+            ->assertSessionHasErrors([
+                'items' => 'ICE GREEN - Packets needs 40 Pieces for 2 Packets, but only 37 Pieces are available at Store A.',
+            ]);
+        $this->assertBaseBalance($product, $this->storeA, 37, 'Rejected sale should not change broken pre-repair stock.');
+    }
+
     /**
      * @return array{0: Product, 1: ProductUnit, 2: ProductUnit, 3: ProductUnit}
      */
@@ -342,6 +411,62 @@ class BaseUnitStockBehaviorTest extends TestCase
         $product->update(['base_product_unit_id' => $piece->id, 'base_unit_label' => 'Piece']);
 
         return [$product, $piece, $carton, $halfCarton];
+    }
+
+    /**
+     * @return array{0: Product, 1: ProductUnit, 2: ProductUnit, 3: ProductUnit}
+     */
+    private function iceGreenProduct(): array
+    {
+        $product = Product::create(['name' => 'ICE GREEN', 'base_unit_label' => 'Pieces', 'is_active' => true]);
+        $piece = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Pieces',
+            'conversion_factor' => 1,
+            'selling_price' => 500,
+            'cost_price' => 300,
+            'is_base_unit' => true,
+            'is_active' => true,
+        ]);
+        $packet = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Packets',
+            'conversion_factor' => 20,
+            'selling_price' => 10000,
+            'cost_price' => 6000,
+            'is_active' => true,
+        ]);
+        $box = ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_name' => 'Boxes',
+            'conversion_factor' => 880,
+            'selling_price' => 440000,
+            'cost_price' => 264000,
+            'is_active' => true,
+        ]);
+        $product->update(['base_product_unit_id' => $piece->id]);
+
+        return [$product->fresh(['units', 'baseProductUnit']), $piece, $packet, $box];
+    }
+
+    private function legacyMovement(Store $store, ProductUnit $unit, float $selectedQty, float $wrongBaseQty, string $referenceNo): void
+    {
+        InventoryTransaction::create([
+            'transaction_date' => '2026-06-01',
+            'store_id' => $store->id,
+            'product_id' => $unit->product_id,
+            'product_unit_id' => $unit->id,
+            'reference_type' => 'legacy_purchase',
+            'reference_id' => abs(crc32($referenceNo)),
+            'reference_no' => $referenceNo,
+            'movement_type' => 'purchase',
+            'quantity_in' => $selectedQty,
+            'quantity_out' => 0,
+            'base_quantity_in' => $wrongBaseQty,
+            'base_quantity_out' => 0,
+            'conversion_factor_snapshot' => 1,
+            'unit_cost' => $unit->cost_price,
+        ]);
     }
 
     /**

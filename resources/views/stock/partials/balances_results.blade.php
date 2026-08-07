@@ -41,6 +41,8 @@
                                 <span class="badge soft">Reorder At {{ $row->reorder_level_label }}</span>
                             </div>
                             <div class="table-meta">Breakdown: {{ $row->friendly_breakdown }}</div>
+                            <div class="table-meta">Equivalent Stock: {{ $row->equivalent_breakdown }}</div>
+                            <div class="table-meta">Can Sell: {{ $row->sellable_breakdown }}</div>
                         </div>
                     </td>
                     <td class="money">
@@ -80,6 +82,10 @@
                                     <a href="{{ route('stock.adjustments.create', ['product_id' => $row->product_id, 'return_to' => url()->full()]) }}" class="row-action-link">
                                         <span>Stock Adjustment</span>
                                         <span class="meta">Adj</span>
+                                    </a>
+                                    <a href="{{ route('stock.conversion-repair.create', ['product_id' => $row->product_id, 'store_id' => $filters['store_id']]) }}" class="row-action-link">
+                                        <span>Conversion Repair</span>
+                                        <span class="meta">Fix</span>
                                     </a>
                                     <a href="{{ route('stock.opening-stock.create', ['product_id' => $row->product_id, 'return_to' => url()->full()]) }}" class="row-action-link primary">
                                         <span>Add Existing Stock</span>

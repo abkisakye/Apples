@@ -291,6 +291,155 @@ class StockController extends Controller
         ]);
     }
 
+    public function conversionRepairCreate(Request $request, StockDisplayService $stockDisplayService): View
+    {
+        $currentStore = auth()->user()?->defaultStore;
+        $storeId = $request->integer('store_id') ?: (int) ($currentStore?->id ?? Store::query()->orderBy('name')->value('id'));
+        $selectedProduct = null;
+        $summary = null;
+
+        if ($request->integer('product_id') > 0) {
+            $selectedProduct = Product::query()
+                ->with(['units' => fn ($query) => $query
+                    ->where('is_active', true)
+                    ->orderByDesc('conversion_factor')
+                    ->orderBy('unit_name'), 'baseProductUnit'])
+                ->where('is_active', true)
+                ->findOrFail($request->integer('product_id'));
+            $summary = $stockDisplayService->productSummary($selectedProduct, $storeId);
+        }
+
+        return view('stock.conversion_repair', [
+            'stores' => Store::query()->orderBy('name')->get(['id', 'name']),
+            'products' => Product::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']),
+            'selectedProduct' => $selectedProduct,
+            'selectedStoreId' => $storeId,
+            'summary' => $summary,
+        ]);
+    }
+
+    public function conversionRepairStore(
+        Request $request,
+        DocumentNumberService $documentNumberService,
+        AuditLogService $auditLogService,
+        StoreAssignmentService $storeAssignmentService,
+        StockAvailabilityService $stockAvailabilityService,
+        ProductUnitConversionService $conversionService,
+        StockDisplayService $stockDisplayService
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'repair_date' => ['required', 'date'],
+            'store_id' => ['required', 'exists:stores,id'],
+            'product_id' => ['required', 'exists:products,id'],
+            'remarks' => ['nullable', 'string', 'max:1000'],
+            'physical_quantities' => ['required', 'array'],
+            'physical_quantities.*' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $storeId = $storeAssignmentService->resolveStoreId((int) $validated['store_id'], $request->user(), app(AccessService::class));
+        $product = Product::query()
+            ->with(['units' => fn ($query) => $query
+                ->where('is_active', true)
+                ->orderByDesc('conversion_factor')
+                ->orderBy('unit_name'), 'baseProductUnit'])
+            ->findOrFail((int) $validated['product_id']);
+        $baseUnit = $conversionService->baseUnitForProduct($product) ?? $product->units->first();
+        $baseUnitLabel = $product->base_unit_label ?: $baseUnit?->unit_name ?: 'base unit(s)';
+        if (! $baseUnit) {
+            throw ValidationException::withMessages([
+                'product_id' => 'This product has no active units to repair.',
+            ]);
+        }
+        $currentBaseStock = $stockDisplayService->baseBalanceForProduct((int) $product->id, $storeId);
+        $physicalRows = collect($validated['physical_quantities'])
+            ->mapWithKeys(fn ($quantity, $unitId) => [(int) $unitId => $quantity === null || $quantity === '' ? 0 : (float) $quantity]);
+        $actualBaseStock = 0.0;
+        $physicalParts = [];
+
+        foreach ($product->units as $unit) {
+            $quantity = round((float) ($physicalRows[(int) $unit->id] ?? 0), 3);
+            $conversionService->validatePrecision($quantity, $unit, 'physical_quantities.'.$unit->id);
+            $actualBaseStock = round($actualBaseStock + $conversionService->toBaseQuantity($quantity, $unit), 3);
+            $physicalParts[] = $stockDisplayService->formatQuantityWithUnit($quantity, $unit->unit_name, $unit);
+        }
+
+        $variance = round($actualBaseStock - $currentBaseStock, 3);
+
+        if ($variance < 0) {
+            if (trim((string) ($validated['remarks'] ?? '')) === '') {
+                throw ValidationException::withMessages([
+                    'remarks' => 'A reason is required before stock can be reduced.',
+                ]);
+            }
+
+            if (! app(AccessService::class)->hasRole('admin')) {
+                throw ValidationException::withMessages([
+                    'product_id' => 'Only an admin can post stock decrease adjustments.',
+                ]);
+            }
+        }
+
+        if (abs($variance) < 0.001) {
+            return redirect()
+                ->route('stock.conversion-repair.create', ['product_id' => $product->id, 'store_id' => $storeId])
+                ->with('status', 'No stock conversion repair was needed. System base stock already matches the physical stock entered.');
+        }
+
+        $referenceNo = $documentNumberService->make('stock_adjustment', $validated['repair_date']);
+        $movementType = $variance > 0 ? 'adjustment_in' : 'adjustment_out';
+        $adjustmentQty = abs($variance);
+        $note = sprintf(
+            'Conversion repair for %s. Physical stock entered as: %s. System base stock was %s. Corrected to %s.',
+            $product->name,
+            implode(', ', $physicalParts),
+            $stockDisplayService->formatQuantityWithUnit($currentBaseStock, $baseUnitLabel, $baseUnit),
+            $stockDisplayService->formatQuantityWithUnit($actualBaseStock, $baseUnitLabel, $baseUnit)
+        );
+
+        if (trim((string) ($validated['remarks'] ?? '')) !== '') {
+            $note .= ' Reason: '.trim((string) $validated['remarks']);
+        }
+
+        DB::transaction(function () use ($validated, $referenceNo, $storeId, $product, $baseUnit, $movementType, $adjustmentQty, $note, $stockAvailabilityService): void {
+            if ($movementType === 'adjustment_out') {
+                $stockAvailabilityService->ensureBaseAvailable($storeId, $baseUnit, $adjustmentQty, 'product_id');
+            }
+
+            InventoryTransaction::create([
+                'transaction_date' => $validated['repair_date'],
+                'store_id' => $storeId,
+                'product_id' => $product->id,
+                'product_unit_id' => $baseUnit?->id,
+                'reference_type' => 'stock_adjustment',
+                'reference_id' => abs(crc32($referenceNo.'-'.$product->id.'-'.$storeId)),
+                'reference_no' => $referenceNo,
+                'movement_type' => $movementType,
+                'quantity_in' => $movementType === 'adjustment_in' ? $adjustmentQty : 0,
+                'quantity_out' => $movementType === 'adjustment_out' ? $adjustmentQty : 0,
+                'base_quantity_in' => $movementType === 'adjustment_in' ? $adjustmentQty : 0,
+                'base_quantity_out' => $movementType === 'adjustment_out' ? $adjustmentQty : 0,
+                'conversion_factor_snapshot' => 1,
+                'unit_cost' => (float) ($baseUnit?->cost_price ?? 0),
+                'remarks' => $note,
+                'created_by' => auth()->id(),
+            ]);
+        });
+
+        $auditLogService->record('stock_conversion_repair.posted', null, "Stock conversion repair {$referenceNo} posted.", [
+            'reference_no' => $referenceNo,
+            'product_id' => $product->id,
+            'store_id' => $storeId,
+            'variance_base_qty' => $variance,
+        ]);
+
+        return redirect()
+            ->route('stock.adjustments.show', $referenceNo)
+            ->with('status', "Stock conversion repair {$referenceNo} posted successfully.");
+    }
+
     public function countCreate(Request $request, StockDisplayService $stockDisplayService): View
     {
         $currentStore = auth()->user()?->defaultStore;

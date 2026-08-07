@@ -624,19 +624,38 @@ class SaleController extends Controller
         StockAvailabilityService $stockAvailabilityService,
         array $availableBaseAdjustments = []
     ): void {
+        $storeName = Store::query()->whereKey($storeId)->value('name') ?: 'the selected store';
+
         foreach ($preparedItems as $item) {
             /** @var ProductUnit $unit */
             $unit = $item['unit'];
             $availableBaseAdjustment = (float) ($availableBaseAdjustments[$unit->product_id] ?? 0);
+            $requestedBaseQty = (float) $item['base_quantity'];
+            $availableBaseQty = round($stockAvailabilityService->availableBaseQuantity($storeId, (int) $unit->product_id) + $availableBaseAdjustment, 3);
 
-            $stockAvailabilityService->ensureBaseAvailable(
-                $storeId,
-                $unit,
-                (float) $item['base_quantity'],
-                'items',
-                "{$unit->product?->name} - {$unit->unit_name} does not have enough base stock at the selected store.",
-                $availableBaseAdjustment
-            );
+            if ($requestedBaseQty <= $availableBaseQty) {
+                continue;
+            }
+
+            $baseUnit = $unit->product?->base_unit_label
+                ?: $unit->product?->baseProductUnit?->unit_name
+                ?: 'base unit(s)';
+            $selectedQuantity = $requestedBaseQty / max((float) ($unit->conversion_factor ?? 1), 1);
+
+            throw ValidationException::withMessages([
+                'items' => sprintf(
+                    '%s - %s needs %s %s for %s %s, but only %s %s are available at %s.',
+                    $unit->product?->name ?? 'Selected product',
+                    $unit->unit_name,
+                    $this->formatQuantity($requestedBaseQty),
+                    ucfirst($this->unitLabel($baseUnit, $requestedBaseQty)),
+                    $this->formatQuantity($selectedQuantity),
+                    ucfirst($this->unitLabel($unit->unit_name, $selectedQuantity)),
+                    $this->formatQuantity($availableBaseQty),
+                    ucfirst($this->unitLabel($baseUnit, $availableBaseQty)),
+                    $storeName
+                ),
+            ]);
         }
     }
 

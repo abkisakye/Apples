@@ -39,6 +39,7 @@
                 <a href="{{ route('stock.adjustments.index') }}" class="button-link">Adjustment Log</a>
                 <a href="{{ route('stock.counts.create', request()->only('store_id', 'category_id', 'q')) }}" class="button-link primary">Physical Count</a>
                 <a href="{{ route('stock.opening-stock.create', request()->only('store_id', 'category_id', 'q')) }}" class="button-link primary">Add Existing Stock</a>
+                <a href="{{ route('stock.conversion-repair.create', request()->only('store_id', 'q')) }}" class="button-link">Conversion Repair</a>
                 <a href="{{ route('stock.transfers.create') }}" class="button-link">Stock Transfer</a>
                 <a href="{{ route('stock.adjustments.create') }}" class="button-link">Stock Adjustment</a>
             @endif

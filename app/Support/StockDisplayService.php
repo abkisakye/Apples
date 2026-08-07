@@ -105,6 +105,8 @@ class StockDisplayService
             'base_stock_label' => $this->formatQuantityWithUnit($baseBalance, $baseUnitLabel, $baseUnit),
             'base_unit_label' => $baseUnitLabel,
             'friendly_breakdown' => $this->friendlyBreakdown($baseBalance, $product, $baseUnit),
+            'equivalent_breakdown' => $this->equivalentBreakdown($baseBalance, $product, true),
+            'sellable_breakdown' => $this->sellableBreakdown($baseBalance, $product),
             'configured_units' => $this->configuredUnitsLabel($product),
             'base_unit' => $baseUnit,
         ];
@@ -223,6 +225,8 @@ class StockDisplayService
                 'base_stock_label' => $this->formatQuantityWithUnit($baseBalance, $baseUnitLabel, $baseUnit),
                 'base_unit_label' => $baseUnitLabel,
                 'friendly_breakdown' => $this->friendlyBreakdown($baseBalance, $product, $baseUnit),
+                'equivalent_breakdown' => $this->equivalentBreakdown($baseBalance, $product, true),
+                'sellable_breakdown' => $this->sellableBreakdown($baseBalance, $product),
                 'configured_units' => $this->configuredUnitsLabel($product),
                 'stock_value' => round($baseBalance * $baseCost, 2),
                 'primary_unit_id' => $this->primaryUnit($product)?->id,
@@ -268,6 +272,81 @@ class StockDisplayService
         return $product->units
             ->sortByDesc(fn (ProductUnit $unit) => $this->conversionService->conversionFactorSnapshot($unit))
             ->map(fn (ProductUnit $unit) => $unit->unit_name.' '.$this->formatNumber($this->conversionService->conversionFactorSnapshot($unit)))
+            ->implode(', ');
+    }
+
+    public function equivalentBreakdown(float|int|string $baseQuantity, Product $product, bool $includeBaseZero = false): string
+    {
+        $baseQuantity = max(round((float) $baseQuantity, 3), 0);
+        $remaining = $baseQuantity;
+        $baseUnit = $this->conversionService->baseUnitForProduct($product);
+        $baseUnitId = $baseUnit?->id;
+        $seenFactors = [];
+        $parts = [];
+
+        $units = $product->units
+            ->where('is_active', true)
+            ->sortByDesc(fn (ProductUnit $unit) => $this->conversionService->conversionFactorSnapshot($unit))
+            ->values();
+
+        foreach ($units as $unit) {
+            $factor = $this->conversionService->conversionFactorSnapshot($unit);
+            $factorKey = number_format($factor, 6, '.', '');
+
+            if ($factor <= 0 || isset($seenFactors[$factorKey])) {
+                continue;
+            }
+
+            $seenFactors[$factorKey] = true;
+            $isBaseUnit = $baseUnitId && (int) $unit->id === (int) $baseUnitId || abs($factor - 1.0) < 0.000001;
+            $quantity = $factor > 1 ? floor($remaining / $factor) : round($remaining, 3);
+
+            if ($factor > 1) {
+                $remaining = round($remaining - ($quantity * $factor), 3);
+            }
+
+            if ($quantity > 0 || ($includeBaseZero && $isBaseUnit)) {
+                $parts[] = $this->formatQuantityWithUnit($quantity, $unit->unit_name, $unit);
+            }
+        }
+
+        if ($parts === []) {
+            $baseLabel = $product->base_unit_label ?: $baseUnit?->unit_name ?: 'base unit(s)';
+
+            return $this->formatQuantityWithUnit($baseQuantity, $baseLabel, $baseUnit);
+        }
+
+        return implode(', ', $parts);
+    }
+
+    public function sellableBreakdown(float|int|string $baseQuantity, Product $product): string
+    {
+        $baseQuantity = max(round((float) $baseQuantity, 3), 0);
+        $seenFactors = [];
+
+        return $product->units
+            ->where('is_active', true)
+            ->sortByDesc(fn (ProductUnit $unit) => $this->conversionService->conversionFactorSnapshot($unit))
+            ->filter(function (ProductUnit $unit) use (&$seenFactors) {
+                $factor = $this->conversionService->conversionFactorSnapshot($unit);
+                $factorKey = number_format($factor, 6, '.', '');
+
+                if ($factor <= 0 || isset($seenFactors[$factorKey])) {
+                    return false;
+                }
+
+                $seenFactors[$factorKey] = true;
+
+                return true;
+            })
+            ->map(function (ProductUnit $unit) use ($baseQuantity) {
+                $factor = $this->conversionService->conversionFactorSnapshot($unit);
+                $quantity = $unit->allow_fractional_quantity
+                    ? round($baseQuantity / $factor, max((int) $unit->quantity_precision, 0))
+                    : floor($baseQuantity / $factor);
+
+                return $unit->unit_name.': '.$this->formatNumber($quantity, (int) $unit->quantity_precision);
+            })
             ->implode(', ');
     }
 

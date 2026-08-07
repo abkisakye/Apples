@@ -182,6 +182,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/stock/transfers/{referenceNo}/print', [StockController::class, 'transferPrint'])->middleware('ability:stock.view')->name('stock.transfers.print');
     Route::get('/stock/opening-stock/create', [StockController::class, 'openingStockCreate'])->middleware('ability:stock.manage')->name('stock.opening-stock.create');
     Route::post('/stock/opening-stock', [StockController::class, 'openingStockStore'])->middleware('ability:stock.manage')->name('stock.opening-stock.store');
+    Route::get('/stock/conversion-repair', [StockController::class, 'conversionRepairCreate'])->middleware('ability:stock.manage')->name('stock.conversion-repair.create');
+    Route::post('/stock/conversion-repair', [StockController::class, 'conversionRepairStore'])->middleware('ability:stock.manage')->name('stock.conversion-repair.store');
     Route::get('/stock/adjustments/create', [StockController::class, 'adjustmentCreate'])->middleware('ability:stock.manage')->name('stock.adjustments.create');
     Route::post('/stock/adjustments', [StockController::class, 'adjustmentStore'])->middleware('ability:stock.manage')->name('stock.adjustments.store');
     Route::get('/stock/adjustments/{referenceNo}', [StockController::class, 'adjustmentShow'])->middleware('ability:stock.view')->name('stock.adjustments.show');
