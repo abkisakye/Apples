@@ -1,65 +1,84 @@
-@php($currency = config('business.currency', 'UGX'))
-@php($salesCollection = $sales->getCollection())
-@php($cashSales = $salesCollection->where('sale_type', 'cash'))
-@php($creditSales = $salesCollection->where('sale_type', 'credit'))
+@php
+    $currency = config('business.currency', 'UGX');
+    $summary = $summary ?? [
+        'sales_count' => 0,
+        'gross_sales' => 0,
+        'cash_sales' => 0,
+        'credit_sales' => 0,
+        'settled_paid' => 0,
+        'outstanding' => 0,
+        'voided_count' => 0,
+        'voided_sales' => 0,
+    ];
+@endphp
 
 <section class="cards desk-cards">
-    <div class="card"><div class="label">{{ $type === 'cash' ? 'Cash Sales' : ($type === 'credit' ? 'Credit Sales' : 'Sales On Page') }}</div><div class="value">{{ number_format($salesCollection->count()) }}</div></div>
-    <div class="card"><div class="label">Cash Value</div><div class="value money">{{ $currency }} {{ number_format((float) $cashSales->sum('total_amount'), 0) }}</div></div>
-    <div class="card"><div class="label">Credit Value</div><div class="value money">{{ $currency }} {{ number_format((float) $creditSales->sum('total_amount'), 0) }}</div></div>
-    <div class="card"><div class="label">Outstanding</div><div class="value money">{{ $currency }} {{ number_format((float) $salesCollection->sum('balance_due'), 0) }}</div></div>
+    <div class="card"><div class="label">Sales Count</div><div class="value">{{ number_format((int) $summary['sales_count']) }}</div></div>
+    <div class="card"><div class="label">Gross Sales</div><div class="value money">{{ $currency }} {{ number_format((float) $summary['gross_sales'], 0) }}</div></div>
+    <div class="card"><div class="label">Cash Sales</div><div class="value money">{{ $currency }} {{ number_format((float) $summary['cash_sales'], 0) }}</div></div>
+    <div class="card"><div class="label">Credit Sales</div><div class="value money">{{ $currency }} {{ number_format((float) $summary['credit_sales'], 0) }}</div></div>
+    <div class="card"><div class="label">Settled / Paid</div><div class="value money">{{ $currency }} {{ number_format((float) $summary['settled_paid'], 0) }}</div></div>
+    <div class="card"><div class="label">Outstanding</div><div class="value money">{{ $currency }} {{ number_format((float) $summary['outstanding'], 0) }}</div></div>
+    <div class="card danger">
+        <div class="label">Voided Sales</div>
+        <div class="value money">{{ number_format((int) $summary['voided_count']) }} | {{ $currency }} {{ number_format((float) $summary['voided_sales'], 0) }}</div>
+    </div>
 </section>
 
 <div class="panel desk-panel">
-    <p class="list-note">This list shows sales receipts and invoices only. Stock purchases are managed from the Purchases page.</p>
+    <p class="list-note">This list keeps posted and voided sales visible for audit. Voided sales are excluded from business totals above.</p>
     <div class="table-wrap table-mobile-friendly">
-    <table>
+    <table class="sales-table">
         <thead>
             <tr>
-                <th>Sale</th>
+                <th>Invoice #</th>
+                <th>Sale Date</th>
                 <th>Customer</th>
-                <th>Type</th>
-                <th>Totals</th>
+                <th>Salesperson</th>
+                <th>Total (UGX)</th>
+                <th>Settled (UGX)</th>
+                <th>Balance (UGX)</th>
+                <th>Status</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($sales as $sale)
-                <tr>
+                @php($isVoided = in_array($sale->status, ['void', 'cancelled', 'canceled'], true))
+                @php($paidAmount = (float) $sale->amount_paid)
+                @php($balanceDue = (float) $sale->balance_due)
+                @php($paymentStatus = $isVoided ? 'Void' : ($balanceDue <= 0 ? 'Paid' : ($paidAmount > 0 ? 'Partial' : 'Pending')))
+                @php($statusClass = $isVoided ? 'danger' : ($paymentStatus === 'Paid' ? 'success' : ($paymentStatus === 'Partial' ? 'credit' : '')))
+                <tr @class(['voided-row' => $isVoided])>
                     <td>
                         <div class="cell-stack">
                             <div class="table-title"><a href="{{ route('sales.show', $sale) }}">{{ $sale->sale_no }}</a></div>
-                            <div class="table-meta">{{ optional($sale->sale_date)->format('d M Y') ?: '-' }}</div>
-                            <div class="table-meta">{{ $sale->store?->name ?? config('business.name', 'Apples Of Gold') }}</div>
-                        </div>
-                    </td>
-                    <td>
-                        <div class="cell-stack">
-                            <div class="table-title">{{ $sale->customer?->name ?? 'Walk-in customer' }}</div>
                             <div class="status-inline">
-                                @if ($sale->customer?->is_walk_in)
-                                    <span class="badge">Walk-in</span>
-                                @endif
-                                @if ($sale->balance_due > 0)
-                                    <span class="badge credit">Balance due</span>
-                                @else
-                                    <span class="badge success">Cleared</span>
+                                <span class="badge {{ $sale->sale_type === 'credit' ? 'credit' : '' }}">{{ ucfirst($sale->sale_type) }}</span>
+                                @if ($sale->paymentMode)
+                                    <span class="badge">{{ $sale->paymentMode->name }}</span>
                                 @endif
                             </div>
                         </div>
                     </td>
+                    <td>{{ optional($sale->sale_date)->format('d M Y') ?: '-' }}</td>
                     <td>
-                        <div class="status-inline">
-                            <span class="badge {{ $sale->sale_type === 'credit' ? 'credit' : '' }}">{{ ucfirst($sale->sale_type) }}</span>
-                            <span class="badge {{ $sale->status === 'posted' ? 'success' : 'credit' }}">{{ ucfirst($sale->status) }}</span>
+                        <div class="cell-stack">
+                            <div class="table-title">{{ $sale->customer?->name ?? 'Walk-in customer' }}</div>
+                            @if ($sale->customer?->phone)
+                                <div class="table-meta">{{ $sale->customer->phone }}</div>
+                            @endif
                         </div>
                     </td>
-                    <td class="money">
-                        <div class="cell-stack">
-                            <div>Total: {{ $currency }} {{ number_format((float) $sale->total_amount, 0) }}</div>
-                            <div class="table-meta">Balance: {{ $currency }} {{ number_format((float) $sale->balance_due, 0) }}</div>
-                            @if ($sale->credit_due_date)
-                                <div class="table-meta">Due {{ $sale->credit_due_date->format('d M Y') }}</div>
+                    <td>{{ $sale->createdBy?->name ?? '-' }}</td>
+                    <td class="money">{{ $currency }} {{ number_format((float) $sale->total_amount, 0) }}</td>
+                    <td class="money">{{ $currency }} {{ number_format($paidAmount, 0) }}</td>
+                    <td class="money">{{ $currency }} {{ number_format($balanceDue, 0) }}</td>
+                    <td>
+                        <div class="status-inline">
+                            <span class="badge {{ $statusClass }}">{{ $paymentStatus }}</span>
+                            @if (! $isVoided && $sale->credit_due_date && $balanceDue > 0)
+                                <span class="badge credit">Due {{ $sale->credit_due_date->format('d M Y') }}</span>
                             @endif
                         </div>
                     </td>
@@ -96,7 +115,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="5" class="muted">No sales match this view yet.</td>
+                    <td colspan="9" class="muted">No sales match this view yet.</td>
                 </tr>
             @endforelse
         </tbody>

@@ -13,6 +13,14 @@
         .desk-cards .card .value {
             font-size: 1.08rem;
         }
+        .desk-cards .card.danger {
+            border-color: #fecaca;
+            background: #fef2f2;
+        }
+        .desk-cards .card.danger .label,
+        .desk-cards .card.danger .value {
+            color: #991b1b;
+        }
         .desk-filters {
             display: grid;
             grid-template-columns: minmax(0, 1.35fr) 160px auto;
@@ -40,6 +48,31 @@
         }
         .desk-panel .table-meta {
             font-size: .78rem;
+        }
+        .sales-table {
+            min-width: 980px;
+        }
+        .sales-table .money {
+            white-space: nowrap;
+        }
+        .sales-table .status-inline {
+            justify-content: flex-start;
+        }
+        .sales-table .badge.danger {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+        .voided-row {
+            background: #fef2f2;
+        }
+        .voided-row td {
+            border-color: #fecaca;
+        }
+        .voided-row .table-title,
+        .voided-row .table-title a,
+        .voided-row .money {
+            color: #991b1b;
         }
         @media (max-width: 900px) {
             .desk-filters {

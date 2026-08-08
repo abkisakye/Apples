@@ -41,21 +41,7 @@ class SaleController extends Controller
             default => 'Sales',
         };
 
-        $sales = Sale::query()
-            ->select([
-                'id',
-                'sale_no',
-                'sale_date',
-                'store_id',
-                'customer_id',
-                'sale_type',
-                'payment_mode_id',
-                'total_amount',
-                'balance_due',
-                'credit_due_date',
-                'status',
-                'created_by',
-            ])
+        $baseQuery = Sale::query()
             ->with(['customer:id,name,phone', 'store:id,name', 'paymentMode:id,name', 'createdBy:id,name'])
             ->whereIn('sale_type', ['cash', 'credit'])
             ->when($search !== '', function ($query) use ($search) {
@@ -73,17 +59,56 @@ class SaleController extends Controller
                 });
             })
             ->when($type !== '', fn ($query) => $query->where('sale_type', $type))
-            ->when($dateFrom && $dateTo, fn ($query) => $query->whereDate('sale_date', '>=', $dateFrom)->whereDate('sale_date', '<=', $dateTo))
+            ->when($dateFrom && $dateTo, fn ($query) => $query->whereDate('sale_date', '>=', $dateFrom)->whereDate('sale_date', '<=', $dateTo));
+
+        $summary = $this->salesIndexSummary(clone $baseQuery);
+
+        $sales = (clone $baseQuery)
+            ->select([
+                'id',
+                'sale_no',
+                'sale_date',
+                'store_id',
+                'customer_id',
+                'sale_type',
+                'payment_mode_id',
+                'total_amount',
+                'amount_paid',
+                'balance_due',
+                'credit_due_date',
+                'status',
+                'created_by',
+            ])
             ->latest('sale_date')
             ->latest('id')
             ->paginate(20)
             ->withQueryString();
 
         if ($request->ajax()) {
-            return view('sales.partials.index_results', compact('sales', 'search', 'type', 'pageTitle', 'dateFrom', 'dateTo'));
+            return view('sales.partials.index_results', compact('sales', 'summary', 'search', 'type', 'pageTitle', 'dateFrom', 'dateTo'));
         }
 
-        return view('sales.index', compact('sales', 'search', 'type', 'pageTitle', 'dateFrom', 'dateTo'));
+        return view('sales.index', compact('sales', 'summary', 'search', 'type', 'pageTitle', 'dateFrom', 'dateTo'));
+    }
+
+    private function salesIndexSummary($query): array
+    {
+        $voidStatuses = ['void', 'cancelled', 'canceled'];
+        $activeQuery = (clone $query)
+            ->where('status', 'posted')
+            ->whereNotIn('status', $voidStatuses);
+        $voidedQuery = (clone $query)->whereIn('status', $voidStatuses);
+
+        return [
+            'sales_count' => (clone $activeQuery)->count(),
+            'gross_sales' => (float) (clone $activeQuery)->sum('total_amount'),
+            'cash_sales' => (float) (clone $activeQuery)->where('sale_type', 'cash')->sum('total_amount'),
+            'credit_sales' => (float) (clone $activeQuery)->where('sale_type', 'credit')->sum('total_amount'),
+            'settled_paid' => (float) (clone $activeQuery)->sum('amount_paid'),
+            'outstanding' => (float) (clone $activeQuery)->sum('balance_due'),
+            'voided_count' => (clone $voidedQuery)->count(),
+            'voided_sales' => (float) (clone $voidedQuery)->sum('total_amount'),
+        ];
     }
 
     public function create(Request $request, StockAvailabilityService $stockAvailabilityService): View

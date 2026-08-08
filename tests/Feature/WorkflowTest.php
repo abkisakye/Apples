@@ -335,6 +335,113 @@ class WorkflowTest extends TestCase
             ->assertDontSee('STOCK-PURCHASE-TEST');
     }
 
+    public function test_sales_index_summary_columns_and_void_audit_display_are_professional(): void
+    {
+        $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Retail Customer', 'phone' => '0700000000', 'is_active' => true]);
+        $creditCustomer = Customer::create(['name' => 'Credit Customer', 'is_active' => true]);
+        $paymentMode = PaymentMode::create(['name' => 'Cash', 'is_active' => true]);
+        $userId = auth()->id();
+
+        Sale::create([
+            'sale_no' => 'SALE-PAID-001',
+            'sale_date' => '2026-07-20',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 1000,
+            'total_amount' => 1000,
+            'amount_paid' => 1000,
+            'balance_due' => 0,
+            'status' => 'posted',
+            'created_by' => $userId,
+        ]);
+
+        Sale::create([
+            'sale_no' => 'SALE-PARTIAL-002',
+            'sale_date' => '2026-07-20',
+            'store_id' => $store->id,
+            'customer_id' => $creditCustomer->id,
+            'sale_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 4000,
+            'total_amount' => 4000,
+            'amount_paid' => 1500,
+            'balance_due' => 2500,
+            'status' => 'posted',
+            'created_by' => $userId,
+        ]);
+
+        Sale::create([
+            'sale_no' => 'SALE-PENDING-003',
+            'sale_date' => '2026-07-20',
+            'store_id' => $store->id,
+            'customer_id' => $creditCustomer->id,
+            'sale_type' => 'credit',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 3000,
+            'total_amount' => 3000,
+            'amount_paid' => 0,
+            'balance_due' => 3000,
+            'status' => 'posted',
+            'created_by' => $userId,
+        ]);
+
+        Sale::create([
+            'sale_no' => 'SALE-VOID-004',
+            'sale_date' => '2026-07-20',
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'sale_type' => 'cash',
+            'payment_mode_id' => $paymentMode->id,
+            'subtotal' => 9000,
+            'total_amount' => 9000,
+            'amount_paid' => 0,
+            'balance_due' => 0,
+            'status' => 'void',
+            'created_by' => $userId,
+        ]);
+
+        $this->get('/sales')
+            ->assertOk()
+            ->assertSee('Sales Count')
+            ->assertSee('3')
+            ->assertSee('Gross Sales')
+            ->assertSee('UGX 8,000')
+            ->assertSee('Cash Sales')
+            ->assertSee('UGX 1,000')
+            ->assertSee('Credit Sales')
+            ->assertSee('UGX 7,000')
+            ->assertSee('Settled / Paid')
+            ->assertSee('UGX 2,500')
+            ->assertSee('Outstanding')
+            ->assertSee('UGX 5,500')
+            ->assertSee('Voided Sales')
+            ->assertSee('1 | UGX 9,000')
+            ->assertSee('Invoice #')
+            ->assertSee('Sale Date')
+            ->assertSee('Customer')
+            ->assertSee('Salesperson')
+            ->assertSee('Total (UGX)')
+            ->assertSee('Settled (UGX)')
+            ->assertSee('Balance (UGX)')
+            ->assertSee('Status')
+            ->assertSee('Actions')
+            ->assertSee('Paid')
+            ->assertSee('Partial')
+            ->assertSee('Pending')
+            ->assertSee('Void')
+            ->assertSee('voided-row', false);
+
+        $this->get('/sales?q=SALE-PARTIAL')
+            ->assertOk()
+            ->assertSee('SALE-PARTIAL-002')
+            ->assertSee('UGX 4,000')
+            ->assertDontSee('SALE-PAID-001')
+            ->assertDontSee('SALE-VOID-004');
+    }
+
     public function test_listing_pages_have_server_backed_live_search_and_keep_server_side_filtering(): void
     {
         $store = Store::create(['name' => 'Main Store', 'is_active' => true]);
